@@ -61,7 +61,13 @@ export function newUid(): string {
 
 /** Short human title for a clip: first meaningful prompt line without tags or the subject_definitions header. */
 export function promptTitle(prompt: string): string {
-  const lines = prompt.split("\n").map((l) => l.replace(/<[^>]+>/g, "").replace(/\{\{ref:[a-z0-9]+\}\}/gi, "").trim());
-  const line = lines.find((l) => l.length > 3 && !/^subject_definitions/i.test(l)) ?? "";
+  let raw = prompt.split("\n");
+  const head = raw.findIndex((l) => l.trim().toLowerCase() === "summary:");
+  if (head >= 0) raw = raw.slice(head + 1); // structured prompt: the summary describes the shot
+  const lines = raw.map((l) =>
+    l.replace(/\[[^\]]*\]|<[^>]+>|\{\{ref:[a-z0-9]+\}\}/gi, "").replace(/\s+/g, " ").trim().replace(/^[\s:.,-]+|[\s:.,-]+$/g, ""),
+  );
+  let line = lines.find((l) => l.length > 3 && !/^subject_definitions/i.test(l)) ?? "";
+  if (head >= 0) line = line.replace(/^(a|an|the)\s+/i, "").replace(/^./, (c) => c.toUpperCase());
   return line.length > 48 ? line.slice(0, 48) + "…" : line;
 }

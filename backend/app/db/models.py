@@ -77,6 +77,8 @@ class MediaAsset(SQLModel, table=True):
 class Generation(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     project_id: int = Field(index=True)
+    kind: str = "generate"  # generate | face (MiniMax_H3_FaceRefine_Best on an existing clip)
+    source_asset_id: int | None = None  # face: the clip being refined
     # queued | running | done | draft_only | error | cancelled
     status: str = "queued"
     stage: str | None = None
@@ -96,6 +98,7 @@ class Generation(SQLModel, table=True):
     started: datetime | None = None
     finished: datetime | None = None
     elapsed_s: float | None = None
+    info: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))  # e.g. face tracking report
 
 
 class KV(SQLModel, table=True):
@@ -110,9 +113,27 @@ engine = create_engine(
 )
 
 
+# columns added after the first release: (table, column, SQL type + default)
+_ADDED_COLUMNS = [
+    ("generation", "kind", "VARCHAR DEFAULT 'generate' NOT NULL"),
+    ("generation", "source_asset_id", "INTEGER"),
+    ("generation", "info", "JSON"),
+]
+
+
+def _migrate() -> None:
+    """create_all never alters existing tables; add new columns in place so user data survives."""
+    with engine.begin() as conn:
+        for table, column, ddl in _ADDED_COLUMNS:
+            existing = {row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table})")}
+            if existing and column not in existing:
+                conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+
 def init_db() -> None:
     settings.ensure_dirs()
     SQLModel.metadata.create_all(engine)
+    _migrate()
 
 
 def session() -> Session:

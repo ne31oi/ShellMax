@@ -1,12 +1,11 @@
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import clsx from "clsx";
-import { Check, ChevronDown, ChevronRight, Copy, Plus, RotateCcw, Star, Trash2, X } from "lucide-react";
+import { Check, ChevronRight, Copy, Plus, RotateCcw, Star, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../api/client";
-import type { EngineProfile, ExpertParams, LoraSpec, ProfileRow } from "../../api/types";
+import type { EngineProfile, ExpertParams, FaceRecipe, LoraSpec, ProfileRow } from "../../api/types";
 import { defaultProfile, useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
-import { Button, IconButton, SectionTitle, Slider, Switch, Tip } from "../ui";
+import { Button, IconButton, Select as SelectField, SectionTitle, Slider, Switch, Tip } from "../ui";
 import { PathField, type ModelCategory } from "./PathField";
 
 const MODEL_FIELDS: { key: keyof EngineProfile; label: string; hint: string; category: ModelCategory }[] = [
@@ -167,6 +166,8 @@ export function EngineSettings() {
         />
       </section>
 
+      <FaceRecipeSection face={draft.face} onChange={(patch) => update({ face: { ...draft.face, ...patch } })} options={options} onOpenExpert={() => !expert && setExpert(true)} />
+
       <section className="flex items-start justify-between gap-6 rounded-xl border border-line bg-raised/50 p-4">
         <div>
           <p className="text-[13px]">Экономия видеопамяти</p>
@@ -235,6 +236,65 @@ export function EngineSettings() {
   );
 }
 
+/** MiniMax_H3_FaceRefine_Best recipe: model + 8-step LoRA; internals folded away. */
+function FaceRecipeSection({ face, onChange, options, onOpenExpert }: {
+  face: FaceRecipe; onChange: (p: Partial<FaceRecipe>) => void; options: { sampler: string[]; scheduler: string[] }; onOpenExpert: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section>
+      <SectionTitle>Улучшение лица</SectionTitle>
+      <p className="-mt-1 mb-3 text-xs text-muted">
+        Модель и LoRA для «Улучшить лицо». По воркфлоу: та же Singularity и turbo-LoRA на 8 шагов — модель не перегружается между генерацией и улучшением.
+      </p>
+      <div className="space-y-3">
+        <div className="grid grid-cols-[150px_1fr] items-center gap-3">
+          <p className="text-[13px]">Модель</p>
+          <PathField value={face.unet} onChange={(unet) => onChange({ unet })} category="unet" />
+        </div>
+        <div className="grid grid-cols-[150px_1fr_150px] items-center gap-3">
+          <p className="text-[13px]">LoRA 8 шагов</p>
+          <PathField value={face.lora} onChange={(lora) => onChange({ lora })} category="lora" />
+          <div className="flex items-center gap-2">
+            <Slider value={face.lora_strength} min={0} max={2} step={0.05} onChange={(lora_strength) => onChange({ lora_strength })} />
+            <span className="w-8 text-right text-xs tabular-nums text-muted">{face.lora_strength.toFixed(2)}</span>
+          </div>
+        </div>
+      </div>
+      <button
+        onClick={() => {
+          setOpen(!open);
+          onOpenExpert();
+        }}
+        className="mt-3 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-faint hover:text-muted"
+      >
+        <ChevronRight size={13} className={clsx("transition-transform", open && "rotate-90")} /> Эксперт улучшения лица
+      </button>
+      {open && (
+        <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-3 rounded-xl border border-warn/30 bg-warn/5 p-4">
+          <NumField label="Шаги (должны совпадать с LoRA)" value={face.steps} onChange={(steps) => onChange({ steps })} min={1} max={40} />
+          <SelectField label="Сэмплер" value={face.sampler} onChange={(sampler) => onChange({ sampler })}
+            options={(options.sampler.length ? options.sampler : [face.sampler]).map((v) => ({ value: v, label: v }))} defaultValue="euler" />
+          <SelectField label="Холст перерисовки" value={String(face.canvas)} onChange={(v) => onChange({ canvas: Number(v) })}
+            options={[512, 640, 768, 1024].map((v) => ({ value: String(v), label: `${v}×${v}` }))} defaultValue="768" />
+          <NumField label="Запас вокруг лица (crop factor)" value={face.crop_factor} onChange={(crop_factor) => onChange({ crop_factor })} min={1.2} max={8} step={0.1} />
+          <NumField label="Сглаживание центра, кадров" value={face.smooth_window} onChange={(smooth_window) => onChange({ smooth_window })} min={1} max={201} step={2} />
+          <NumField label="Сглаживание размера, кадров" value={face.size_smooth_window} onChange={(size_smooth_window) => onChange({ size_smooth_window })} min={1} max={201} step={2} />
+          <NumField label="Мелкое лицо до, px (полная сила)" value={face.face_px_small} onChange={(face_px_small) => onChange({ face_px_small })} min={8} max={1000} />
+          <NumField label="Крупное лицо от, px (0.35× силы)" value={face.face_px_large} onChange={(face_px_large) => onChange({ face_px_large })} min={8} max={2000} />
+          <NumField label="Расширение маски вклейки, px" value={face.mask_dilation} onChange={(mask_dilation) => onChange({ mask_dilation })} min={0} max={200} />
+          <NumField label="Размытие края вклейки, px" value={face.feather} onChange={(feather) => onChange({ feather })} min={0} max={200} />
+          <NumField label="Подгонка цвета (0–1)" value={face.colour_match} onChange={(colour_match) => onChange({ colour_match })} min={0} max={1} step={0.05} />
+          <NumField label="Сила вклейки (0–1)" value={face.blend} onChange={(blend) => onChange({ blend })} min={0} max={1} step={0.05} />
+          <SelectField label="Размер референсов" value={face.ref_image_size} onChange={(v) => onChange({ ref_image_size: v as "match" | "max" })}
+            options={[{ value: "max", label: "Максимальный — лицо точнее" }, { value: "match", label: "Как у холста — быстрее" }]} defaultValue="max" />
+          <NumField label="CRF итогового mp4" value={face.crf} onChange={(crf) => onChange({ crf })} min={0} max={51} />
+        </div>
+      )}
+    </section>
+  );
+}
+
 function LoraGroup({ title, hint, items, onChange, badPrefix, bad }: {
   title: string; hint: string; items: LoraSpec[]; onChange: (v: LoraSpec[]) => void; badPrefix: string; bad: Set<string>;
 }) {
@@ -288,43 +348,3 @@ function NumField({ label, value, onChange, min, max, step = 1 }: { label: strin
   );
 }
 
-/** Dropdown for fields with a fixed set of choices; the workflow's value is marked. */
-function SelectField({ label, value, onChange, options, defaultValue }: {
-  label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; defaultValue?: string;
-}) {
-  const all = options.some((o) => o.value === value) ? options : [{ value, label: value }, ...options];
-  const current = all.find((o) => o.value === value);
-  // long lists: current value and the workflow's value pinned on top, the rest below
-  const pinnedValues = all.length > 6 ? [...new Set([value, defaultValue].filter(Boolean) as string[])] : [];
-  const pinned = pinnedValues.map((v) => all.find((o) => o.value === v)).filter(Boolean) as typeof all;
-  const rest = all.filter((o) => !pinnedValues.includes(o.value));
-  return (
-    <div>
-      <p className="mb-1 text-xs text-muted">{label}</p>
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger asChild>
-          <button className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-line bg-raised px-2.5 text-left text-[13px] outline-none hover:bg-hover focus-visible:border-accent/60 data-[state=open]:border-accent/60">
-            <span className="truncate">{current?.label ?? value}</span>
-            <ChevronDown size={13} className="shrink-0 text-faint" />
-          </button>
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Portal>
-          <DropdownMenu.Content align="start" sideOffset={4} collisionPadding={12}
-            className="z-50 max-h-72 min-w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto rounded-xl border border-line bg-panel p-1 shadow-2xl">
-            {[...pinned, ...rest].map((o, i) => (
-              <div key={o.value}>
-                {i === pinned.length && pinned.length > 0 && <DropdownMenu.Separator className="my-1 h-px bg-line" />}
-                <DropdownMenu.Item onSelect={() => onChange(o.value)}
-                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] outline-none data-[highlighted]:bg-hover">
-                  <span className="w-4">{o.value === value && <Check size={13} className="text-accent" />}</span>
-                  <span className="flex-1">{o.label}</span>
-                  {o.value === defaultValue && <span className="text-[10px] text-faint">воркфлоу</span>}
-                </DropdownMenu.Item>
-              </div>
-            ))}
-          </DropdownMenu.Content>
-        </DropdownMenu.Portal>
-      </DropdownMenu.Root>
-    </div>
-  );
-}

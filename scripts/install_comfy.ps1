@@ -7,7 +7,7 @@
   - pins ComfyUI core to the commit the MiniMax H3 workflow was validated on
   - installs sageattention / triton-windows pinned to a known-good stack (RTX 50xx, sm120)
   - clones only the custom node packs the workflow needs, at pinned commits
-  - links ShellMax's own nodes (comfy_nodes\shellmax_nodes) via a junction
+  - copies the project's own node packs (comfy_nodes\*) into the engine
   - points ComfyUI at the existing models folder (no copying)
   - verifies sol-attn / sageattention and that all required node classes load
 
@@ -33,11 +33,15 @@ $CoreCommit     = 'b0f4b7b294ce482a2e071d9d762c133d38c7aa07'
 $SevenZipUrl    = 'https://www.7-zip.org/a/7zr.exe'
 $SageWheelUrl   = 'https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows.post4/sageattention-2.2.0%2Bcu130torch2.9.0andhigher.post4-cp39-abi3-win_amd64.whl'
 $TritonSpec     = 'triton-windows==3.6.0.post25'
+$OnnxSpec       = 'onnxruntime-gpu==1.24.4'   # insightface (face identity in H3FaceTrackCrop) runs on it
 
 $NodePacks = @(
     @{ Name = 'ComfyUI-KJNodes';                    Url = 'https://github.com/kijai/ComfyUI-KJNodes';                       Commit = '203eb357743402b437db8ae973a062a9b15387d2' },
     @{ Name = 'ComfyUI-VideoHelperSuite';           Url = 'https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite';        Commit = '4ee72c065db22c9d96c2427954dc69e7b908444b' },
-    @{ Name = 'Comfyui_Minimax_h3_latent_Upscaler'; Url = 'https://github.com/LBH-123-AI/Comfyui_Minimax_h3_latent_Upscaler'; Commit = '04f71594d11325be877b5ba05096fcb851c29048' }
+    @{ Name = 'Comfyui_Minimax_h3_latent_Upscaler'; Url = 'https://github.com/LBH-123-AI/Comfyui_Minimax_h3_latent_Upscaler'; Commit = '04f71594d11325be877b5ba05096fcb851c29048' },
+    # face refine (MiniMax_H3_FaceRefine_Best): face tracking / stitching and the "Load Image & Crop" node
+    @{ Name = 'ComfyUI-H3-FaceRefine';              Url = 'https://github.com/Carasibana/ComfyUI-H3-FaceRefine';             Commit = 'd8521d14fe0d721d80cd9417fff5a559cbc21aba' },
+    @{ Name = 'comfyui-obvpm';                      Url = 'https://github.com/obvpm/comfyui-obvpm';                          Commit = '7d5b977add00c2fb9690dca9a5f20023a47c8a80' }
 )
 $DebugPacks = @(
     @{ Name = 'rgthree-comfy';     Url = 'https://github.com/rgthree/rgthree-comfy';   Commit = '' },
@@ -54,7 +58,10 @@ $RequiredClasses = @(
     'MiniMaxH3MemoryEfficientSageAttentionPatch', 'MiniMaxLowVRAMAttention', 'MiniMaxChunkFeedForward',
     'VHS_VideoCombine', 'VHS_LoadVideo', 'MinimaxH3LatentUpscaler3D',
     'ShellMaxUNETLoaderByPath', 'ShellMaxCLIPLoaderByPath', 'ShellMaxVAELoaderByPath',
-    'ShellMaxLoraLoaderByPath', 'ShellMaxLoraModelOnlyByPath', 'ShellMaxLatentUpscalerByPath'
+    'ShellMaxLoraLoaderByPath', 'ShellMaxLoraModelOnlyByPath', 'ShellMaxLatentUpscalerByPath',
+    # face refine
+    'VHS_LoadVideoPath', 'H3FaceTrackCrop', 'H3InjectVideoLatent', 'H3PerFrameDenoise', 'H3FaceStitch',
+    'MiniMaxH3NativeAudioLock', 'LoadImageCrop', 'PreviewAny'
 )
 
 # ---------------------------------------------------------------- paths
@@ -139,7 +146,8 @@ Write-Host "    torch: $torchInfo"
 if ($torchInfo -notmatch 'True') { Fail 'torch не видит CUDA. Обновите драйвер NVIDIA.' }
 Invoke-Native $Python @('-s', '-m', 'pip', 'install', '--quiet', '--disable-pip-version-check', $TritonSpec)
 Invoke-Native $Python @('-s', '-m', 'pip', 'install', '--quiet', '--disable-pip-version-check', '--no-deps', $SageWheelUrl)
-Ok 'triton-windows и sageattention установлены'
+Invoke-Native $Python @('-s', '-m', 'pip', 'install', '--quiet', '--disable-pip-version-check', $OnnxSpec)
+Ok 'triton-windows, sageattention и onnxruntime-gpu установлены'
 
 # ---------------------------------------------------------------- 4. node packs
 Step '4/7 пакеты нод'
@@ -165,15 +173,16 @@ foreach ($p in $packs) {
 }
 
 # ---------------------------------------------------------------- 5. shellmax nodes
-Step '5/7 ноды ShellMax'
+Step '5/7 ноды из проекта (comfy_nodes\*)'
 # copied, not linked: exFAT volumes support neither symlinks nor junctions.
-# The backend re-syncs this copy before every engine start.
-$dest = Join-Path $CustomNodes 'shellmax_nodes'
-$src  = Join-Path $Root 'comfy_nodes\shellmax_nodes'
-robocopy $src $dest /MIR /XD __pycache__ /NFL /NDL /NJH /NJS /NP | Out-Null
-if ($LASTEXITCODE -ge 8) { Fail "не удалось скопировать $src -> $dest" }
-$global:LASTEXITCODE = 0
-Ok "$src -> $dest"
+# The backend re-syncs these copies before every engine start.
+foreach ($pack in Get-ChildItem (Join-Path $Root 'comfy_nodes') -Directory) {
+    $dest = Join-Path $CustomNodes $pack.Name
+    robocopy $pack.FullName $dest /MIR /XD __pycache__ /NFL /NDL /NJH /NJS /NP | Out-Null
+    if ($LASTEXITCODE -ge 8) { Fail "не удалось скопировать $($pack.FullName) -> $dest" }
+    $global:LASTEXITCODE = 0
+    Ok "$($pack.Name)"
+}
 
 # ---------------------------------------------------------------- 6. models
 Step '6/7 extra_model_paths.yaml (модели из существующей установки)'
@@ -189,10 +198,25 @@ shellmax_shared:
     vae_approx: vae_approx
     loras: loras
     latent_upscale_models: latent_upscale_models
+    ultralytics: ultralytics
 "@
 # UTF-8 without BOM: PS 5.1's -Encoding utf8 would prepend a BOM to the first yaml key
 [IO.File]::WriteAllText((Join-Path $Core 'extra_model_paths.yaml'), $yaml, (New-Object Text.UTF8Encoding $false))
 Ok $models
+
+# insightface looks only in the engine's own models\insightface (no extra paths); the pack is small, copy it
+$insightSrc = Join-Path $Config.legacy_models_dir 'insightface/models/buffalo_l'
+$insightDst = Join-Path $Core 'models/insightface/models/buffalo_l'
+if ((Test-Path $insightSrc) -and -not (Test-Path (Join-Path $insightDst 'w600k_r50.onnx'))) {
+    robocopy $insightSrc $insightDst /E /NFL /NDL /NJH /NJS /NP | Out-Null
+    if ($LASTEXITCODE -ge 8) { Fail "не удалось скопировать insightface buffalo_l" }
+    $global:LASTEXITCODE = 0
+    Ok 'insightface buffalo_l скопирован'
+} elseif (Test-Path $insightDst) {
+    Ok 'insightface buffalo_l уже на месте'
+} else {
+    Write-Host '    insightface buffalo_l скачается при первом улучшении лица' -ForegroundColor Yellow
+}
 
 # ---------------------------------------------------------------- 7. verify
 if ($SkipVerify) { Write-Host "`nпроверка пропущена (-SkipVerify)"; exit 0 }

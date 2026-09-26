@@ -14,20 +14,12 @@ from ..comfy.supervisor import EngineSupervisor
 from ..db.models import Generation, MediaAsset, Upload, select, session, utcnow
 from ..hub import hub
 from ..media import library
-from ..workflow.builder import DRAFT_OUTPUT_NODE, FINAL_OUTPUT_NODE, SAMPLER_NODES, STAGE_BY_NODE, build_prompt
-from ..workflow.params import FullParams
+from ..workflow.builder import build_prompt
+from ..workflow.builder_face import build_face_prompt
+from ..workflow.params import FaceFullParams, FullParams
+from .pipelines import PIPELINES, Pipeline
 
 log = logging.getLogger("shellmax.jobs")
-
-# (stage, share of total time) in execution order - drives the overall progress bar
-STAGES = [("load", 0.08), ("encode", 0.07), ("pass1", 0.25), ("draft", 0.05),
-          ("upscale", 0.05), ("pass2", 0.05), ("final", 0.35), ("decode", 0.10)]
-STAGE_START = {}
-_acc = 0.0
-for _name, _w in STAGES:
-    STAGE_START[_name] = _acc
-    _acc += _w
-STAGE_WEIGHT = dict(STAGES)
 
 READY_STATES = ("ready", "external")
 
@@ -35,6 +27,8 @@ READY_STATES = ("ready", "external")
 @dataclass
 class Running:
     gen_id: int
+    pipe: Pipeline = PIPELINES["generate"]
+    kind: str = "generate"
     prompt_id: str | None = None
     stage: str = "load"
     progress: float = 0.0
@@ -139,7 +133,7 @@ class JobManager:
         return None
 
     async def _run(self, g: Generation) -> None:
-        r = self.running = Running(gen_id=g.id)
+        r = self.running = Running(gen_id=g.id, pipe=PIPELINES.get(g.kind, PIPELINES["generate"]), kind=g.kind)
         with session() as s:
             row = s.get(Generation, g.id)
             row.status, row.stage, row.started, row.progress = "running", "load", utcnow(), 0.0
@@ -155,15 +149,18 @@ class JobManager:
             await self._finish(g.id, "cancelled")
             return
 
-        full = FullParams(**g.full_params)
-        full = await self._upload_refs(full, g.ui_params)
+        if g.kind == "face":
+            full = await self._upload_face_refs(FaceFullParams(**g.full_params))
+            prompt = build_face_prompt(full)
+        else:
+            full = await self._upload_refs(FullParams(**g.full_params), g.ui_params)
+            prompt = build_prompt(full)
         with session() as s:
             row = s.get(Generation, g.id)
             row.full_params = full.model_dump()
             s.add(row)
             s.commit()
 
-        prompt = build_prompt(full)
         try:
             r.prompt_id = await self.client.queue_prompt(prompt)
         except PromptRejected as e:
@@ -206,6 +203,14 @@ class JobManager:
                 refs.append(ref)
         return full.model_copy(update={"refs": refs})
 
+    async def _upload_face_refs(self, full: FaceFullParams) -> FaceFullParams:
+        """Identity (<Picture 1>) and close-up (<Picture 2>) images go into ComfyUI's input dir."""
+        names = {}
+        for path in {full.identity_path, full.closeup_path}:
+            names[path] = await self.client.upload_input(Path(path), Path(path).name)
+        return full.model_copy(update={"identity_image": names[full.identity_path],
+                                       "closeup_image": names[full.closeup_path]})
+
     async def _finish(self, gen_id: int, status: str, error: tuple[str, str] | None = None,
                       elapsed: float | None = None) -> None:
         r = self.running
@@ -239,26 +244,28 @@ class JobManager:
             if node is None:  # whole prompt finished
                 r.done.set()
                 return
-            stage = STAGE_BY_NODE.get(str(node))
-            if stage and STAGE_START[stage] >= STAGE_START[r.stage]:
+            stage = r.pipe.stage_by_node.get(str(node))
+            if stage and r.pipe.stage_start[stage] >= r.pipe.stage_start[r.stage]:
                 changed = stage != r.stage
                 r.stage = stage
                 if changed:
                     r.step = None  # a new stage starts without step info until its node reports
-                await self._progress(r, STAGE_START[stage], force=changed)
+                await self._progress(r, r.pipe.stage_start[stage], force=changed)
         elif kind == "progress":
             node = str(data.get("node"))
-            if node in SAMPLER_NODES or STAGE_BY_NODE.get(node) == r.stage:
+            if node in r.pipe.sampler_nodes or r.pipe.stage_by_node.get(node) == r.stage:
                 value, total = data.get("value", 0), max(1, data.get("max", 1))
                 first = r.step is None
                 r.step = {"value": value, "max": total}
                 # always show the first and the last step; throttle the ones in between
-                await self._progress(r, STAGE_START[r.stage] + STAGE_WEIGHT[r.stage] * value / total,
+                await self._progress(r, r.pipe.stage_start[r.stage] + r.pipe.stage_weight[r.stage] * value / total,
                                      force=first or value >= total)
         elif kind == "executed":
             node = str(data.get("node"))
-            if node in (DRAFT_OUTPUT_NODE, FINAL_OUTPUT_NODE):
+            if node in (r.pipe.draft_node, r.pipe.final_node):
                 await self._save_output(r, node, data.get("output") or {})
+            elif node == r.pipe.report_node:
+                await self._save_report(r, data.get("output") or {})
         elif kind == "execution_error":
             r.error = humanize_error(data.get("exception_type", ""), data.get("exception_message", ""),
                                      data.get("node_type", ""))
@@ -299,7 +306,7 @@ class JobManager:
         if not files:
             return
         info = files[0]
-        is_draft = node == DRAFT_OUTPUT_NODE
+        is_draft = node == r.pipe.draft_node
         if (is_draft and r.draft_asset_id) or (not is_draft and r.final_asset_id):
             return
         suffix = Path(info["filename"]).suffix or ".mp4"
@@ -310,9 +317,15 @@ class JobManager:
         else:
             await self.client.download_output(info, dest)
         with session() as s:
-            prompt = (s.get(Generation, r.gen_id).ui_params or {}).get("prompt", "")
+            g = s.get(Generation, r.gen_id)
+            if g.kind == "face":
+                src_asset = s.get(MediaAsset, g.source_asset_id) if g.source_asset_id else None
+                base = src_asset.name if src_asset else f"Клип {g.source_asset_id}"
+                title = f"{base} · {'трекинг' if is_draft else 'лицо'}"
+            else:
+                title = asset_title((g.ui_params or {}).get("prompt", ""), r.gen_id)
         asset_id = await register_asset(dest, generation_id=r.gen_id, source="draft" if is_draft else "generated",
-                                        name=asset_title(prompt, r.gen_id))
+                                        name=title)
         if is_draft:
             r.draft_asset_id = asset_id
         else:
@@ -327,6 +340,19 @@ class JobManager:
             s.commit()
             await push_generation(g, r.step)
 
+    async def _save_report(self, r: Running, output: dict) -> None:
+        """PreviewAny text (face tracking report) -> Generation.info, shown in the UI."""
+        text = output.get("text")
+        report = "\n".join(map(str, text)) if isinstance(text, list) else str(text or "")
+        if not report:
+            return
+        with session() as s:
+            g = s.get(Generation, r.gen_id)
+            g.info = {**(g.info or {}), "track_report": report}
+            s.add(g)
+            s.commit()
+            await push_generation(g, r.step)
+
     async def _collect_missing_outputs(self, r: Running) -> None:
         """Websocket messages can be missed across reconnects; history is authoritative."""
         if not r.prompt_id or (r.final_asset_id and r.draft_asset_id):
@@ -336,8 +362,10 @@ class JobManager:
         except Exception:  # noqa: BLE001
             return
         for node, out in (hist.get("outputs") or {}).items():
-            if node in (DRAFT_OUTPUT_NODE, FINAL_OUTPUT_NODE):
+            if node in (r.pipe.draft_node, r.pipe.final_node):
                 await self._save_output(r, node, out)
+            elif node == r.pipe.report_node:
+                await self._save_report(r, out)
         status = hist.get("status") or {}
         if not r.error and status.get("status_str") == "error":
             for m in status.get("messages", []):
@@ -348,11 +376,19 @@ class JobManager:
 
 
 def asset_title(prompt: str, gen_id: int) -> str:
-    """Short human name for a clip: the prompt's first meaningful line, without reference tags."""
+    """Short human name for a clip: the summary of a structured prompt, else its first meaningful line."""
     import re
 
-    lines = [re.sub(r"<[^>]+>", "", l).strip(" :.-") for l in prompt.splitlines()]
+    raw = prompt.splitlines()
+    heads = [i for i, l in enumerate(raw) if l.strip().lower() == "summary:"]
+    if heads:  # official 6-field format: the summary describes the shot, subject lines only define refs
+        raw = raw[heads[0] + 1:]
+    clean = lambda l: re.sub(r"\s+", " ", re.sub(r"\[[^\]]*\]|<[^>]+>", "", l)).strip(" :.-,")  # noqa: E731
+    lines = [clean(l) for l in raw]
     text = next((l for l in lines if len(l) > 3 and not l.lower().startswith("subject_definitions")), "")
+    if heads:
+        text = re.sub(r"^(a|an|the)\s+", "", text, flags=re.I)
+        text = text[:1].upper() + text[1:]
     return (text[:48] + "…") if len(text) > 48 else (text or f"Генерация {gen_id}")
 
 

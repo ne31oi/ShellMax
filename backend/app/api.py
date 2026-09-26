@@ -17,8 +17,8 @@ from .hub import hub
 from .jobs.estimator import estimate_seconds
 from .jobs.queue import push_generation, register_asset
 from .media import library
-from .workflow import presets
-from .workflow.params import ASPECT_RATIOS, FPS, MAX_REFS, EngineProfile, UIParams, frame_count
+from .workflow import face, presets
+from .workflow.params import ASPECT_RATIOS, FPS, MAX_REFS, EngineProfile, FaceUIParams, UIParams, frame_count
 
 router = APIRouter(prefix="/api")
 
@@ -40,6 +40,7 @@ def meta():
         "duration": {"min": 1.0, "max": 20.0, "optimal": [5.0, 15.0]},
         "max_refs": MAX_REFS,
         "defaults": d["ui"],
+        "face_strength": face.strength_presets(),
     }
 
 
@@ -127,8 +128,12 @@ def engine_log(request: Request, tail: int = 400):
 def list_profiles():
     with session() as s:
         rows = s.exec(select(EngineProfileRow).order_by(EngineProfileRow.id)).all()
-    return [{"id": r.id, "name": r.name, "is_default": r.is_default, "data": r.data,
-             "problems": services.profile_problems(EngineProfile(**r.data))} for r in rows]
+    out = []
+    for r in rows:
+        prof = face.with_face_defaults(EngineProfile(**r.data))
+        out.append({"id": r.id, "name": r.name, "is_default": r.is_default, "data": prof.model_dump(),
+                    "problems": services.profile_problems(prof)})
+    return out
 
 
 class ProfileIn(BaseModel):
@@ -176,7 +181,7 @@ def delete_profile(pid: int):
 
 @router.get("/profiles/workflow-defaults")
 def workflow_defaults():
-    return presets.default_profile().model_dump()
+    return face.with_face_defaults(presets.default_profile()).model_dump()
 
 
 def _make_default(s, pid: int) -> None:
@@ -308,8 +313,41 @@ class RetryIn(BaseModel):
 async def retry_generation(gid: int, body: RetryIn, request: Request):
     with session() as s:
         g = s.get(Generation, gid) or _404()
+    if g.kind == "face":
+        created = []
+        for i in range(body.variants):
+            seed = g.seed if body.same_seed and i == 0 else presets.new_seed()
+            created.append(await create_face(FaceUIParams(**{**g.ui_params, "seed": seed}), request, g.project_id))
+        return created
     ui = UIParams(**{**g.ui_params, "seed": g.seed if body.same_seed else None, "variants": body.variants})
     return await create_generation(ui, request, g.project_id)
+
+
+# ---------------------------------------------------------------- face refine (MiniMax_H3_FaceRefine_Best)
+@router.get("/face/defaults")
+def face_defaults(asset_id: int):
+    return services.face_defaults(asset_id)
+
+
+class FaceDetectIn(BaseModel):
+    upload_id: str
+
+
+@router.post("/face/detect")
+def face_detect(body: FaceDetectIn):
+    """Close-up crop around the largest face of a reference image (None found -> portrait framing)."""
+    with session() as s:
+        up = s.get(Upload, body.upload_id) or _404()
+    box = face.detect_face_box(up.path)
+    return {"found": box is not None, "crop": face.closeup_crop_for(box)}
+
+
+@router.post("/face")
+async def create_face(ui: FaceUIParams, request: Request, project_id: int = 1):
+    g = services.create_face_refine(ui, project_id)
+    await push_generation(g)
+    _state(request).jobs.enqueue(g.id)
+    return g
 
 
 @router.post("/generations/{gid}/cancel")

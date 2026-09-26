@@ -1,5 +1,8 @@
 import type {
+  CropBox,
   EngineProfile,
+  FaceDefaults,
+  FaceUIParams,
   EngineState,
   FsListing,
   Generation,
@@ -99,6 +102,10 @@ export const api = {
     post<Generation[]>(`/api/generations/${id}/retry`, { same_seed, variants }),
   cancel: (id: number) => post(`/api/generations/${id}/cancel`),
   deleteGeneration: (id: number) => del(`/api/generations/${id}`),
+
+  faceDefaults: (assetId: number) => get<FaceDefaults>("/api/face/defaults" + q({ asset_id: assetId })),
+  faceDetect: (uploadId: string) => post<{ found: boolean; crop: CropBox }>("/api/face/detect", { upload_id: uploadId }),
+  faceRefine: (params: FaceUIParams) => post<Generation>("/api/face", params),
 
   assets: () => get<MediaAsset[]>("/api/assets"),
   assetAsUpload: (assetId: number) => post<Upload>(`/api/assets/${assetId}/as-upload`),

@@ -52,5 +52,7 @@ def test_error_humanization():
 
 def test_asset_title_skips_header_and_tags():
     prompt = "subject_definitions:\n<Subject 1> walks in <Picture 1> city streets at night"
-    assert asset_title(prompt, 3) == "walks in  city streets at night"
+    assert asset_title(prompt, 3) == "walks in city streets at night"
     assert asset_title("", 3) == "Генерация 3"
+    structured = "subject_definitions:\n<Subject 1> is the woman in <Picture 1>.\n\nsummary:\n[reference] A woman dances in the rain"
+    assert asset_title(structured, 4) == "Woman dances in the rain"

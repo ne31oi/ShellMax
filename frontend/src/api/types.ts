@@ -40,6 +40,65 @@ export interface ExpertParams {
   crf: number;
 }
 
+export interface FaceRecipe {
+  unet: string;
+  lora: string;
+  lora_strength: number;
+  steps: number;
+  sampler: string;
+  scheduler: string;
+  ref_image_size: "match" | "max";
+  crop_factor: number;
+  canvas: number;
+  smooth_window: number;
+  size_smooth_window: number;
+  select: string;
+  face_px_small: number;
+  face_px_large: number;
+  mask_dilation: number;
+  feather: number;
+  colour_match: number;
+  blend: number;
+  crf: number;
+}
+
+export interface CropBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface FaceUIParams {
+  source_asset_id: number;
+  identity_upload_id: string;
+  closeup_upload_id: string | null;
+  closeup_crop: CropBox | null;
+  prompt: string;
+  denoise: number;
+  select: string | null;
+  seed: number | null;
+  profile_id: number | null;
+}
+
+export interface FaceStrength {
+  id: string;
+  label: string;
+  denoise: number;
+  hint: string;
+}
+
+export interface FaceDefaults {
+  asset: MediaAsset;
+  identity: Upload | null;
+  closeup_crop: CropBox | null;
+  prompt: string;
+  source_prompt: string;
+  frames: number;
+  warnings: string[];
+  presets: FaceStrength[];
+}
+
 export interface EngineProfile {
   name: string;
   unet: string;
@@ -51,6 +110,7 @@ export interface EngineProfile {
   loras_final: LoraSpec[];
   low_vram: boolean;
   expert: ExpertParams;
+  face: FaceRecipe;
 }
 
 export interface ProfileRow {
@@ -90,13 +150,18 @@ export interface UIParams {
 export type GenStatus = "queued" | "running" | "done" | "draft_only" | "error" | "cancelled";
 export type Stage = "load" | "encode" | "pass1" | "draft" | "upscale" | "pass2" | "final" | "decode" | "done";
 
+export type JobKind = "generate" | "face";
+
 export interface Generation {
   id: number;
   project_id: number;
+  kind: JobKind;
+  source_asset_id: number | null; // face: the refined clip
+  info: { track_report?: string } | null;
   status: GenStatus;
   stage: Stage | null;
   progress: number;
-  ui_params: UIParams;
+  ui_params: UIParams & Partial<FaceUIParams>;
   full_params: Record<string, unknown> | null;
   seed: number;
   profile_name: string;
@@ -152,6 +217,7 @@ export interface Meta {
   duration: { min: number; max: number; optimal: [number, number] };
   max_refs: Record<RefKind, number>;
   defaults: { aspect: string; duration: number; quality: string; prompt_template: string };
+  face_strength: FaceStrength[];
 }
 
 export interface FsListing {

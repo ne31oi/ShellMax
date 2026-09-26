@@ -5,7 +5,7 @@ import * as SliderPrimitive from "@radix-ui/react-slider";
 import * as SwitchPrimitive from "@radix-ui/react-switch";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import clsx from "clsx";
-import { X } from "lucide-react";
+import { Check, ChevronDown, X } from "lucide-react";
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 
 // ---------------------------------------------------------------- buttons
@@ -277,6 +277,48 @@ export function SectionTitle({ children, right }: { children: ReactNode; right?:
     <div className="mb-2 flex items-center justify-between">
       <h3 className="text-[11px] font-semibold uppercase tracking-wider text-faint">{children}</h3>
       {right}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- select
+/** Dropdown for fields with a fixed set of choices; the workflow's value is marked. */
+export function Select({ label, value, onChange, options, defaultValue }: {
+  label?: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; defaultValue?: string;
+}) {
+  const all = options.some((o) => o.value === value) ? options : [{ value, label: value }, ...options];
+  const current = all.find((o) => o.value === value);
+  // long lists: current value and the workflow's value pinned on top, the rest below
+  const pinnedValues = all.length > 6 ? [...new Set([value, defaultValue].filter(Boolean) as string[])] : [];
+  const pinned = pinnedValues.map((v) => all.find((o) => o.value === v)).filter(Boolean) as typeof all;
+  const rest = all.filter((o) => !pinnedValues.includes(o.value));
+  return (
+    <div>
+      {label && <p className="mb-1 text-xs text-muted">{label}</p>}
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger asChild>
+          <button className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-line bg-raised px-2.5 text-left text-[13px] outline-none hover:bg-hover focus-visible:border-accent/60 data-[state=open]:border-accent/60">
+            <span className="truncate">{current?.label ?? value}</span>
+            <ChevronDown size={13} className="shrink-0 text-faint" />
+          </button>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content align="start" sideOffset={4} collisionPadding={12}
+            className="z-50 max-h-72 min-w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto rounded-xl border border-line bg-panel p-1 shadow-2xl">
+            {[...pinned, ...rest].map((o, i) => (
+              <div key={o.value}>
+                {i === pinned.length && pinned.length > 0 && <DropdownMenu.Separator className="my-1 h-px bg-line" />}
+                <DropdownMenu.Item onSelect={() => onChange(o.value)}
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] outline-none data-[highlighted]:bg-hover">
+                  <span className="w-4">{o.value === value && <Check size={13} className="text-accent" />}</span>
+                  <span className="flex-1">{o.label}</span>
+                  {o.value === defaultValue && <span className="text-[10px] text-faint">воркфлоу</span>}
+                </DropdownMenu.Item>
+              </div>
+            ))}
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
     </div>
   );
 }

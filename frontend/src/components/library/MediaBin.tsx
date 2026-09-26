@@ -1,8 +1,8 @@
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import clsx from "clsx";
 import {
-  AlertCircle, Clapperboard, Copy, Dices, Film, FolderOpen, ImagePlus, Pencil, Shuffle, SplitSquareHorizontal,
-  Square, Trash2, Upload as UploadIcon,
+  AlertCircle, Clapperboard, Copy, Dices, Film, FolderOpen, ImagePlus, Pencil, ScanFace, Shuffle,
+  SplitSquareHorizontal, Square, Trash2, Upload as UploadIcon,
 } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { api, urls } from "../../api/client";
@@ -173,7 +173,7 @@ function GenerationCard({ gen }: { gen: Generation }) {
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/45">
             <ProgressRing value={gen.progress} />
             <span className="text-[10px] font-medium text-white/90 tabular-nums">
-              {stageInfo(gen.stage).short}
+              {stageInfo(gen.stage, gen).short}
               {stepProgress(gen) ? ` · ${stepProgress(gen)!.pct}%` : "…"}
             </span>
           </div>
@@ -186,11 +186,18 @@ function GenerationCard({ gen }: { gen: Generation }) {
             <AlertCircle size={20} />
           </div>
         )}
+        {gen.kind === "face" && gen.status !== "running" && (
+          <span className="absolute left-1 top-1 flex items-center gap-0.5 rounded bg-accent px-1 text-[10px] font-semibold text-accent-fg">
+            <ScanFace size={10} /> лицо
+          </span>
+        )}
         {gen.status === "draft_only" && (
           <span className="absolute left-1 top-1 rounded bg-warn px-1 text-[10px] font-semibold text-black">черновик</span>
         )}
         {gen.status === "running" && gen.draft_asset_id && (
-          <span className="absolute left-1 top-1 rounded bg-warn px-1 text-[10px] font-semibold text-black">черновик готов</span>
+          <span className="absolute left-1 top-1 rounded bg-warn px-1 text-[10px] font-semibold text-black">
+            {gen.kind === "face" ? "трекинг готов" : "черновик готов"}
+          </span>
         )}
         {asset?.duration != null && !active && (
           <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[10px] text-white tabular-nums">{fmtDuration(asset.duration)}</span>
@@ -214,12 +221,17 @@ function GenerationCard({ gen }: { gen: Generation }) {
         <ContextMenu.Content className="z-40 min-w-56 rounded-xl border border-line bg-panel p-1 shadow-2xl">
           {active && <CtxItem icon={<Square size={13} />} onSelect={() => actions.cancel(gen)}>{gen.draft_asset_id ? "Остановить, оставить черновик" : "Отменить"}</CtxItem>}
           <CtxItem icon={<Dices size={13} />} onSelect={() => actions.retry(gen, false)}>Повторить с новым сидом</CtxItem>
-          <CtxItem icon={<Copy size={13} />} onSelect={() => actions.retry(gen, true)}>Повторить точно (тот же сид)</CtxItem>
-          <CtxItem icon={<Shuffle size={13} />} onSelect={() => actions.retry(gen, false, 4)}>Вариации ×4</CtxItem>
+          {gen.kind !== "face" && (
+            <>
+              <CtxItem icon={<Copy size={13} />} onSelect={() => actions.retry(gen, true)}>Повторить точно (тот же сид)</CtxItem>
+              <CtxItem icon={<Shuffle size={13} />} onSelect={() => actions.retry(gen, false, 4)}>Вариации ×4</CtxItem>
+            </>
+          )}
           <CtxItem icon={<Pencil size={13} />} onSelect={() => actions.editAndRetry(gen)}>Изменить и повторить</CtxItem>
           {asset && (
             <>
               <ContextMenu.Separator className="my-1 h-px bg-line" />
+              <CtxItem icon={<ScanFace size={13} />} onSelect={() => useUI.getState().openFaceDialog({ assetId: asset.id })} disabled={gen.status !== "done"}>Улучшить лицо…</CtxItem>
               <CtxItem icon={<Film size={13} />} onSelect={() => actions.addToTimeline(asset)} disabled={gen.status !== "done"}>В таймлайн</CtxItem>
               <CtxItem icon={<ImagePlus size={13} />} onSelect={() => actions.assetAsRef(asset)}>Использовать как видео-референс</CtxItem>
               <CtxItem icon={<SplitSquareHorizontal size={13} />} onSelect={() => {

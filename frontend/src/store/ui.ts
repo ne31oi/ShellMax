@@ -10,6 +10,12 @@ interface Toast {
   action?: { label: string; run: () => void };
 }
 
+/** Face refine dialog: which clip, optionally a past face job to start from ("edit and retry"). */
+export interface FaceDialogState {
+  assetId: number;
+  fromGenerationId?: number;
+}
+
 interface UIState {
   workspace: Workspace;
   selectedGen: number | null;
@@ -19,6 +25,7 @@ interface UIState {
   genDrawer: boolean; // generation panel in the Edit workspace
   binFilter: "all" | "video" | "draft" | "imported";
   toasts: Toast[];
+  faceDialog: FaceDialogState | null;
 
   setWorkspace: (w: Workspace) => void;
   selectGen: (id: number | null) => void;
@@ -28,6 +35,7 @@ interface UIState {
   toggleGenDrawer: () => void;
   setBinFilter: (f: UIState["binFilter"]) => void;
   toast: (text: string, tone?: Toast["tone"], action?: Toast["action"]) => void;
+  openFaceDialog: (state: FaceDialogState | null) => void;
   dismiss: (id: number) => void;
 }
 
@@ -42,6 +50,7 @@ export const useUI = create<UIState>((set) => ({
   genDrawer: false,
   binFilter: "all",
   toasts: [],
+  faceDialog: null,
 
   setWorkspace: (workspace) => {
     localStorage.setItem("sm.workspace", workspace);
@@ -59,4 +68,5 @@ export const useUI = create<UIState>((set) => ({
     setTimeout(() => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), action ? 9000 : 4500);
   },
   dismiss: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+  openFaceDialog: (faceDialog) => set({ faceDialog }),
 }));

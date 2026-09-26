@@ -65,6 +65,38 @@ class ExpertParams(BaseModel):
     crf: int = 19
 
 
+class FaceRecipe(BaseModel):
+    """MiniMax_H3_FaceRefine_Best internals. Model/LoRA paths are filled from config/defaults.json."""
+
+    unet: str = ""
+    lora: str = ""
+    lora_strength: float = 1.0
+    steps: int = 8  # must match the 8-step turbo LoRA
+    sampler: str = "euler"
+    scheduler: str = "simple"
+    ref_image_size: Literal["match", "max"] = "max"
+    # H3FaceTrackCrop (node 2)
+    crop_factor: float = 2.2
+    canvas: int = 768
+    smooth_window: int = 21
+    size_smooth_window: int = 51
+    select: str = "largest_face"
+    # H3PerFrameDenoise (node 31)
+    face_px_small: int = 60
+    face_px_large: int = 200
+    # H3FaceStitch (node 22)
+    mask_dilation: int = 24
+    feather: int = 24
+    colour_match: float = 1.0
+    blend: float = 1.0
+    crf: int = 16
+
+    @field_validator("unet", "lora")
+    @classmethod
+    def _clean(cls, v: str) -> str:
+        return clean_path(v)
+
+
 class EngineProfile(BaseModel):
     name: str = "Singularity v1.3"
     unet: str
@@ -76,6 +108,7 @@ class EngineProfile(BaseModel):
     loras_final: list[LoraSpec] = Field(default_factory=list)
     low_vram: bool = False
     expert: ExpertParams = Field(default_factory=ExpertParams)
+    face: FaceRecipe = Field(default_factory=FaceRecipe)
 
     @field_validator("unet", "text_encoder", "vae_video", "vae_audio", "upscaler")
     @classmethod
@@ -147,6 +180,40 @@ class FullParams(BaseModel):
     low_vram: bool
     expert: ExpertParams
     filename_prefix: str = "ShellMax/gen"
+
+
+class FaceUIParams(BaseModel):
+    """Face refine decisions: which clip, whose face, the close-up crop, prompt and strength."""
+
+    source_asset_id: int
+    identity_upload_id: str  # <Picture 1>
+    closeup_upload_id: str | None = None  # <Picture 2>; None -> same image as identity
+    closeup_crop: dict[str, float] | None = None  # normalized {x, y, w, h}; None -> whole image
+    prompt: str
+    denoise: float = Field(0.35, ge=0.05, le=0.9)
+    select: str | None = None  # which face when several are in frame; None -> recipe (largest_face)
+    seed: int | None = None  # None -> workflow's 42
+    profile_id: int | None = None
+
+
+class FaceFullParams(BaseModel):
+    schema_version: int = SCHEMA_VERSION
+    source_path: str
+    frame_load_cap: int = 0  # 0 = whole clip (already on the 17k+5 grid)
+    force_rate: float = 0
+    identity_image: str = ""  # ComfyUI input name (filled right before submit)
+    closeup_image: str = ""
+    identity_path: str = ""
+    closeup_path: str = ""
+    closeup_crop: str = ""  # LoadImageCrop JSON
+    prompt: str
+    denoise: float
+    seed: int
+    text_encoder: str
+    vae_video: str
+    vae_audio: str
+    recipe: FaceRecipe
+    filename_prefix: str = "ShellMax/face"
 
 
 # ------------------------------------------------------------------ derived values

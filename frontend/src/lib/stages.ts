@@ -1,23 +1,71 @@
-import type { Generation } from "../api/types";
+import type { Generation, JobKind } from "../api/types";
 
-/** Pipeline stages in execution order (mirrors backend jobs/queue.py STAGES). */
-export const STAGES: { id: string; label: string; short: string }[] = [
-  { id: "load", label: "Загрузка моделей", short: "Загрузка" },
-  { id: "encode", label: "Разбор промпта и референсов", short: "Промпт" },
-  { id: "pass1", label: "Проход 1 — черновое видео", short: "Проход 1" },
-  { id: "draft", label: "Сборка черновика", short: "Черновик" },
-  { id: "upscale", label: "Апскейл", short: "Апскейл" },
-  { id: "pass2", label: "Проход 2", short: "Проход 2" },
-  { id: "final", label: "Финальный проход — детали и звук", short: "Финал" },
-  { id: "decode", label: "Сборка видео", short: "Сборка" },
-];
+export interface StageDef {
+  id: string;
+  label: string;
+  short: string;
+}
 
-export const stageInfo = (id: string | null) => STAGES.find((s) => s.id === id) ?? STAGES[0];
-export const stageIndex = (id: string | null) => Math.max(0, STAGES.findIndex((s) => s.id === id));
+/** Pipeline stages per job kind, in execution order (mirrors backend jobs/pipelines.py). */
+export const STAGES_BY_KIND: Record<JobKind, StageDef[]> = {
+  generate: [
+    { id: "load", label: "Загрузка моделей", short: "Загрузка" },
+    { id: "encode", label: "Разбор промпта и референсов", short: "Промпт" },
+    { id: "pass1", label: "Проход 1 — черновое видео", short: "Проход 1" },
+    { id: "draft", label: "Сборка черновика", short: "Черновик" },
+    { id: "upscale", label: "Апскейл", short: "Апскейл" },
+    { id: "pass2", label: "Проход 2", short: "Проход 2" },
+    { id: "final", label: "Финальный проход — детали и звук", short: "Финал" },
+    { id: "decode", label: "Сборка видео", short: "Сборка" },
+  ],
+  face: [
+    { id: "load", label: "Загрузка моделей", short: "Загрузка" },
+    { id: "track", label: "Поиск и трекинг лица", short: "Трекинг" },
+    { id: "encode", label: "Разбор промпта и референсов", short: "Промпт" },
+    { id: "lipsync", label: "Привязка к звуку клипа", short: "Звук" },
+    { id: "refine", label: "Перерисовка лица", short: "Лицо" },
+    { id: "stitch", label: "Вклейка лица в кадр", short: "Вклейка" },
+    { id: "save", label: "Сохранение видео", short: "Сохранение" },
+  ],
+};
+
+/** Backwards-compatible default list (generation). */
+export const STAGES = STAGES_BY_KIND.generate;
+
+export const stagesOf = (g: Pick<Generation, "kind">) => STAGES_BY_KIND[g.kind] ?? STAGES;
+export const stageInfo = (id: string | null, g?: Pick<Generation, "kind">) => {
+  const list = g ? stagesOf(g) : STAGES;
+  return list.find((s) => s.id === id) ?? list[0];
+};
+export const stageIndex = (id: string | null, g?: Pick<Generation, "kind">) =>
+  Math.max(0, (g ? stagesOf(g) : STAGES).findIndex((s) => s.id === id));
 
 /** Progress of the current stage, when its node reports steps (samplers, decoders). */
 export function stepProgress(g: Generation): { value: number; max: number; pct: number } | null {
   const s = g.step;
   if (!s || !s.max) return null;
   return { ...s, pct: Math.round((s.value / s.max) * 100) };
+}
+
+/** Human summary of H3FaceTrackCrop's report. */
+export function trackSummary(report: string | undefined): { found: string; size?: string; warn?: string } | null {
+  if (!report) return null;
+  const frames = report.match(/frames=(\d+)\s+face=(\d+)/);
+  const height = report.match(/face height\s+min=(\d+)px\s+mean=(\d+)px/);
+  const mag = report.match(/magnification[^:]*:\s*min=([\d.]+)x\s+mean=([\d.]+)x/);
+  const lost = report.match(/lost:\s*(\d+)/);
+  if (!frames) return null;
+  const [total, face] = [Number(frames[1]), Number(frames[2])];
+  return {
+    found: `Лицо найдено на ${face} из ${total} кадров`,
+    size: height ? `размер лица ~${height[2]} px${mag ? ` · увеличение ×${Number(mag[2]).toFixed(1)}` : ""}` : undefined,
+    warn:
+      lost && Number(lost[1]) > 0
+        ? `Лицо потеряно на ${lost[1]} кадрах — там останется оригинал`
+        : face < total
+          ? `На ${total - face} кадрах лицо не найдено — там останется оригинал`
+          : mag && Number(mag[1]) < 1
+            ? "Лицо в кадре и так крупное — заметного улучшения может не быть"
+            : undefined,
+  };
 }

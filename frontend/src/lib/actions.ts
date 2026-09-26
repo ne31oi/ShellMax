@@ -59,6 +59,10 @@ export async function retry(g: Generation, sameSeed: boolean, variants = 1) {
 }
 
 export async function editAndRetry(g: Generation) {
+  if (g.kind === "face") {
+    if (g.source_asset_id) useUI.getState().openFaceDialog({ assetId: g.source_asset_id, fromGenerationId: g.id });
+    return;
+  }
   await useForm.getState().loadFromGeneration(g);
   const ui = useUI.getState();
   if (ui.workspace === "edit" && !ui.genDrawer) ui.toggleGenDrawer();

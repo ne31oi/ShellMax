@@ -11,6 +11,7 @@ dependencies = [
     "sqlmodel>=0.0.22",
     "pydantic>=2.9",
     "python-multipart>=0.0.18",
+    "opencv-python-headless>=4.10,<5",
 ]
 
 [dependency-groups]

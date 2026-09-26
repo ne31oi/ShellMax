@@ -1,14 +1,14 @@
 import clsx from "clsx";
 import {
-  AlertCircle, Camera, Copy, Dices, Maximize2, Pause, Pencil, Play, Repeat, SkipBack, SkipForward, Square, Volume2,
-  VolumeX, X,
+  AlertCircle, Camera, Copy, Dices, Maximize2, Pause, Pencil, Play, Repeat, ScanFace, SkipBack, SkipForward,
+  SplitSquareHorizontal, Square, Volume2, VolumeX, X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { urls } from "../../api/client";
 import type { Generation, MediaAsset } from "../../api/types";
 import * as actions from "../../lib/actions";
 import { on } from "../../lib/bus";
-import { STAGES, stageIndex, stageInfo, stepProgress } from "../../lib/stages";
+import { stageIndex, stageInfo, stagesOf, stepProgress, trackSummary } from "../../lib/stages";
 import { fmtDuration, fmtEstimate, fmtTimecode } from "../../lib/format";
 import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
@@ -23,6 +23,8 @@ export function Viewer() {
   const other = useLibrary((s) => (compareWith ? s.generations[compareWith] : undefined));
   const assets = useLibrary((s) => s.assets);
   const preview = useLibrary((s) => (selectedGen ? s.previews[selectedGen] : undefined));
+  const [faceResultOnly, setFaceResultOnly] = useState(false);
+  useEffect(() => setFaceResultOnly(false), [selectedGen]);
 
   if (!gen && !selectedAsset) return <Welcome />;
 
@@ -38,11 +40,17 @@ export function Viewer() {
   const draft = gen.draft_asset_id ? assets[gen.draft_asset_id] : undefined;
   const final = gen.output_asset_id ? assets[gen.output_asset_id] : undefined;
   const otherAsset = actions.outputAsset(other, assets);
+  const faceSource = gen.kind === "face" && gen.source_asset_id ? assets[gen.source_asset_id] : undefined;
 
   return (
     <div className="flex h-full flex-col">
       <div className="relative min-h-0 flex-1">
-        {final && otherAsset ? (
+        {gen.kind === "face" && final && faceSource && !faceResultOnly && !otherAsset ? (
+          // a refined face is judged against the original: open straight into the before | after wipe
+          <CompareView a={faceSource} b={final} labelA="До" labelB="После" onClose={() => setFaceResultOnly(true)} closeLabel="Только результат" />
+        ) : gen.kind === "face" && gen.status === "running" && draft ? (
+          <Player asset={draft} badge="Трекинг" overlay={<FaceTrackBanner gen={gen} />} />
+        ) : final && otherAsset ? (
           <CompareView a={final} b={otherAsset} labelA={`#${gen.id}`} labelB={`#${other!.id}`} />
         ) : final || (draft && gen.status !== "running") ? (
           <Player asset={(final ?? draft)!} badge={!final ? "Черновик" : undefined} />
@@ -72,7 +80,7 @@ function LiveView({ gen, preview }: { gen: Generation; preview?: string }) {
   const elapsed = started ? (now - started) / 1000 : 0;
   const left = gen.estimate_s ? Math.max(0, gen.estimate_s - elapsed) : null;
 
-  const stage = stageInfo(gen.stage);
+  const stage = stageInfo(gen.stage, gen);
   const step = stepProgress(gen);
   const queued = gen.status === "queued";
 
@@ -115,7 +123,11 @@ function LiveView({ gen, preview }: { gen: Generation; preview?: string }) {
           </Button>
         </div>
         {!gen.draft_asset_id && !queued && (
-          <p className="mt-1 text-center text-[11px] text-faint">Черновик появится после первого прохода — тогда можно будет не ждать финал</p>
+          <p className="mt-1 text-center text-[11px] text-faint">
+            {gen.kind === "face"
+              ? "Сначала найдём лицо на каждом кадре — покажем превью трекинга"
+              : "Черновик появится после первого прохода — тогда можно будет не ждать финал"}
+          </p>
         )}
       </div>
     </div>
@@ -124,11 +136,12 @@ function LiveView({ gen, preview }: { gen: Generation; preview?: string }) {
 
 /** All stages in a row: done / current (with its percent) / upcoming. */
 function StageTrack({ gen }: { gen: Generation }) {
-  const current = gen.status === "queued" ? -1 : stageIndex(gen.stage);
+  const current = gen.status === "queued" ? -1 : stageIndex(gen.stage, gen);
   const step = stepProgress(gen);
+  const stages = stagesOf(gen);
   return (
-    <div className="mt-4 grid grid-cols-8 gap-1">
-      {STAGES.map((s, i) => {
+    <div className="mt-4 grid gap-1" style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))` }}>
+      {stages.map((s, i) => {
         const done = i < current;
         const active = i === current;
         return (
@@ -155,12 +168,33 @@ function DraftBanner({ gen }: { gen: Generation }) {
   return (
     <div className="absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-3 rounded-xl border border-warn/40 bg-panel/95 px-3 py-2 shadow-xl backdrop-blur">
       <span className="text-xs tabular-nums">
-        <b className="text-warn">Черновик готов.</b> {stageInfo(gen.stage).short}
+        <b className="text-warn">Черновик готов.</b> {stageInfo(gen.stage, gen).short}
         {step ? ` · шаг ${step.value}/${step.max} · ${step.pct}%` : ""}
         <span className="text-faint"> · всего {Math.round(gen.progress * 100)}%</span>
       </span>
       <Button size="sm" variant="outline" onClick={() => actions.cancel(gen)}>
         Не нравится — остановить
+      </Button>
+    </div>
+  );
+}
+
+/** Face job: the tracking preview is ready - say whether the face was found while refining goes on. */
+function FaceTrackBanner({ gen }: { gen: Generation }) {
+  const step = stepProgress(gen);
+  const t = trackSummary(gen.info?.track_report);
+  return (
+    <div className="absolute left-1/2 top-3 flex max-w-[90%] -translate-x-1/2 items-center gap-3 rounded-xl border border-line bg-panel/95 px-3 py-2 shadow-xl backdrop-blur">
+      <span className="text-xs tabular-nums">
+        {t ? <b className={t.warn ? "text-warn" : "text-ok"}>{t.found}.</b> : <b>Трекинг готов.</b>}{" "}
+        {t?.warn ?? t?.size ?? ""}
+        <span className="text-faint">
+          {" "}· {stageInfo(gen.stage, gen).short}
+          {step ? ` ${step.value}/${step.max}` : ""} · всего {Math.round(gen.progress * 100)}%
+        </span>
+      </span>
+      <Button size="sm" variant="outline" onClick={() => actions.cancel(gen)}>
+        Остановить
       </Button>
     </div>
   );
@@ -178,7 +212,7 @@ function ErrorView({ gen }: { gen: Generation }) {
         </div>
         <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-fg">{gen.error}</p>
         <div className="mt-4 flex flex-wrap gap-2">
-          {gen.error_kind === "oom" && (
+          {gen.error_kind === "oom" && gen.kind !== "face" && (
             <>
               <Button size="sm" variant="primary" onClick={() => actions.fixes.lowerQuality(gen)}>Снизить качество</Button>
               <Button size="sm" onClick={() => actions.fixes.enableLowVram().then(() => actions.retry(gen, true))}>Включить экономию VRAM и повторить</Button>
@@ -286,6 +320,11 @@ export function Player({ asset, badge, overlay }: { asset: MediaAsset; badge?: s
             {fmtTimecode(time, fps)} <span className="text-faint">/ {fmtTimecode(duration, fps)}</span>
           </span>
           <span className="ml-auto" />
+          {asset.kind === "video" && (
+            <IconButton label="Улучшить лицо" onClick={() => useUI.getState().openFaceDialog({ assetId: asset.id })}>
+              <ScanFace size={15} />
+            </IconButton>
+          )}
           <IconButton
             label="Этот кадр — в референсы"
             onClick={() => {
@@ -313,7 +352,9 @@ function videoStep(v: HTMLVideoElement | null, n: number, fps: number) {
 }
 
 // ---------------------------------------------------------------- A/B wipe
-function CompareView({ a, b, labelA, labelB }: { a: MediaAsset; b: MediaAsset; labelA: string; labelB: string }) {
+function CompareView({ a, b, labelA, labelB, onClose, closeLabel = "Закрыть сравнение" }: {
+  a: MediaAsset; b: MediaAsset; labelA: string; labelB: string; onClose?: () => void; closeLabel?: string;
+}) {
   const va = useRef<HTMLVideoElement>(null);
   const vb = useRef<HTMLVideoElement>(null);
   const [split, setSplit] = useState(0.5);
@@ -354,8 +395,8 @@ function CompareView({ a, b, labelA, labelB }: { a: MediaAsset; b: MediaAsset; l
       </div>
       <div className="flex items-center justify-center gap-2 pb-2 text-xs text-muted">
         Тяните по кадру, чтобы сдвинуть шторку
-        <Button size="sm" variant="ghost" onClick={() => useUI.getState().compare(null)}>
-          <X size={12} /> Закрыть сравнение
+        <Button size="sm" variant="ghost" onClick={onClose ?? (() => useUI.getState().compare(null))}>
+          <X size={12} /> {closeLabel}
         </Button>
       </div>
     </div>
@@ -364,6 +405,55 @@ function CompareView({ a, b, labelA, labelB }: { a: MediaAsset; b: MediaAsset; l
 
 // ---------------------------------------------------------------- selected clip details + actions
 function ClipInfo({ gen }: { gen: Generation }) {
+  if (gen.kind === "face") return <FaceClipInfo gen={gen} />;
+  return <GenerationClipInfo gen={gen} />;
+}
+
+function FaceClipInfo({ gen }: { gen: Generation }) {
+  const source = useLibrary((s) => (gen.source_asset_id ? s.assets[gen.source_asset_id] : undefined));
+  const presets = useLibrary((s) => s.meta?.face_strength ?? []);
+  const preset = presets.find((p) => Math.abs(p.denoise - (gen.ui_params.denoise ?? 0)) < 1e-6);
+  const t = trackSummary(gen.info?.track_report);
+  return (
+    <div className="border-t border-line bg-panel px-4 py-2.5">
+      <div className="flex items-start gap-4">
+        <div className="min-w-0 flex-1 text-xs leading-relaxed text-muted">
+          <p className="text-fg">
+            <ScanFace size={13} className="mr-1 inline text-accent" />
+            Улучшение лица{source ? ` · «${source.name}»` : ""}
+          </p>
+          {t && (
+            <p className={t.warn ? "text-warn" : ""}>
+              {t.found}
+              {t.warn ? ` · ${t.warn}` : t.size ? ` · ${t.size}` : ""}
+            </p>
+          )}
+        </div>
+        <div className="flex shrink-0 gap-1">
+          {gen.status === "done" && source && (
+            <Button size="sm" variant="ghost" onClick={() => useUI.getState().selectAsset(source.id)} title="Открыть исходный клип">
+              <SplitSquareHorizontal size={13} /> Исходник
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" onClick={() => actions.retry(gen, false)} title="Ещё одна попытка с другим сидом">
+            <Dices size={13} /> Ещё раз
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => actions.editAndRetry(gen)}>
+            <Pencil size={13} /> Изменить
+          </Button>
+        </div>
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-faint tabular-nums">
+        <span>#{gen.id}</span>
+        <span>сила: {preset?.label ?? gen.ui_params.denoise}</span>
+        <span>сид {gen.seed}</span>
+        {gen.elapsed_s && <span>готово за {fmtDuration(gen.elapsed_s)}</span>}
+      </div>
+    </div>
+  );
+}
+
+function GenerationClipInfo({ gen }: { gen: Generation }) {
   const styles = useLibrary((s) => s.styles);
   const quality = useLibrary((s) => s.meta?.quality.find((q) => q.id === gen.ui_params.quality));
   const p = gen.ui_params;

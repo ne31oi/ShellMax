@@ -8,23 +8,73 @@
     "vae_audio": "vae/minimax_h3/minimax_h3_audio_vae_fp32.safetensors",
     "upscaler": "latent_upscale_models/minimax_h3_latent_upscaler_3d_conv_v1_fp16.safetensors",
     "loras_main": [
-      {"path": "loras/minimax_h3/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors", "strength": 1.0, "enabled": true}
+      {
+        "path": "loras/minimax_h3/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors",
+        "strength": 1.0,
+        "enabled": true
+      }
     ],
     "loras_final": [
-      {"path": "loras/minimax_h3/minimax_h3_lms_v1.0_r64.safetensors", "strength": 0.5, "enabled": true},
-      {"path": "loras/minimax_h3/h3-realism-people-t2v-i2v-r2v.safetensors", "strength": 1.0, "enabled": true}
+      {
+        "path": "loras/minimax_h3/minimax_h3_lms_v1.0_r64.safetensors",
+        "strength": 0.5,
+        "enabled": true
+      },
+      {
+        "path": "loras/minimax_h3/h3-realism-people-t2v-i2v-r2v.safetensors",
+        "strength": 1.0,
+        "enabled": true
+      }
     ],
     "low_vram": false
   },
   "quality_presets": {
-    "draft":    {"label": "Черновик", "megapixels": 0.3, "scale": 1.5},
-    "standard": {"label": "Стандарт", "megapixels": 0.5, "scale": 1.5},
-    "high":     {"label": "Высокое",  "megapixels": 0.9, "scale": 1.5}
+    "draft": {
+      "label": "Черновик",
+      "megapixels": 0.3,
+      "scale": 1.5
+    },
+    "standard": {
+      "label": "Стандарт",
+      "megapixels": 0.5,
+      "scale": 1.5
+    },
+    "high": {
+      "label": "Высокое",
+      "megapixels": 0.9,
+      "scale": 1.5
+    }
   },
   "ui": {
     "aspect": "16:9 (Widescreen)",
     "duration": 2.0,
     "quality": "standard",
     "prompt_template": "subject_definitions:\n<Subject 1> is the person in <Picture 1>.\n\n<Picture 1> is the sole authoritative visual reference for <Subject 1>'s identity and all visible appearance.\n\n<Environment 1> is a newly generated realistic physical location.\n\n"
-  }
+  },
+  "face": {
+    "_comment": "MiniMax_H3_FaceRefine_Best values. Paths relative to legacy_models_dir.",
+    "unet": "diffusion_models/minimax_h3/Minimax-h3_Singularity_ref2va_Pruned_v1.3_int8.safetensors",
+    "lora": "loras/minimax_h3/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors",
+    "lora_strength": 1.0
+  },
+  "face_strength_presets": [
+    {
+      "id": "gentle",
+      "label": "Бережно",
+      "denoise": 0.3,
+      "hint": "Если лицо скачет или мерцает"
+    },
+    {
+      "id": "standard",
+      "label": "Стандарт",
+      "denoise": 0.35,
+      "hint": "Как в воркфлоу"
+    },
+    {
+      "id": "strong",
+      "label": "Сильнее",
+      "denoise": 0.42,
+      "hint": "Если изменений почти не видно"
+    }
+  ]
 }

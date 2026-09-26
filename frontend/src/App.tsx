@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import { Clapperboard, Settings, Wand2, X } from "lucide-react";
 import { useEffect } from "react";
+import { FaceRefineDialog } from "./components/face/FaceRefineDialog";
 import { GeneratePanel } from "./components/generate/GeneratePanel";
 import { EngineStatus } from "./components/layout/EngineStatus";
 import { Resizer, usePanelSize } from "./components/layout/Resizer";
@@ -137,6 +138,7 @@ export default function App() {
         </div>
       </div>
       <SettingsDialog />
+      <FaceRefineDialog />
       <Toasts />
     </TipProvider>
   );

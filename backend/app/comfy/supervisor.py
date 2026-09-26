@@ -23,10 +23,12 @@ PID_FILE = settings.DATA_DIR / "engine.pid"
 
 
 def sync_shellmax_nodes() -> None:
-    """Copy comfy_nodes/shellmax_nodes into the engine (exFAT allows no symlinks/junctions)."""
-    src = settings.ROOT / "comfy_nodes" / "shellmax_nodes"
-    dest = settings.portable_dir() / "ComfyUI" / "custom_nodes" / "shellmax_nodes"
-    shutil.copytree(src, dest, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
+    """Copy every pack in comfy_nodes/ into the engine (exFAT allows no symlinks/junctions)."""
+    custom_nodes = settings.portable_dir() / "ComfyUI" / "custom_nodes"
+    for src in (settings.ROOT / "comfy_nodes").iterdir():
+        if src.is_dir() and not src.name.startswith(("_", ".")):
+            shutil.copytree(src, custom_nodes / src.name, dirs_exist_ok=True,
+                            ignore=shutil.ignore_patterns("__pycache__"))
 
 
 def pid_alive(pid: int | None) -> bool:
