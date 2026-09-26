@@ -4,16 +4,25 @@ import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type 
 import StarterKit from "@tiptap/starter-kit";
 import type { JSONContent } from "@tiptap/core";
 import clsx from "clsx";
-import { AlertTriangle, AudioLines, FileText, History } from "lucide-react";
+import { AlertTriangle, AudioLines, FileText, History, Sparkles, Square } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { create } from "zustand";
 import { urls } from "../../api/client";
 import type { RefItem } from "../../api/types";
 import { emit, on } from "../../lib/bus";
 import { KIND_COLOR, REF_TOKEN, danglingTags, fromModelPrompt, tagOf, toModelPrompt } from "../../lib/refs";
+import { frameCount } from "../../lib/format";
+import { useAssistant } from "../../store/assistant";
+import { EditPromptButton } from "../assistant/EditPromptButton";
 import { useForm } from "../../store/form";
+import { useUI } from "../../store/ui";
 import { useLibrary } from "../../store/library";
-import { Button, Menu, MenuItem, MenuLabel } from "../ui";
+import { Button, Menu, MenuItem, MenuLabel, Spinner, Tip } from "../ui";
+
+/** Live assistant text without the ```text fence lines. */
+export function stripFence(text: string): string {
+  return text.replace(/^[^`]*```[a-z]*\n?/i, "").replace(/```[\s\S]*$/, "");
+}
 
 // ---------------------------------------------------------------- token string <-> editor doc
 function toDoc(prompt: string): JSONContent {
@@ -238,6 +247,51 @@ export function PromptEditor() {
   // chips are tokens, so any raw <Picture N> left in the text was typed by hand
   const dangling = danglingTags(prompt, refs);
 
+  const job = useAssistant((s) => s.job);
+  const composing = job?.target === "compose" || job?.target === "edit";
+  // a finished, structured prompt is fixed in plain words; a free description is converted
+  const structured = /subject_definitions\s*:/i.test(prompt);
+  const videoBusy = useLibrary((s) => Object.values(s.generations).some((g) => g.status === "running" || g.status === "queued"));
+  const liveBox = useRef<HTMLPreElement>(null);
+  useEffect(() => {
+    if (liveBox.current) liveBox.current.scrollTop = liveBox.current.scrollHeight;
+  }, [job?.text]);
+
+  // plain words + reference tags -> a prompt written by the local assistant to the user's specification
+  const convert = async () => {
+    const f = useForm.getState();
+    const text = toModelPrompt(f.prompt, f.refs).trim();
+    if (!text) {
+      useUI.getState().toast("Опишите обычными словами, что должно происходить в видео", "info");
+      emit("focusPrompt");
+      return;
+    }
+    const before = f.prompt;
+    const result = await useAssistant.getState().run("compose", "/api/assistant/compose", {
+      text,
+      refs: f.refs.map((r) => ({ upload_id: r.upload.id, with_audio: r.withAudio })),
+      duration: frameCount(f.duration) / 24,
+    });
+    if (!result) return;
+    useForm.getState().setPrompt(fromModelPrompt(result, useForm.getState().refs), true);
+    useUI.getState().toast("Промпт готов", "ok", { label: "Вернуть как было", run: () => useForm.getState().setPrompt(before, true) });
+  };
+
+  // "make it night, add rain" -> the assistant changes only that, keeping the rest and the reference tags
+  const editWithAssistant = async (instruction: string) => {
+    const f = useForm.getState();
+    const before = f.prompt;
+    const result = await useAssistant.getState().run("edit", "/api/assistant/edit", {
+      prompt: toModelPrompt(f.prompt, f.refs),
+      instruction,
+      refs: f.refs.map((r) => ({ upload_id: r.upload.id, with_audio: r.withAudio })),
+      duration: frameCount(f.duration) / 24,
+    });
+    if (!result) return;
+    useForm.getState().setPrompt(fromModelPrompt(result, useForm.getState().refs), true);
+    useUI.getState().toast("Промпт исправлен", "ok", { label: "Вернуть как было", run: () => useForm.getState().setPrompt(before, true) });
+  };
+
   const applyTemplate = () => {
     const tokens = fromModelPrompt(template, refs);
     const current = useForm.getState().prompt.trim();
@@ -247,8 +301,22 @@ export function PromptEditor() {
 
   return (
     <div>
-      <div className="prompt-editor rounded-xl border border-line bg-raised focus-within:border-accent/60">
+      <div className="prompt-editor relative rounded-xl border border-line bg-raised focus-within:border-accent/60">
         <EditorContent editor={editor} />
+        {composing && (
+          // the assistant's text appears live on top of the editor; it replaces the prompt when done
+          <div className="absolute inset-x-0 top-0 bottom-[37px] flex flex-col rounded-t-xl bg-raised">
+            <div className="flex items-center gap-2 px-3 pt-2.5 text-xs text-accent">
+              <Spinner size={12} />
+              {job.stage === "loading"
+                ? "Загружаю ассистента… первый раз это может занять минуту"
+                : job.target === "edit" ? "Вношу правки…" : "Пишу промпт по спецификации…"}
+            </div>
+            <pre ref={liveBox} className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap px-3 py-2 font-mono text-[11px] leading-relaxed text-muted">
+              {stripFence(job.text)}
+            </pre>
+          </div>
+        )}
         <div className="flex items-center gap-1 border-t border-line/60 px-1.5 py-1">
           <Button variant="ghost" size="sm" onClick={applyTemplate} title="Вставить каркас описания субъекта из воркфлоу">
             <FileText size={13} /> Шаблон
@@ -268,7 +336,26 @@ export function PromptEditor() {
               </MenuItem>
             ))}
           </Menu>
-          <span className="ml-auto pr-1.5 text-[11px] text-faint">Ctrl+Enter — создать</span>
+          <span className="ml-auto" />
+          {composing ? (
+            <Button variant="outline" size="sm" onClick={() => useAssistant.getState().stop()}>
+              <Square size={11} /> Стоп
+            </Button>
+          ) : structured ? (
+            <EditPromptButton
+              onSubmit={editWithAssistant}
+              disabled={videoBusy || !!job}
+              hint={videoBusy ? "Ассистент будет доступен, когда закончится генерация видео" : "Ассистент занят"}
+            />
+          ) : (
+            <Tip text={videoBusy ? "Ассистент будет доступен, когда закончится генерация видео" : "Ассистент перепишет ваше описание в промпт по спецификации. Теги референсов сохранятся"}>
+              <span>
+                <Button variant="ghost" size="sm" onClick={convert} disabled={videoBusy || !!job} className="text-accent hover:text-accent-strong">
+                  <Sparkles size={13} /> В промпт
+                </Button>
+              </span>
+            </Tip>
+          )}
         </div>
       </div>
       {dangling.length > 0 && (

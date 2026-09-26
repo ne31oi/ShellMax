@@ -157,7 +157,8 @@ export interface Generation {
   project_id: number;
   kind: JobKind;
   source_asset_id: number | null; // face: the refined clip
-  info: { track_report?: string } | null;
+  // stage_seconds: exact seconds per stage; cold: models were loaded from disk (left out of averages)
+  info: { track_report?: string; stage_seconds?: Record<string, number>; cold?: boolean } | null;
   status: GenStatus;
   stage: Stage | null;
   progress: number;
@@ -233,3 +234,64 @@ export interface ScannedModel {
   rel: string;
   size: number;
 }
+
+// ---------------------------------------------------------------- assistant (local LLM)
+export interface AssistantFile {
+  id: string;
+  label: string;
+  status: "ready" | "missing" | "downloading" | "error";
+  received: number;
+  total: number;
+  error?: string | null;
+}
+
+export interface AssistantStatus {
+  model: string;
+  label: string;
+  ready: boolean;
+  files: AssistantFile[];
+  total_bytes: number;
+  received_bytes: number;
+  downloading: boolean;
+  running: boolean;
+  starting: boolean;
+  busy: boolean;
+}
+
+export interface AssistantModel {
+  id: string;
+  label: string;
+  hint: string;
+  ready: boolean;
+  size: number; // bytes still to download
+}
+
+export interface AssistantSettings {
+  model: string;
+  device: "gpu" | "cpu";
+  context_size: number;
+  max_output_tokens: number;
+  kv_cache: "off" | "q8_0" | "q5_1" | "q4_0";
+  video_vision: boolean;
+  sampling_override: boolean;
+  temperature: number;
+  top_p: number;
+  top_k: number;
+  min_p: number;
+  presence_penalty: number;
+  frequency_penalty: number;
+  repeat_penalty: number;
+}
+
+/** Time estimate from this machine's finished jobs (backend jobs/estimator.py). */
+export interface Estimate {
+  seconds: number;
+  basis: "exact" | "scaled" | "prior"; // same-size average | scaled from other sizes | no history yet
+  samples: number;
+}
+
+export type AssistantEvent =
+  | { stage: "loading" | "writing" }
+  | { delta: string }
+  | { done: true; prompt: string; cancelled: boolean }
+  | { error: string };

@@ -2,11 +2,12 @@ import clsx from "clsx";
 import { Check, ChevronDown, Clock, Palette, Plus, Sparkles } from "lucide-react";
 import { forwardRef, useEffect, useState, type ReactNode } from "react";
 import { api } from "../../api/client";
-import { fmtEstimate, fmtSeconds, frameCount } from "../../lib/format";
+import type { Estimate } from "../../api/types";
+import { estimateBasis, fmtEstimate, fmtSeconds, frameCount } from "../../lib/format";
 import { useForm } from "../../store/form";
 import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
-import { Button, Popover, Slider } from "../ui";
+import { Button, Popover, Slider, Tip } from "../ui";
 
 const Chip = forwardRef<HTMLButtonElement, { icon?: ReactNode; children: ReactNode; active?: boolean } & React.ButtonHTMLAttributes<HTMLButtonElement>>(
   ({ icon, children, active, className, ...props }, ref) => (
@@ -123,16 +124,16 @@ export function DurationChip() {
 }
 
 // ---------------------------------------------------------------- quality
-export function useEstimates(): Record<string, number> {
+export function useEstimates(): Record<string, Estimate | undefined> {
   const aspect = useForm((s) => s.aspect);
   const duration = useForm((s) => s.duration);
   const quality = useLibrary((s) => s.meta?.quality ?? []);
   const generationsCount = useLibrary((s) => Object.keys(s.generations).length);
-  const [est, setEst] = useState<Record<string, number>>({});
+  const [est, setEst] = useState<Record<string, Estimate | undefined>>({});
   useEffect(() => {
     const t = setTimeout(async () => {
       const pairs = await Promise.all(
-        quality.map(async (q) => [q.id, (await api.estimate(aspect, q.id, duration).catch(() => ({ seconds: NaN }))).seconds] as const),
+        quality.map(async (q) => [q.id, await api.estimate(aspect, q.id, duration).catch(() => undefined)] as const),
       );
       setEst(Object.fromEntries(pairs));
     }, 250);
@@ -141,7 +142,7 @@ export function useEstimates(): Record<string, number> {
   return est;
 }
 
-export function QualityChip({ estimates }: { estimates: Record<string, number> }) {
+export function QualityChip({ estimates }: { estimates: Record<string, Estimate | undefined> }) {
   const presets = useLibrary((s) => s.meta?.quality ?? []);
   const quality = useForm((s) => s.quality);
   const aspect = useForm((s) => s.aspect);
@@ -174,7 +175,12 @@ export function QualityChip({ estimates }: { estimates: Record<string, number> }
               </span>
               <span className="text-xs text-muted tabular-nums">{w}×{h}</span>
             </span>
-            <span className="text-xs text-faint tabular-nums">{fmtEstimate(estimates[p.id])}</span>
+            <Tip text={estimateBasis(estimates[p.id])} side="right">
+              <span className="text-xs text-faint tabular-nums">
+                {fmtEstimate(estimates[p.id]?.seconds)}
+                {estimates[p.id]?.basis === "exact" && <span className="block text-[10px] opacity-70">по {estimates[p.id]!.samples}</span>}
+              </span>
+            </Tip>
           </button>
         );
       })}

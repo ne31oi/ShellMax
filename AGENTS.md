@@ -43,7 +43,8 @@ ShellMax — локальное веб-приложение (FastAPI + React), �
    - Ошибки показываются человеческим текстом плюс действие-исправление (`humanize_error` → `ErrorView`).
    - Настройки сохраняются автоматически, кнопки «Сохранить» нет.
 5. **Таймлайн меняется только командами** (`frontend/src/store/timeline.ts`, `commands.*`) — это даёт undo/redo. Модель данных уже рассчитана на NLE: `Project.timeline` → tracks → clips.
-6. **Промпт хранится с токенами** `{{ref:<uid>}}` (`lib/refs.ts`). В `<Picture N>` / `<Video N>` / `<Audio N>` он превращается только при отправке (`toModelPrompt`). Нумерация идёт по типу, в порядке карточек, как в ноде 56.
+6. **Правила промптов ассистента = спецификация пользователя.** `backend/app/llm/prompt_spec.md` — дословная копия `MiniMax_H3_Singularity_Prompt_Writing_Specification_Enhanced_EN.md` (снято только markdown-экранирование). Не переписывать и не «улучшать»; обвязка (формат ответа в ```text, честность референсов, правила лица) — в `llm/prompt.py`. Движок, модели, флаги и сэмплинг ассистента повторяют Minimax Studio V6 (`llm/registry.py`, `llm/runner.py`) — менять только по просьбе пользователя.
+7. **Промпт хранится с токенами** `{{ref:<uid>}}` (`lib/refs.ts`). В `<Picture N>` / `<Video N>` / `<Audio N>` он превращается только при отправке (`toModelPrompt`). Нумерация идёт по типу, в порядке карточек, как в ноде 56.
 
 ## Карта кода
 
@@ -66,6 +67,9 @@ ShellMax — локальное веб-приложение (FastAPI + React), �
 | `backend/app/comfy/client.py` | REST и WS клиента ComfyUI |
 | `backend/app/api.py` | Все HTTP-роуты `/api/*` и WS `/api/ws` |
 | `backend/app/services.py` | Бутстрап (проект и профиль при первом запуске), загрузки, создание генераций |
+| `backend/app/llm/` | Ассистент: `registry` (модели/URL как в студии), `downloader`, `runner` (llama-server :8090), `prompt` (системные промпты compose/face), `service` (арбитраж VRAM, стрим) |
+| `backend/app/assistant_api.py` | `/api/assistant/*`: status, models, download, settings, compose (SSE), edit (SSE, правка готового промпта словами), face-prompt (SSE), stop, unload |
+| `backend/app/jobs/estimator.py` | Оценка времени по реальным готовым задачам: `exact` (среднее по тому же `kind` и `work_units`), `scaled`, `prior`; холодные (`info.cold`) исключаются. Время задачи — `elapsed_s`, по этапам — `info.stage_seconds` (пишет `jobs/queue.py`) |
 | `backend/app/db/models.py` | SQLModel/SQLite: Project, EngineProfileRow, StyleLora, Upload, MediaAsset, Generation, KV |
 | `frontend/src/store/` | zustand: `library` (данные с сервера), `form` (панель генерации, sticky), `ui`, `timeline` (команды) |
 | `frontend/src/lib/` | `actions` (общие действия), `live` (WS), `refs` (токены промпта), `stages`, `hotkeys`, `bus` (события между панелями) |
@@ -136,6 +140,8 @@ powershell -ExecutionPolicy Bypass -File scripts\install_comfy.ps1   # уста�
 - 8188 — основной ComfyUI пользователя, его не трогать.
 
 **GPU:** 16 ГБ VRAM, модели ~50 ГБ идут через выгрузку в RAM. Не запускать генерации в двух ComfyUI одновременно.
+
+**Ассистент и генерация делят GPU по очереди** (как `vram-arbiter.ts` студии): при активной/ожидающей генерации ассистент отвечает 409; перед его запуском — ComfyUI `/free`; перед отправкой видео-задачи `JobManager.before_submit` ждёт ответ ассистента и останавливает llama-server.
 
 **Реальная генерация** длится ~6 минут (2 с, «Стандарт»), первая дольше из-за загрузки моделей. Повтор с тем же сидом близок (SSIM ≈ 0.96), но не бит-в-бит.
 

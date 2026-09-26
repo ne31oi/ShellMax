@@ -41,6 +41,16 @@ class Running:
     last_push: float = 0.0
     last_preview: float = 0.0
     step: dict | None = None  # {"value", "max"} of the node currently reporting progress
+    started_at: float = field(default_factory=time.time)  # job start: exact wall time is measured from here
+    stage_marks: list = field(default_factory=list)  # [(stage, t)] when each stage began
+    cold: bool = False  # models had to be loaded (first job after engine start or after they were freed)
+
+    def stage_seconds(self, until: float) -> dict[str, float]:
+        out: dict[str, float] = {}
+        marks = self.stage_marks + [("", until)]
+        for (stage, t0), (_, t1) in zip(marks, marks[1:]):
+            out[stage] = round(out.get(stage, 0.0) + (t1 - t0), 2)
+        return out
 
 
 def humanize_error(exc_type: str, message: str, node_type: str = "") -> tuple[str, str]:
@@ -60,6 +70,10 @@ class JobManager:
         self.queue: asyncio.Queue[int] = asyncio.Queue()
         self.running: Running | None = None
         self._stop = asyncio.Event()
+        # awaited right before a job goes to ComfyUI (the assistant finishes and leaves the GPU)
+        self.before_submit = None
+        self.cold_next = True  # next job loads models from disk (engine start / models freed)
+        self._warm_pid: int | None = None
 
     # ------------------------------------------------------------------ lifecycle
     async def start(self) -> None:
@@ -76,6 +90,14 @@ class JobManager:
 
     async def stop(self) -> None:
         self._stop.set()
+
+    def mark_cold(self) -> None:
+        """Models were unloaded (e.g. for the assistant): the next job is a cold sample."""
+        self.cold_next = True
+
+    def busy(self) -> bool:
+        """A video job is running or waiting."""
+        return self.running is not None or not self.queue.empty()
 
     def enqueue(self, gen_id: int) -> None:
         self.queue.put_nowait(gen_id)
@@ -134,6 +156,7 @@ class JobManager:
 
     async def _run(self, g: Generation) -> None:
         r = self.running = Running(gen_id=g.id, pipe=PIPELINES.get(g.kind, PIPELINES["generate"]), kind=g.kind)
+        r.stage_marks.append(("prepare", r.started_at))
         with session() as s:
             row = s.get(Generation, g.id)
             row.status, row.stage, row.started, row.progress = "running", "load", utcnow(), 0.0
@@ -161,6 +184,9 @@ class JobManager:
             s.add(row)
             s.commit()
 
+        if self.before_submit:
+            await self.before_submit()
+        r.cold = self.cold_next or self.engine.pid != self._warm_pid
         try:
             r.prompt_id = await self.client.queue_prompt(prompt)
         except PromptRejected as e:
@@ -172,14 +198,14 @@ class JobManager:
             s.add(row)
             s.commit()
 
-        t0 = time.time()
         await r.done.wait()
         await self._collect_missing_outputs(r)
 
         if r.error:
             await self._finish(g.id, "error", error=r.error)
         elif r.final_asset_id:
-            await self._finish(g.id, "done", elapsed=time.time() - t0)
+            await self._finish(g.id, "done", elapsed=time.time() - r.started_at)
+            self.cold_next, self._warm_pid = False, self.engine.pid
         elif r.draft_asset_id and (r.stop_after_draft or r.cancelled):
             await self._finish(g.id, "draft_only")
         elif r.cancelled:
@@ -224,7 +250,11 @@ class JobManager:
             if status == "done":
                 g.progress, g.stage = 1.0, "done"
             if elapsed is not None:
-                g.elapsed_s = elapsed
+                g.elapsed_s = round(elapsed, 2)
+            if r and r.gen_id == gen_id:
+                stages = r.stage_seconds(time.time())
+                # a job that had to load the models from disk is a "cold" sample for time estimates
+                g.info = {**(g.info or {}), "stage_seconds": stages, "cold": r.cold}
             if error:
                 g.error_kind, g.error = error
             s.add(g)
@@ -248,6 +278,8 @@ class JobManager:
             if stage and r.pipe.stage_start[stage] >= r.pipe.stage_start[r.stage]:
                 changed = stage != r.stage
                 r.stage = stage
+                if changed or not r.stage_marks:
+                    r.stage_marks.append((stage, time.time()))
                 if changed:
                     r.step = None  # a new stage starts without step info until its node reports
                 await self._progress(r, r.pipe.stage_start[stage], force=changed)

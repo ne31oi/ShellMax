@@ -41,6 +41,18 @@ export const stageIndex = (id: string | null, g?: Pick<Generation, "kind">) =>
   Math.max(0, (g ? stagesOf(g) : STAGES).findIndex((s) => s.id === id));
 
 /** Progress of the current stage, when its node reports steps (samplers, decoders). */
+/** "Загрузка 40 с · Проход 1 2 мин · …" — where the time of a finished job went. */
+export function timeBreakdown(g: Generation): string {
+  const secs = g.info?.stage_seconds;
+  if (!secs) return "";
+  const fmt = (s: number) => (s < 60 ? `${Math.round(s)} с` : `${Math.floor(s / 60)} мин ${Math.round(s % 60)} с`);
+  const parts = Object.entries(secs)
+    .filter(([, s]) => s >= 1)
+    .map(([id, s]) => `${id === "prepare" ? "Подготовка" : stageInfo(id, g).short} ${fmt(s)}`);
+  if (g.info?.cold) parts.push("модели грузились с диска — в среднее время не идёт");
+  return parts.join(" · ");
+}
+
 export function stepProgress(g: Generation): { value: number; max: number; pct: number } | null {
   const s = g.step;
   if (!s || !s.max) return null;

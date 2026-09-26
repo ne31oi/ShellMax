@@ -1,4 +1,5 @@
 import type { EngineState, Generation, MediaAsset } from "../api/types";
+import { useAssistant } from "../store/assistant";
 import { useLibrary } from "../store/library";
 import { notifyDone } from "./notify";
 
@@ -7,7 +8,8 @@ type LiveEvent =
   | { type: "generation_deleted"; id: number }
   | { type: "asset"; asset: MediaAsset }
   | { type: "preview"; generation_id: number; data: string }
-  | { type: "engine"; engine: EngineState };
+  | { type: "engine"; engine: EngineState }
+  | { type: "assistant_download" };
 
 /** Keeps a websocket to the backend open forever; reconnects with backoff. */
 export function connectLive(): () => void {
@@ -59,6 +61,9 @@ function handle(ev: LiveEvent) {
       break;
     case "engine":
       lib.setEngine(ev.engine);
+      break;
+    case "assistant_download":
+      void useAssistant.getState().refresh();
       break;
   }
 }

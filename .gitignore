@@ -17,3 +17,6 @@ node_modules/
 # misc
 *.log
 .DS_Store
+
+# local assistant: llama.cpp engine + GGUF models (downloaded by the app)
+/llm/

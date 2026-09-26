@@ -1,13 +1,16 @@
 import clsx from "clsx";
-import { AlertTriangle, ChevronRight, ImagePlus, ScanFace, Sparkles } from "lucide-react";
+import { AlertTriangle, ChevronRight, ImagePlus, ScanFace, Sparkles, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, urls } from "../../api/client";
-import type { CropBox, FaceDefaults, Upload } from "../../api/types";
+import type { CropBox, Estimate, FaceDefaults, Upload } from "../../api/types";
 import { uploadFiles } from "../../lib/actions";
-import { fmtEstimate, fmtSeconds } from "../../lib/format";
+import { estimateBasis, fmtEstimate, fmtSeconds } from "../../lib/format";
+import { useAssistant } from "../../store/assistant";
 import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
 import { Button, Dialog, SectionTitle, Select, Spinner } from "../ui";
+import { EditPromptButton } from "../assistant/EditPromptButton";
+import { stripFence } from "../generate/PromptEditor";
 import { CropEditor } from "./CropEditor";
 
 // H3FaceTrackCrop "select" modes that need no extra coordinates
@@ -45,10 +48,13 @@ function FaceForm({ assetId, fromGenerationId, onDone }: { assetId: number; from
   const [denoise, setDenoise] = useState(0.35);
   const [select, setSelect] = useState("largest_face");
   const [editPrompt, setEditPrompt] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState<string | null>(null);
+  const job = useAssistant((s) => s.job);
+  const writing = job?.target === "face";
   const [busy, setBusy] = useState(false);
   const [detecting, setDetecting] = useState(false);
   const [error, setError] = useState("");
-  const [estimate, setEstimate] = useState<number | null>(null);
+  const [estimate, setEstimate] = useState<Estimate | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -63,9 +69,7 @@ function FaceForm({ assetId, fromGenerationId, onDone }: { assetId: number; from
         setPrompt(p?.prompt ?? d.prompt);
         setDenoise(p?.denoise ?? d.presets.find((x) => x.id === "standard")?.denoise ?? 0.35);
         setSelect(p?.select ?? "largest_face");
-        const gens = Object.values(useLibrary.getState().generations).filter((g) => g.kind === "face" && g.status === "done" && g.elapsed_s);
-        const last = gens.sort((a, b) => b.id - a.id)[0];
-        setEstimate(last?.elapsed_s ?? 150 * (d.frames / 56));
+        api.faceEstimate(assetId).then(setEstimate).catch(() => setEstimate(null));
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Не удалось открыть клип"));
   }, [assetId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -127,6 +131,36 @@ function FaceForm({ assetId, fromGenerationId, onDone }: { assetId: number; from
   }
 
   const usesTemplate = prompt === defaults.prompt;
+
+  // the local assistant looks at the photo, the close-up crop and a frame of the clip and writes the close-up prompt
+  const composeWithAssistant = async () => {
+    if (!identity) return;
+    setEditPrompt(true);
+    const result = await useAssistant.getState().run("face", "/api/assistant/face-prompt", {
+      source_asset_id: assetId,
+      identity_upload_id: identity.id,
+      closeup_crop: crop,
+    });
+    if (result) {
+      setPrompt(result);
+      setAiPrompt(result);
+    }
+  };
+
+  const editWithAssistant = async (instruction: string) => {
+    if (!identity) return;
+    setEditPrompt(true);
+    const before = prompt;
+    const result = await useAssistant.getState().run("face", "/api/assistant/edit", {
+      prompt,
+      instruction,
+      face: { source_asset_id: assetId, identity_upload_id: identity.id, closeup_crop: crop },
+    });
+    if (!result) return;
+    setPrompt(result);
+    setAiPrompt(result);
+    useUI.getState().toast("Промпт исправлен", "ok", { label: "Вернуть как было", run: () => setPrompt(before) });
+  };
 
   return (
     <div className="space-y-5 p-5">
@@ -248,17 +282,39 @@ function FaceForm({ assetId, fromGenerationId, onDone }: { assetId: number; from
 
       {/* prompt, folded: it is pre-filled and rarely needs editing */}
       <section>
-        <button onClick={() => setEditPrompt(!editPrompt)} className="flex w-full items-center gap-1.5 text-left">
-          <ChevronRight size={13} className={clsx("text-faint transition-transform", editPrompt && "rotate-90")} />
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-faint">Описание</span>
-          <span className="ml-2 truncate text-xs text-muted">
-            {usesTemplate ? "шаблон крупного плана · внешность из исходного клипа" : prompt === defaults.source_prompt ? "исходный промпт клипа" : "изменено"}
-          </span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setEditPrompt(!editPrompt)} className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
+            <ChevronRight size={13} className={clsx("text-faint transition-transform", editPrompt && "rotate-90")} />
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-faint">Описание</span>
+            <span className="ml-2 truncate text-xs text-muted">
+              {writing
+                ? job.stage === "loading" ? "загружаю ассистента…" : "ассистент пишет…"
+                : aiPrompt !== null && prompt === aiPrompt ? "составлено ассистентом по спецификации"
+                : usesTemplate ? "шаблон крупного плана · внешность из исходного клипа"
+                : prompt === defaults.source_prompt ? "исходный промпт клипа" : "изменено"}
+            </span>
+          </button>
+          {writing ? (
+            <Button size="sm" variant="outline" onClick={() => useAssistant.getState().stop()}>
+              <Square size={11} /> Стоп
+            </Button>
+          ) : (
+            <>
+            {prompt.trim() && (
+              <EditPromptButton onSubmit={editWithAssistant} disabled={!identity || !!job} hint={!identity ? "Сначала выберите фото персонажа" : undefined} />
+            )}
+            <Button size="sm" variant="ghost" className="text-accent hover:text-accent-strong" onClick={composeWithAssistant}
+              disabled={!identity || !!job} title="Ассистент посмотрит на фото, рамку и кадр клипа и напишет промпт крупного плана по спецификации">
+              <Sparkles size={13} /> Составить ассистентом
+            </Button>
+            </>
+          )}
+        </div>
         {editPrompt && (
           <div className="mt-2">
             <textarea
-              value={prompt}
+              value={writing ? stripFence(job.text) : prompt}
+              readOnly={writing}
               onChange={(e) => setPrompt(e.target.value)}
               rows={10}
               spellCheck={false}
@@ -268,6 +324,11 @@ function FaceForm({ assetId, fromGenerationId, onDone }: { assetId: number; from
               <Button size="sm" variant={usesTemplate ? "subtle" : "ghost"} onClick={() => setPrompt(defaults.prompt)}>
                 Шаблон крупного плана
               </Button>
+              {aiPrompt !== null && (
+                <Button size="sm" variant={prompt === aiPrompt ? "subtle" : "ghost"} onClick={() => setPrompt(aiPrompt)}>
+                  От ассистента
+                </Button>
+              )}
               {defaults.source_prompt && (
                 <Button size="sm" variant={prompt === defaults.source_prompt ? "subtle" : "ghost"} onClick={() => setPrompt(defaults.source_prompt)}>
                   Исходный промпт
@@ -283,9 +344,9 @@ function FaceForm({ assetId, fromGenerationId, onDone }: { assetId: number; from
 
       <div className="flex items-center justify-end gap-2 border-t border-line pt-4">
         <Button variant="ghost" onClick={onDone}>Отмена</Button>
-        <Button variant="primary" size="lg" onClick={submit} disabled={busy || !identity || !prompt.trim()}>
+        <Button variant="primary" size="lg" onClick={submit} disabled={busy || writing || !identity || !prompt.trim()} title={estimateBasis(estimate)}>
           {busy ? <Spinner /> : <Sparkles size={15} />} Улучшить лицо
-          {estimate != null && <span className="font-normal opacity-70">{fmtEstimate(estimate)}</span>}
+          {estimate && <span className="font-normal opacity-70">{fmtEstimate(estimate.seconds)}</span>}
         </Button>
       </div>
     </div>

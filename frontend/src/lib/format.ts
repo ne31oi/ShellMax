@@ -13,6 +13,21 @@ export function fmtEstimate(seconds: number | null | undefined): string {
   return `~${Math.round(seconds / 60)} мин`;
 }
 
+/** What an estimate is based on, for a tooltip. */
+export function estimateBasis(e: { basis: string; samples: number } | null | undefined): string {
+  if (!e) return "";
+  if (e.basis === "exact") return `Среднее по ${e.samples} ${plural(e.samples, "готовой генерации", "готовым генерациям", "готовым генерациям")} такого же размера на этом компьютере`;
+  if (e.basis === "scaled") return `Пересчитано по ${e.samples} ${plural(e.samples, "готовой генерации", "готовым генерациям", "готовым генерациям")} другого размера. Станет точнее после первой такой генерации`;
+  return "Приблизительно: готовых генераций ещё нет. После первой оценка будет по реальному времени";
+}
+
+export function plural(n: number, one: string, few: string, many: string): string {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+  return many;
+}
+
 export function fmtTimecode(t: number, fps = 24): string {
   if (!isFinite(t)) t = 0;
   const m = Math.floor(t / 60);

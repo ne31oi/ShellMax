@@ -1,4 +1,9 @@
 import type {
+  AssistantEvent,
+  Estimate,
+  AssistantModel,
+  AssistantSettings,
+  AssistantStatus,
   CropBox,
   EngineProfile,
   FaceDefaults,
@@ -63,7 +68,8 @@ const q = (params: Record<string, string | number>) =>
 export const api = {
   meta: () => get<Meta>("/api/meta"),
   estimate: (aspect: string, quality: string, duration: number) =>
-    get<{ seconds: number }>("/api/estimate" + q({ aspect, quality, duration })),
+    get<Estimate>("/api/estimate" + q({ aspect, quality, duration })),
+  faceEstimate: (assetId: number) => get<Estimate>("/api/face/estimate" + q({ asset_id: assetId })),
 
   uiState: () => get<Record<string, unknown>>("/api/state/ui"),
   saveUiState: (value: Record<string, unknown>) => put("/api/state/ui", value),
@@ -107,6 +113,14 @@ export const api = {
   faceDetect: (uploadId: string) => post<{ found: boolean; crop: CropBox }>("/api/face/detect", { upload_id: uploadId }),
   faceRefine: (params: FaceUIParams) => post<Generation>("/api/face", params),
 
+  assistantStatus: () => get<AssistantStatus>("/api/assistant/status"),
+  assistantModels: () => get<AssistantModel[]>("/api/assistant/models"),
+  assistantDownload: () => post("/api/assistant/download"),
+  assistantSettings: () => get<AssistantSettings>("/api/assistant/settings"),
+  saveAssistantSettings: (s: AssistantSettings) => put("/api/assistant/settings", s),
+  assistantStop: () => post("/api/assistant/stop"),
+  assistantUnload: () => post("/api/assistant/unload"),
+
   assets: () => get<MediaAsset[]>("/api/assets"),
   assetAsUpload: (assetId: number) => post<Upload>(`/api/assets/${assetId}/as-upload`),
   frameToRef: (assetId: number, t: number) => post<Upload>(`/api/assets/${assetId}/frame`, { t }),
@@ -124,3 +138,37 @@ export const urls = {
   assetFile: (id: number) => `/api/assets/${id}/file`,
   assetThumb: (id: number) => `/api/assets/${id}/thumb`,
 };
+
+/** POST that answers with server-sent events; calls onEvent per `data:` line. */
+export async function streamAssistant(url: string, body: unknown, onEvent: (e: AssistantEvent) => void, signal?: AbortSignal) {
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
+  if (!res.ok || !res.body) {
+    let msg = `Ошибка ${res.status}`;
+    try {
+      const d = (await res.json()).detail;
+      if (typeof d === "string") msg = d;
+    } catch {
+      /* not json */
+    }
+    throw new ApiError(msg, res.status, null);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const events = buf.split("\n\n");
+    buf = events.pop() ?? "";
+    for (const ev of events) {
+      const line = ev.split("\n").find((l) => l.startsWith("data: "));
+      if (!line) continue;
+      try {
+        onEvent(JSON.parse(line.slice(6)) as AssistantEvent);
+      } catch {
+        /* partial chunk */
+      }
+    }
+  }
+}

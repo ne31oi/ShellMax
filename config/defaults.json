@@ -49,7 +49,7 @@
     "aspect": "16:9 (Widescreen)",
     "duration": 2.0,
     "quality": "standard",
-    "prompt_template": "subject_definitions:\n<Subject 1> is the person in <Picture 1>.\n\n<Picture 1> is the sole authoritative visual reference for <Subject 1>'s identity and all visible appearance.\n\n<Environment 1> is a newly generated realistic physical location.\n\n"
+    "prompt_template": "subject_definitions:\n<Subject 1> is the person in <Picture 1>: [identity / appearance / clothing / distinctive features].\n<Environment>: [location / architecture / terrain / atmosphere / lighting]\n\nsummary:\n[Main action progression and final state]\n\nretention_analysis:\n<Subject 1>: fully_preserved — [details retained from <Picture 1>]\n\ndetailed_description:\n[Shot 1] [shot size / camera position] establishes [composition]. <Subject 1> begins in [initial state], then [trigger]. As [primary action] continues, [body / prop / environmental movement]. The camera [movement] toward / along / around [direction], at [speed / amplitude], following <Subject 1>. At [impact / contact / emotional beat], [VFX / physics / lighting response]. The shot ends with [final state].\n\noverall_soundscape:\n[Ambient environment + synchronized diegetic effects + dialogue]\n\nnon_diegetic_music:\n[Music style / intensity / progression, or N/A]\n"
   },
   "face": {
     "_comment": "MiniMax_H3_FaceRefine_Best values. Paths relative to legacy_models_dir.",

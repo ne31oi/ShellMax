@@ -105,7 +105,7 @@ export function Popover({
           side={side}
           sideOffset={8}
           collisionPadding={12}
-          className={clsx("z-40 rounded-xl border border-line bg-panel p-3 shadow-2xl outline-none", className)}
+          className={clsx("z-50 rounded-xl border border-line bg-panel p-3 shadow-2xl outline-none", className)}
         >
           {children}
         </PopoverPrimitive.Content>

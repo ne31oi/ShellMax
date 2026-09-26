@@ -78,6 +78,11 @@ class ComfyClient:
     async def delete_from_queue(self, prompt_id: str) -> None:
         await self._http.post("/queue", json={"delete": [prompt_id]})
 
+    async def free_models(self) -> None:
+        """Unload models and free cached memory (ComfyUI /free)."""
+        r = await self._http.post("/free", json={"unload_models": True, "free_memory": True}, timeout=10)
+        r.raise_for_status()
+
     async def history(self, prompt_id: str) -> dict:
         r = await self._http.get(f"/history/{prompt_id}")
         r.raise_for_status()

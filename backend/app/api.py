@@ -14,7 +14,7 @@ from .db.models import (EngineProfileRow, Generation, MediaAsset, Project, Style
                         select, session)
 from .fs import browse
 from .hub import hub
-from .jobs.estimator import estimate_seconds
+from .jobs.estimator import estimate as estimate_time
 from .jobs.queue import push_generation, register_asset
 from .media import library
 from .workflow import face, presets
@@ -52,8 +52,9 @@ def frames(duration: float):
 
 @router.get("/estimate")
 def estimate(aspect: str, quality: str, duration: float):
+    """{seconds, basis: exact|scaled|prior, samples} from this machine's finished jobs."""
     res = presets.resolution_for(aspect, quality)["final"]
-    return {"seconds": estimate_seconds(res[0] * res[1] * frame_count(duration))}
+    return estimate_time(res[0] * res[1] * frame_count(duration), "generate")
 
 
 # ---------------------------------------------------------------- sticky ui state
@@ -331,6 +332,15 @@ def face_defaults(asset_id: int):
 
 class FaceDetectIn(BaseModel):
     upload_id: str
+
+
+@router.get("/face/estimate")
+def face_estimate(asset_id: int):
+    with session() as s:
+        asset = s.get(MediaAsset, asset_id) or _404()
+    _, _, frames, _ = face.source_frames(asset.duration, asset.fps)
+    _, profile = services.get_profile(None)
+    return estimate_time(face.face_work_units(profile.face, frames), "face")
 
 
 @router.post("/face/detect")

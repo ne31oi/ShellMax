@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import { Clapperboard, Settings, Wand2, X } from "lucide-react";
 import { useEffect } from "react";
+import { AssistantSetup } from "./components/assistant/AssistantSetup";
 import { FaceRefineDialog } from "./components/face/FaceRefineDialog";
 import { GeneratePanel } from "./components/generate/GeneratePanel";
 import { EngineStatus } from "./components/layout/EngineStatus";
@@ -13,6 +14,7 @@ import { IconButton, Kbd, Spinner, TipProvider } from "./components/ui";
 import { Viewer } from "./components/viewer/Viewer";
 import { useHotkeys } from "./lib/hotkeys";
 import { connectLive } from "./lib/live";
+import { useAssistant } from "./store/assistant";
 import { useForm } from "./store/form";
 import { useLibrary } from "./store/library";
 import { useTimeline } from "./store/timeline";
@@ -41,6 +43,7 @@ export default function App() {
         const meta = useLibrary.getState().meta!;
         useForm.getState().hydrate(meta.defaults);
       });
+    void useAssistant.getState().refresh();
     fetch("/api/projects/1")
       .then((r) => r.json())
       .then((p) => useTimeline.getState().load(p.timeline))
@@ -139,6 +142,7 @@ export default function App() {
       </div>
       <SettingsDialog />
       <FaceRefineDialog />
+      <AssistantSetup />
       <Toasts />
     </TipProvider>
   );

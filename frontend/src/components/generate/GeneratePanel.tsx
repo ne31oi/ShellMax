@@ -4,7 +4,8 @@ import { Check, ChevronDown, Dices, Lock, RotateCcw, Wand2 } from "lucide-react"
 import { useEffect, useState } from "react";
 import { generate } from "../../lib/actions";
 import { on } from "../../lib/bus";
-import { fmtEstimate } from "../../lib/format";
+import type { Estimate } from "../../api/types";
+import { estimateBasis, fmtEstimate } from "../../lib/format";
 import { useForm } from "../../store/form";
 import { defaultProfile, sortedGenerations, useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
@@ -38,7 +39,7 @@ export function GeneratePanel() {
   );
 }
 
-function GenerateBar({ estimates }: { estimates: Record<string, number> }) {
+function GenerateBar({ estimates }: { estimates: Record<string, Estimate | undefined> }) {
   const { quality, variants, seedLocked, seed, profileId, set } = useForm();
   const engine = useLibrary((s) => s.engine);
   const profiles = useLibrary((s) => s.profiles);
@@ -88,11 +89,12 @@ function GenerateBar({ estimates }: { estimates: Record<string, number> }) {
             <button
               onClick={run}
               disabled={busy}
+              title={est ? estimateBasis(est) : undefined}
               className="flex h-11 flex-1 items-center justify-center gap-2 bg-accent font-semibold text-accent-fg transition-colors hover:bg-accent-strong disabled:opacity-60"
             >
               {busy ? <Spinner /> : <Wand2 size={16} />}
               {variants > 1 ? `Создать ×${variants}` : "Создать"}
-              {est != null && isFinite(est) && <span className="text-[12px] font-normal opacity-70">{fmtEstimate(est * variants)}</span>}
+              {est && isFinite(est.seconds) && <span className="text-[12px] font-normal opacity-70">{fmtEstimate(est.seconds * variants)}</span>}
             </button>
             <Menu
               trigger={

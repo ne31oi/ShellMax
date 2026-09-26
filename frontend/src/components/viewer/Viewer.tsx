@@ -8,7 +8,7 @@ import { urls } from "../../api/client";
 import type { Generation, MediaAsset } from "../../api/types";
 import * as actions from "../../lib/actions";
 import { on } from "../../lib/bus";
-import { stageIndex, stageInfo, stagesOf, stepProgress, trackSummary } from "../../lib/stages";
+import { stageIndex, stageInfo, stagesOf, stepProgress, timeBreakdown, trackSummary } from "../../lib/stages";
 import { fmtDuration, fmtEstimate, fmtTimecode } from "../../lib/format";
 import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
@@ -447,7 +447,7 @@ function FaceClipInfo({ gen }: { gen: Generation }) {
         <span>#{gen.id}</span>
         <span>сила: {preset?.label ?? gen.ui_params.denoise}</span>
         <span>сид {gen.seed}</span>
-        {gen.elapsed_s && <span>готово за {fmtDuration(gen.elapsed_s)}</span>}
+        {gen.elapsed_s && <span title={timeBreakdown(gen)}>готово за {fmtDuration(gen.elapsed_s)}</span>}
       </div>
     </div>
   );
@@ -486,7 +486,7 @@ function GenerationClipInfo({ gen }: { gen: Generation }) {
         <span>сид {gen.seed}</span>
         {styleNames.length > 0 && <span>стиль: {styleNames.join(", ")}</span>}
         {p.refs.length > 0 && <span>референсов: {p.refs.length}</span>}
-        {gen.elapsed_s && <span>создано за {fmtDuration(gen.elapsed_s)}</span>}
+        {gen.elapsed_s && <span title={timeBreakdown(gen)}>создано за {fmtDuration(gen.elapsed_s)}</span>}
         <span className="ml-auto hidden xl:inline">
           <Kbd>Пробел</Kbd> пуск · <Kbd>←</Kbd>
           <Kbd>→</Kbd> кадр · <Kbd>F</Kbd> экран
