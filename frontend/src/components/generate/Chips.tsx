@@ -1,9 +1,10 @@
 import clsx from "clsx";
-import { Check, ChevronDown, Clock, Palette, Plus, Sparkles } from "lucide-react";
+import { AudioLines, Check, ChevronDown, Clock, Palette, Plus, Sparkles } from "lucide-react";
 import { forwardRef, useEffect, useState, type ReactNode } from "react";
 import { api } from "../../api/client";
 import type { Estimate } from "../../api/types";
 import { estimateBasis, fmtEstimate, fmtSeconds, frameCount } from "../../lib/format";
+import { tagOf } from "../../lib/refs";
 import { useForm } from "../../store/form";
 import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
@@ -85,6 +86,15 @@ export function DurationChip() {
   const idx = Math.max(0, VALID.findIndex((f) => f >= frames));
   const seconds = frames / 24;
   const optimal = frames >= 124 && frames <= 362;
+  // sound the clip should cover: audio refs and video refs whose soundtrack is passed on
+  const refs = useForm((st) => st.refs);
+  const sounds = refs
+    .filter((r) => (r.upload.kind === "audio" || (r.upload.kind === "video" && r.withAudio)) && r.upload.duration)
+    .map((r) => {
+      const f = Math.min(frameCount(r.upload.duration!), VALID[VALID.length - 1]);
+      return { uid: r.uid, tag: tagOf(refs, r.uid)!, length: r.upload.duration!, frames: f, clipped: frameCount(r.upload.duration!) > f };
+    });
+  const shorter = sounds.filter((x) => seconds + 1e-3 < x.length);
   return (
     <Popover trigger={<Chip icon={<Clock size={13} className="text-muted" />}>{fmtSeconds(seconds)}</Chip>} className="w-72">
       <div className="mb-3 flex items-baseline justify-between">
@@ -119,6 +129,30 @@ export function DurationChip() {
           );
         })}
       </div>
+      {sounds.length > 0 && (
+        <div className="mt-3 border-t border-line pt-3">
+          <p className="mb-1.5 text-[11px] text-faint">Под длину звука (видео чуть длиннее, чтобы звук вошёл целиком)</p>
+          <div className="flex flex-col gap-1">
+            {sounds.map((x) => (
+              <button
+                key={x.uid}
+                onClick={() => set({ duration: x.frames / 24 })}
+                className={clsx(
+                  "flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs",
+                  x.frames === frames ? "bg-accent/15 text-accent" : "bg-raised text-muted hover:text-fg",
+                )}
+              >
+                <AudioLines size={13} />
+                <span className="flex-1">Под {x.tag} · {fmtSeconds(x.length)}</span>
+                <span className="tabular-nums">→ {fmtSeconds(x.frames / 24)}{x.clipped ? " (максимум)" : ""}</span>
+              </button>
+            ))}
+          </div>
+          {shorter.length > 0 && (
+            <p className="mt-1.5 text-[11px] text-warn">Видео короче, чем {shorter.map((x) => x.tag).join(", ")}: конец звука не войдёт</p>
+          )}
+        </div>
+      )}
     </Popover>
   );
 }
