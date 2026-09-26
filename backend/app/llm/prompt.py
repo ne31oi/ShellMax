@@ -89,22 +89,52 @@ def _refs_block(refs: list[RefInfo]) -> str:
                      "возраст, телосложение, одежду (цвет, фасон, детали), характерные признаки; в retention_analysis "
                      "отметь уровень сохранения с перечислением этих деталей; в detailed_description повторяй ключевые "
                      "детали при упоминании <Subject N>.")
+        lines.append(
+            "ЖИВОЕ ЛИЦО (анти–зловещая долина): лицо — живой человек, не манекен и не CGI. В detailed_description "
+            "обязательно опиши наблюдаемую микро-мимику (§13 спецификации): направление взгляда и на что смотрит, "
+            "моргание, лёгкую естественную асимметрию (брови/уголки губ не «зеркальные»), микро-сдвиги бровей и губ "
+            "под эмоцию и речь, влажный блик в глазах, живую кожу (тон, поры, лёгкий румянец), а не матовую «пластик». "
+            "Запрещены формулировки вроде perfect symmetric face, flawless skin, doll-like, mannequin, wax figure, "
+            "frozen expression. Не оставляй лицо в «neutral expression» на весь клип, если есть речь, музыка или действие — "
+            "выражение должно меняться по ходу."
+        )
     return "\n".join(lines)
 
 
-def compose_system(refs: list[RefInfo], duration: float) -> str:
+CINEMA_CRAFT = """=== РЕАЛИЗМ И КИНОШНОСТЬ ===
+1) Обязателен блок visual_style (отдельной секцией перед overall_soundscape, если его ещё нет): источник и направление
+   света, контраст/атмосфера (haze, пыль — по месту), глубина резкости / фокус, отклик материалов (кожа, ткань, металл,
+   стекло). Конкретно (§11), не словами cinematic / epic / high quality в одиночку.
+2) Камера — пять элементов из спеки: shot size / позиция → тип движения → направление → скорость/амплитуда → кого
+   ведёт + DoF. Привяжи камеру к действию. Запрещён голый «dynamic camera».
+3) Лица — живые (§13): взгляд, моргание, микро-мимика под эмоцию/речь; запрет doll / mannequin / frozen / perfect symmetric.
+4) Звук: тихий ambient + 1–2 синхронных diegetic эффекта к видимым событиям; non_diegetic_music не забивает речь.
+5) Короткие клипы (≲ 4 с): обычно ОДИН [Shot 1], одна камера, один эмоциональный бит — не трейлер из трёх склеек."""
+
+
+def compose_system(refs: list[RefInfo], duration: float, look: str | None = None) -> str:
+    from ..workflow.look import assistant_look_hint
+
     seconds = max(2.5, round(duration, 1))
+    short = seconds <= 4.0
+    shots_hint = ("Для ~{s} с — один [Shot 1], без лишних склеек.".format(s=seconds) if short
+                  else "Для такой длины обычно достаточно одного-двух кадров (shots).")
+    look_line = assistant_look_hint(look)
+    look_block = f"\n=== ПОДАЧА ===\n{look_line}\n" if look_line else ""
     return f"""Ты превращаешь описание пользователя в промпт для видео-модели MiniMax H3 (видео + синхронный звук).
 Пользователь пишет обычными словами, на любом языке, и может ставить метки референсов (<Picture N>, <Video N>, <Audio N>).
 Сохрани его замысел полностью: кто, что делает, где, какие реплики. То, что он не уточнил (камера, свет, физика,
 звук, микро-актёрская игра), добавь сам по спецификации — конкретно и правдоподобно, не противореча замыслу.
 Реплики персонажей бери дословно из текста пользователя, не придумывай новые слова.
+Лица людей должны выглядеть живыми (§13): микро-мимика, взгляд, моргание, реакция на события — не застывшая маска.
 
 {SPEC_BLOCK}
 
+{CINEMA_CRAFT}
+{look_block}
 === КЛИП ===
 Длительность: ~{seconds} с. Таймкоды кадров ([Shot 2] At 00:03.000) должны укладываться в неё, последняя склейка ≤ длительность − 2 с.
-Для такой длины обычно достаточно одного-двух кадров (shots).
+{shots_hint}
 
 === РЕФЕРЕНСЫ ===
 {_refs_block(refs)}
@@ -133,14 +163,18 @@ def face_system() -> str:
   прямо укажи, что они НЕ часть кадра, из фото берутся только личность и внешность. Строка про <Picture 2> — крупный
   план лица для точных деталей. Строка про <Audio 1> — точный звук кадра; рот следует речи в нём с точной синхронизацией.
 - retention_analysis: <Subject 1> fully_preserved с перечислением деталей; <Audio 1> — reference (слова и тайминг ведут губы).
-- detailed_description: один кадр [Shot 1] — непрерывный фотореалистичный крупный план <Subject 1>. Кадрирование,
-  положение и размер головы, повороты головы, движения тела и камеры остаются ТОЧНО как в исходном видео — меняется
-  только детализация лица. Лицо резкое, два чётких симметричных естественных глаза, естественные веки и ресницы,
-  чёткий нос, читаемый рот с естественными зубами. Губы, челюсть и щёки двигаются с <Audio 1>, черты и личность стабильны.
+- detailed_description: один кадр [Shot 1] — непрерывный ЖИВОЙ фотореалистичный крупный план <Subject 1> (человек, не кукла).
+  Кадрирование, положение и размер головы, повороты головы, движения тела и камеры остаются ТОЧНО как в исходном видео —
+  меняется только детализация лица. Лицо резкое и в фокусе; два естественных глаза с влажным бликом (лёгкая природная
+  асимметрия допустима — НЕ пиши «perfectly symmetric»); естественные веки и ресницы; читаемый рот с естественными зубами.
+  Губы, челюсть, щёки, брови и мелкая мимика двигаются с <Audio 1> и эмоцией речи; между фразами — естественное моргание
+  и микро-сдвиги выражения, не застывшая маска. Черты и личность стабильны.
   Реплики пиши в <d>...</d> ТОЛЬКО если они есть в исходном промпте клипа — дословно; иначе не придумывай слова.
-  Закончи запретами: No facial morphing, no duplicated features, no warping, no face blur, no plastic skin.
+  Закончи запретами: No facial morphing, no duplicated features, no warping, no face blur, no plastic skin, no doll-like
+  or mannequin face, no frozen expression, no CGI wax skin.
 - visual_style (можно внутри detailed_description или отдельной строкой в конце описания): реальная фотографическая
-  съёмка, микротекстура кожи, поры, пряди волос, свет как в окружающем кадре (по прикреплённому кадру клипа).
+  съёмка; живая кожа с порами, микротекстурой и лёгким подкожным тоном (не матовый пластик); пряди волос; свет как в
+  окружающем кадре (по прикреплённому кадру клипа).
 - overall_soundscape: ровно одна строка «Only the exact supplied sound from <Audio 1>.» — дословно, ничего не добавляй:
   звук берётся из клипа как есть, любое описание звука уводит губы от <Audio 1>.
 - non_diegetic_music: ровно «N/A».
@@ -162,7 +196,9 @@ EDIT_RULES = """Ты ПРАВИШЬ готовый промпт MiniMax H3 по 
 - Верни ПОЛНЫЙ исправленный промпт, а не только изменённые куски."""
 
 
-def edit_system(refs: list[RefInfo], duration: float, face: bool = False) -> str:
+def edit_system(refs: list[RefInfo], duration: float, face: bool = False, look: str | None = None) -> str:
+    from ..workflow.look import assistant_look_hint
+
     if face:
         context = ("Это промпт для УЛУЧШЕНИЯ ЛИЦА (крупный план, воркфлоу FaceRefine). Метки фиксированы: <Picture 1> — фото "
                    "персонажа (прикреплено первым), <Picture 2> — крупный план лица из него (прикреплено вторым), "
@@ -170,11 +206,15 @@ def edit_system(refs: list[RefInfo], duration: float, face: bool = False) -> str
                    "кадрирование и движения — как в исходном видео.")
     else:
         seconds = max(2.5, round(duration, 1))
-        context = (f"Длительность клипа ~{seconds} с (таймкоды кадров должны укладываться в неё).\n\n"
+        look_line = assistant_look_hint(look)
+        look_bit = f"\nПодача: {look_line}" if look_line else ""
+        context = (f"Длительность клипа ~{seconds} с (таймкоды кадров должны укладываться в неё).{look_bit}\n\n"
                    f"=== РЕФЕРЕНСЫ ===\n{_refs_block(refs)}")
     return f"""{EDIT_RULES}
 
 {context}
+
+{CINEMA_CRAFT if not face else ""}
 
 {SPEC_BLOCK}
 
@@ -183,25 +223,32 @@ def edit_system(refs: list[RefInfo], duration: float, face: bool = False) -> str
 {OUTPUT_CONTRACT}"""
 
 
-def chat_system(refs: list[RefInfo], duration: float, draft: str, fresh: bool) -> str:
+def chat_system(refs: list[RefInfo], duration: float, draft: str, fresh: bool, look: str | None = None) -> str:
     """Ideas chat (studio assistant-stream.ts buildSystemMessage, adapted to this spec and output contract).
 
     fresh: a new chat (studio правка 166) - the generation panel's refs and draft are NOT shown, so a new
     conversation does not pick up another session's topic.
     """
+    from ..workflow.look import assistant_look_hint
+
     seconds = max(2.5, round(duration, 1))
     refs_part = ("Референсы панели генерации в НОВОМ чате не показываются. Если пользователь не описал их словами — "
                  "метки <Picture N>, <Video N>, <Audio N> ЗАПРЕЩЕНЫ.") if fresh else _refs_block(refs)
     draft_line = ("Черновик промпта панели генерации: (скрыт — новый чат, не подтягивай тему из прошлых сессий)" if fresh
                   else "Черновик промпта панели генерации (состояние вкладки «Генерация», НЕ часть этого чата — используй "
                        f"ТОЛЬКО если пользователь прямо на него ссылается):\n{draft.strip() or '(пусто)'}")
+    look_line = assistant_look_hint(look)
+    look_block = f"\nПодача панели генерации: {look_line}\n" if look_line and not fresh else ""
     return f"""Ты — ассистент видео-студии на модели MiniMax H3 (видео + синхронный звук). Помогаешь придумывать идеи
 сцен и превращать их в промпты. Общайся по-русски.
 
 {SPEC_BLOCK}
 
+{CINEMA_CRAFT}
+{look_block}
 === КОНТЕКСТ СЕССИИ ===
 Длительность клипа: ~{seconds} с (таймкоды кадров должны укладываться в неё, последняя склейка ≤ длительность − 2 с).
+{"На короткой длительности предлагай один shot." if seconds <= 4 else ""}
 
 === РЕФЕРЕНСЫ ПАНЕЛИ ГЕНЕРАЦИИ ===
 {refs_part}

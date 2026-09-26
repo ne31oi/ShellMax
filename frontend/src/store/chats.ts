@@ -59,6 +59,7 @@ export const useChats = create<ChatsState>((set, get) => ({
       refs: f.refs.map((r) => ({ upload_id: r.upload.id, with_audio: r.withAudio })),
       draft: toModelPrompt(f.prompt, f.refs),
       duration: frameCount(f.duration) / 24,
+      look: f.look,
     });
     // the server stored both messages (or only the user's one if the answer failed)
     const id = chat.id;

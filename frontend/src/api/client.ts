@@ -17,6 +17,8 @@ import type {
   MediaAsset,
   Meta,
   ProfileRow,
+  QualityPresetValues,
+  QualitySettings,
   ScannedModel,
   Style,
   UIParams,
@@ -42,22 +44,27 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
     (init.headers as Record<string, string>)["Content-Type"] = "application/json";
   }
   const res = await fetch(url, init);
-  if (!res.ok) {
+  const text = await res.text();
+  const looksHtml = /^\s*</.test(text);
+  if (!res.ok || looksHtml) {
     let detail: unknown = null;
-    try {
-      detail = (await res.json()).detail;
-    } catch {
-      /* not json */
+    if (!looksHtml) {
+      try {
+        detail = JSON.parse(text).detail;
+      } catch {
+        /* not json */
+      }
     }
-    const message =
-      typeof detail === "string"
+    const message = looksHtml
+      ? "Сервер вернул HTML вместо API — перезапустите ShellMax (кнопка питания в шапке)"
+      : typeof detail === "string"
         ? detail
         : detail && typeof detail === "object" && "message" in detail
           ? String((detail as { message: unknown }).message)
           : `Ошибка ${res.status}`;
-    throw new ApiError(message, res.status, detail);
+    throw new ApiError(message, looksHtml ? 502 : res.status, detail);
   }
-  return res.json() as Promise<T>;
+  return JSON.parse(text) as T;
 }
 
 const get = <T>(url: string) => request<T>("GET", url);
@@ -79,6 +86,7 @@ export const api = {
 
   engine: () => get<EngineState>("/api/engine"),
   engineAction: (action: "start" | "stop" | "restart") => post<EngineState>(`/api/engine/${action}`),
+  restartAll: () => post<{ ok: boolean }>("/api/system/restart"),
   engineOptions: () => get<{ sampler: string[]; scheduler: string[]; live: boolean }>("/api/engine/options"),
   engineLog: () => get<{ lines: string[] }>("/api/engine/log"),
 
@@ -93,6 +101,10 @@ export const api = {
   createStyle: (s: Omit<Style, "id" | "preview_asset_id">) => post<Style>("/api/styles", s),
   updateStyle: (id: number, s: Omit<Style, "id" | "preview_asset_id">) => put<Style>(`/api/styles/${id}`, s),
   deleteStyle: (id: number) => del(`/api/styles/${id}`),
+
+  quality: () => get<QualitySettings>("/api/quality"),
+  saveQuality: (presets: Record<string, QualityPresetValues>) => put<QualitySettings>("/api/quality", { presets }),
+  resetQuality: () => post<QualitySettings>("/api/quality/reset"),
 
   fsList: (path: string) => get<FsListing>("/api/fs/list" + q({ path })),
   fsCheck: (path: string) => get<{ path: string; exists: boolean; size: number | null; name: string }>("/api/fs/check" + q({ path })),

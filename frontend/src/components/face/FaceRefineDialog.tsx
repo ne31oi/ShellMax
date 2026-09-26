@@ -67,7 +67,7 @@ function FaceForm({ assetId, fromGenerationId, onDone }: { assetId: number; from
         setIdentity(idUpload);
         setCrop((p?.closeup_crop as CropBox | undefined) ?? d.closeup_crop);
         setPrompt(p?.prompt ?? d.prompt);
-        setDenoise(p?.denoise ?? d.presets.find((x) => x.id === "standard")?.denoise ?? 0.35);
+        setDenoise(p?.denoise ?? d.presets.find((x) => x.id === "gentle")?.denoise ?? 0.3);
         setSelect(p?.select ?? "largest_face");
         api.faceEstimate(assetId).then(setEstimate).catch(() => setEstimate(null));
       })
@@ -220,7 +220,9 @@ function FaceForm({ assetId, fromGenerationId, onDone }: { assetId: number; from
               <ImagePlus size={18} /> Фото персонажа
             </button>
           )}
-          <p className="mt-1.5 text-[11px] leading-snug text-faint">{"<Picture 1>"}: личность и внешность. Лучше тот же реф, что при генерации.</p>
+          <p className="mt-1.5 text-[11px] leading-snug text-faint">
+            {"<Picture 1>"}: личность и внешность. Лучше нейтральный портрет (глаза в камеру, ровный свет) — тот же реф, что при генерации. Селфи с едой/жестом хуже держит лицо.
+          </p>
         </section>
 
         {/* close-up crop */}

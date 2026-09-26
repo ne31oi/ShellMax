@@ -271,6 +271,7 @@ export function PromptEditor() {
       text,
       refs: f.refs.map((r) => ({ upload_id: r.upload.id, with_audio: r.withAudio })),
       duration: frameCount(f.duration) / 24,
+      look: f.look,
     });
     if (!result) return;
     useForm.getState().setPrompt(fromModelPrompt(result, useForm.getState().refs), true);
@@ -286,6 +287,7 @@ export function PromptEditor() {
       instruction,
       refs: f.refs.map((r) => ({ upload_id: r.upload.id, with_audio: r.withAudio })),
       duration: frameCount(f.duration) / 24,
+      look: f.look,
     });
     if (!result) return;
     useForm.getState().setPrompt(fromModelPrompt(result, useForm.getState().refs), true);

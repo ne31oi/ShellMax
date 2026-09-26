@@ -1,15 +1,17 @@
 import * as Tabs from "@radix-ui/react-tabs";
 import clsx from "clsx";
-import { Cpu, Palette, Settings2, Sparkles } from "lucide-react";
+import { Cpu, MonitorPlay, Palette, Settings2, Sparkles } from "lucide-react";
 import { useUI, type SettingsTab } from "../../store/ui";
 import { Dialog } from "../ui";
 import { AssistantSettingsPanel } from "./AssistantSettingsPanel";
 import { EngineSettings } from "./EngineSettings";
+import { QualitySettingsPanel } from "./QualitySettings";
 import { StylesSettings } from "./StylesSettings";
 import { SystemSettings } from "./SystemSettings";
 
 const TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
   { id: "engine", label: "Движок", icon: <Cpu size={14} /> },
+  { id: "quality", label: "Качество", icon: <MonitorPlay size={14} /> },
   { id: "styles", label: "Стили", icon: <Palette size={14} /> },
   { id: "assistant", label: "Ассистент", icon: <Sparkles size={14} /> },
   { id: "system", label: "Система", icon: <Settings2 size={14} /> },
@@ -38,6 +40,7 @@ export function SettingsDialog() {
         </Tabs.List>
         <div className="min-w-0 flex-1">
           <Tabs.Content value="engine"><EngineSettings /></Tabs.Content>
+          <Tabs.Content value="quality"><QualitySettingsPanel /></Tabs.Content>
           <Tabs.Content value="styles"><StylesSettings /></Tabs.Content>
           <Tabs.Content value="assistant"><AssistantSettingsPanel /></Tabs.Content>
           <Tabs.Content value="system"><SystemSettings /></Tabs.Content>

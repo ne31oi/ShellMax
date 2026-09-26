@@ -143,6 +143,7 @@ export interface UIParams {
   aspect: string;
   duration: number;
   quality: string;
+  look?: string;
   styles: { style_id: number; strength: number | null }[];
   seed: number | null;
   variants: number;
@@ -210,16 +211,39 @@ export interface EngineState {
 export interface QualityPreset {
   id: string;
   label: string;
+  megapixels: number;
+  scale: number;
+  /** True when megapixels and scale still match config/defaults.json (workflow). */
+  workflow: boolean;
   resolutions: Record<string, { base: [number, number]; final: [number, number] }>;
+}
+
+export interface LookPreset {
+  id: string;
+  label: string;
+  hint: string;
+}
+
+export interface QualityPresetValues {
+  label: string;
+  megapixels: number;
+  scale: number;
+}
+
+export interface QualitySettings {
+  presets: Record<string, QualityPresetValues>;
+  workflow: Record<string, QualityPresetValues>;
+  resolutions: Record<string, Record<string, { base: [number, number]; final: [number, number] }>>;
 }
 
 export interface Meta {
   fps: number;
   aspects: { id: string; ratio: [number, number]; short: string }[];
   quality: QualityPreset[];
+  look: LookPreset[];
   duration: { min: number; max: number; optimal: [number, number] };
   max_refs: Record<RefKind, number>;
-  defaults: { aspect: string; duration: number; quality: string; prompt_template: string };
+  defaults: { aspect: string; duration: number; quality: string; look?: string; prompt_template: string };
   face_strength: FaceStrength[];
 }
 

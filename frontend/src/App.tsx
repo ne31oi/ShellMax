@@ -7,6 +7,7 @@ import { RefEditor } from "./components/generate/RefEditor";
 import { ChatView } from "./components/assistant/ChatView";
 import { GeneratePanel } from "./components/generate/GeneratePanel";
 import { EngineStatus } from "./components/layout/EngineStatus";
+import { RestartAllButton } from "./components/layout/RestartAllButton";
 import { Resizer, usePanelSize } from "./components/layout/Resizer";
 import { Toasts } from "./components/layout/Toasts";
 import { MediaBin } from "./components/library/MediaBin";
@@ -96,6 +97,7 @@ export default function App() {
           </div>
           <span className="flex-1" />
           <EngineStatus />
+          <RestartAllButton />
           <IconButton label="Настройки" onClick={() => openSettings("engine")}>
             <Settings size={16} />
           </IconButton>

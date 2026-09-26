@@ -99,6 +99,7 @@ class ComposeIn(BaseModel):
     text: str  # user's description; references as <Picture N>/<Video N>/<Audio N>
     refs: list[ComposeRef] = []
     duration: float = 2.0
+    look: str = "cinema"
 
 
 @router.post("/compose")
@@ -117,7 +118,7 @@ def compose(body: ComposeIn, request: Request):
             infos.append(prompt.RefInfo(kind=up.kind, name=up.orig_name, with_audio=ref.with_audio))
             if up.kind == "image":
                 images.append(Path(up.path))
-    system = prompt.compose_system(infos, body.duration)
+    system = prompt.compose_system(infos, body.duration, body.look)
     # the huge spec comes first; restate at the end that the action is the user's, not the photo's
     user = (f"Описание пользователя (ГЛАВНОЕ — действие видео берётся только отсюда):\n{body.text.strip()}\n\n"
             "Преобразуй его в промпт. summary и detailed_description описывают именно это действие; "
@@ -137,6 +138,7 @@ class EditIn(BaseModel):
     instruction: str  # what to change, in plain words
     refs: list[ComposeRef] = []
     duration: float = 2.0
+    look: str = "cinema"
     face: FaceIn | None = None  # set when editing a face refine prompt
 
 
@@ -163,7 +165,7 @@ def edit(body: EditIn, request: Request):
                 infos.append(prompt.RefInfo(kind=up.kind, name=up.orig_name, with_audio=ref.with_audio))
                 if up.kind == "image":
                     images.append(Path(up.path))
-    system = prompt.edit_system(infos, body.duration, face=body.face is not None)
+    system = prompt.edit_system(infos, body.duration, face=body.face is not None, look=body.look)
     user = (f"Текущий промпт:\n```text\n{body.prompt.strip()}\n```\n\n"
             f"Что изменить (слова пользователя):\n{body.instruction.strip()}\n\nВерни полный исправленный промпт.")
     return _sse(svc.stream(system, user, images))
@@ -305,6 +307,7 @@ class ChatIn(BaseModel):
     refs: list[ComposeRef] = []  # the generation panel's current references
     draft: str = ""  # the generation panel's current prompt
     duration: float = 2.0
+    look: str = "cinema"
 
 
 @router.post("/chats/{cid}/send")
@@ -340,7 +343,7 @@ def send(cid: str, body: ChatIn, request: Request):
         images.append(ATTACH_DIR / msg["attachment"]["id"])
         history[-1]["content"] += (f"\n\n[Вложение чата: {msg['attachment']['name']} — прикреплено для описания/анализа, "
                                    "НЕ референс генерации, не называй его <Picture N>]")
-    system = prompt.chat_system(infos, body.duration, body.draft, fresh)
+    system = prompt.chat_system(infos, body.duration, body.draft, fresh, body.look)
 
     async def run():
         svc.chat_id = cid

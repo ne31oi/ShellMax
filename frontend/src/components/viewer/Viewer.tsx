@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { urls } from "../../api/client";
-import type { Generation, MediaAsset } from "../../api/types";
+import type { FaceStrength, Generation, MediaAsset } from "../../api/types";
 import * as actions from "../../lib/actions";
 import { on } from "../../lib/bus";
 import { stageIndex, stageInfo, stagesOf, stepProgress, timeBreakdown, trackSummary } from "../../lib/stages";
@@ -14,6 +14,8 @@ import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
 import { Button, IconButton, Kbd, Spinner } from "../ui";
 import { Welcome } from "./Welcome";
+
+const EMPTY_FACE_STRENGTH: FaceStrength[] = [];
 
 export function Viewer() {
   const selectedGen = useUI((s) => s.selectedGen);
@@ -411,7 +413,7 @@ function ClipInfo({ gen }: { gen: Generation }) {
 
 function FaceClipInfo({ gen }: { gen: Generation }) {
   const source = useLibrary((s) => (gen.source_asset_id ? s.assets[gen.source_asset_id] : undefined));
-  const presets = useLibrary((s) => s.meta?.face_strength ?? []);
+  const presets = useLibrary((s) => s.meta?.face_strength) ?? EMPTY_FACE_STRENGTH;
   const preset = presets.find((p) => Math.abs(p.denoise - (gen.ui_params.denoise ?? 0)) < 1e-6);
   const t = trackSummary(gen.info?.track_report);
   return (

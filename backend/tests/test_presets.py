@@ -23,7 +23,7 @@ def test_quality_preset_maps_to_megapixels_and_scale():
 
 def test_styles_append_to_main_chain_after_technical_loras():
     style = (LoraSpec(path="F:/cinema.safetensors", strength=0.8), ["cinematic look"])
-    full = expand(UIParams(prompt="a cat"), profile(), [], [style], seed=1, filename_prefix="x")
+    full = expand(UIParams(prompt="a cat", look="natural"), profile(), [], [style], seed=1, filename_prefix="x")
     assert [l.path for l in full.loras_main] == ["F:/turbo.safetensors", "F:/cinema.safetensors"]
     assert full.prompt.endswith("cinematic look")
     assert [l.path for l in full.loras_final] == ["F:/lms.safetensors"]

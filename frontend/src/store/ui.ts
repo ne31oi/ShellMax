@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 export type Workspace = "generate" | "edit" | "assistant";
-export type SettingsTab = "engine" | "styles" | "assistant" | "system";
+export type SettingsTab = "engine" | "quality" | "styles" | "assistant" | "system";
 
 interface Toast {
   id: number;

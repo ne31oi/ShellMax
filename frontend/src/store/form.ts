@@ -11,6 +11,7 @@ interface FormState {
   aspect: string;
   duration: number;
   quality: string;
+  look: string;
   styles: StyleChoice[];
   seedLocked: boolean;
   seed: number | null; // seed used when locked (last generation's seed)
@@ -20,7 +21,7 @@ interface FormState {
   /** bumps when the prompt is replaced from outside (retry/template) so the editor reloads */
   promptRevision: number;
 
-  hydrate: (defaults: { aspect: string; duration: number; quality: string }) => Promise<void>;
+  hydrate: (defaults: { aspect: string; duration: number; quality: string; look?: string }) => Promise<void>;
   set: (patch: Partial<FormState>) => void;
   setPrompt: (prompt: string, external?: boolean) => void;
   addRefs: (uploads: Upload[]) => { added: RefItem[]; rejected: string[] };
@@ -35,7 +36,7 @@ interface FormState {
 
 const LIMITS = { image: 9, video: 3, audio: 3 } as const;
 const STICKY: (keyof FormState)[] = [
-  "refs", "prompt", "aspect", "duration", "quality", "styles", "seedLocked", "seed", "variants", "profileId", "promptHistory",
+  "refs", "prompt", "aspect", "duration", "quality", "look", "styles", "seedLocked", "seed", "variants", "profileId", "promptHistory",
 ];
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -47,6 +48,7 @@ export const useForm = create<FormState>((set, get) => ({
   aspect: "16:9 (Widescreen)",
   duration: 2,
   quality: "standard",
+  look: "cinema",
   styles: [],
   seedLocked: false,
   seed: null,
@@ -121,6 +123,7 @@ export const useForm = create<FormState>((set, get) => ({
       aspect: p.aspect,
       duration: p.duration,
       quality: p.quality,
+      look: p.look ?? get().look,
       styles: p.styles.map((st) => ({ style_id: st.style_id, strength: st.strength ?? 1 })),
       seed: g.seed,
       promptRevision: s.promptRevision + 1,

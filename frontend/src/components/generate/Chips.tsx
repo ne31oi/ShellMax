@@ -1,14 +1,26 @@
 import clsx from "clsx";
-import { AudioLines, Check, ChevronDown, Clock, Palette, Plus, Sparkles } from "lucide-react";
+import { AudioLines, Check, ChevronDown, Clock, Film, Palette, Plus, Sparkles } from "lucide-react";
 import { forwardRef, useEffect, useState, type ReactNode } from "react";
 import { api } from "../../api/client";
-import type { Estimate } from "../../api/types";
+import type { Estimate, LookPreset, QualityPreset } from "../../api/types";
 import { estimateBasis, fmtEstimate, fmtSeconds, frameCount } from "../../lib/format";
 import { tagOf } from "../../lib/refs";
 import { useForm } from "../../store/form";
 import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
 import { Button, Popover, Slider, Tip } from "../ui";
+
+/** Stable empty refs for zustand selectors — `?? []` would re-render forever (React #185). */
+const NO_ASPECTS: { id: string; ratio: [number, number]; short: string }[] = [];
+const NO_QUALITY: QualityPreset[] = [];
+/** Fallback when meta.look is missing (old backend / not restarted yet). */
+const FALLBACK_LOOK: LookPreset[] = [
+  { id: "natural", label: "Как есть", hint: "Без добавок к visual_style" },
+  { id: "documentary", label: "Документалка", hint: "Живой свет, сдержанная камера" },
+  { id: "cinema", label: "Кино", hint: "Мотивированный свет, лёгкий DoF" },
+  { id: "social", label: "Клип", hint: "Жёстче контраст, чёткий объект" },
+];
+const NO_LOOK: LookPreset[] = [];
 
 const Chip = forwardRef<HTMLButtonElement, { icon?: ReactNode; children: ReactNode; active?: boolean } & React.ButtonHTMLAttributes<HTMLButtonElement>>(
   ({ icon, children, active, className, ...props }, ref) => (
@@ -27,6 +39,7 @@ const Chip = forwardRef<HTMLButtonElement, { icon?: ReactNode; children: ReactNo
     </button>
   ),
 );
+Chip.displayName = "Chip";
 
 // ---------------------------------------------------------------- format
 function AspectIcon({ ratio, size = 18 }: { ratio: [number, number]; size?: number }) {
@@ -40,7 +53,7 @@ function AspectIcon({ ratio, size = 18 }: { ratio: [number, number]; size?: numb
 }
 
 export function FormatChip() {
-  const aspects = useLibrary((s) => s.meta?.aspects ?? []);
+  const aspects = useLibrary((s) => s.meta?.aspects ?? NO_ASPECTS);
   const aspect = useForm((s) => s.aspect);
   const set = useForm((s) => s.set);
   const current = aspects.find((a) => a.id === aspect);
@@ -112,8 +125,10 @@ export function DurationChip() {
         />
         <Slider value={idx} min={0} max={VALID.length - 1} step={1} onChange={(i) => set({ duration: VALID[i] / 24 })} />
       </div>
-      <p className={clsx("mt-1.5 text-[11px]", optimal ? "text-ok" : "text-faint")}>
-        {optimal ? "В диапазоне, на котором обучалась модель" : "Модель лучше всего работает на 5–15 секундах"}
+      <p className={clsx("mt-1.5 text-[11px]", optimal ? "text-ok" : "text-warn")}>
+        {optimal
+          ? "В диапазоне, на котором обучалась модель"
+          : "Для реализма и «кино» лучше 5–15 с; на 2 с — один короткий бит, не трейлер"}
       </p>
       <div className="mt-3 grid grid-cols-4 gap-1.5">
         {QUICK.map((q) => {
@@ -161,7 +176,7 @@ export function DurationChip() {
 export function useEstimates(): Record<string, Estimate | undefined> {
   const aspect = useForm((s) => s.aspect);
   const duration = useForm((s) => s.duration);
-  const quality = useLibrary((s) => s.meta?.quality ?? []);
+  const quality = useLibrary((s) => s.meta?.quality ?? NO_QUALITY);
   const generationsCount = useLibrary((s) => Object.keys(s.generations).length);
   const [est, setEst] = useState<Record<string, Estimate | undefined>>({});
   useEffect(() => {
@@ -177,10 +192,11 @@ export function useEstimates(): Record<string, Estimate | undefined> {
 }
 
 export function QualityChip({ estimates }: { estimates: Record<string, Estimate | undefined> }) {
-  const presets = useLibrary((s) => s.meta?.quality ?? []);
+  const presets = useLibrary((s) => s.meta?.quality ?? NO_QUALITY);
   const quality = useForm((s) => s.quality);
   const aspect = useForm((s) => s.aspect);
   const set = useForm((s) => s.set);
+  const openSettings = useUI((s) => s.openSettings);
   const [open, setOpen] = useState(false);
   const current = presets.find((p) => p.id === quality);
   return (
@@ -205,7 +221,9 @@ export function QualityChip({ estimates }: { estimates: Record<string, Estimate 
             <span className="flex-1">
               <span className="block text-[13px] font-medium">
                 {p.label}
-                {p.id === "standard" && <span className="ml-1.5 text-[11px] font-normal text-faint">как в воркфлоу</span>}
+                {p.workflow && p.id === "standard" && (
+                  <span className="ml-1.5 text-[11px] font-normal text-faint">как в воркфлоу</span>
+                )}
               </span>
               <span className="text-xs text-muted tabular-nums">{w}×{h}</span>
             </span>
@@ -219,6 +237,52 @@ export function QualityChip({ estimates }: { estimates: Record<string, Estimate 
         );
       })}
       {quality === "high" && <p className="px-2.5 pb-1 pt-1 text-[11px] text-warn">Высокое качество требует много видеопамяти и времени</p>}
+      <button
+        onClick={() => {
+          setOpen(false);
+          openSettings("quality");
+        }}
+        className="mt-0.5 w-full rounded-lg px-2.5 py-1.5 text-left text-xs text-muted hover:bg-hover hover:text-fg"
+      >
+        Настроить пресеты…
+      </button>
+    </Popover>
+  );
+}
+
+// ---------------------------------------------------------------- look / delivery
+export function LookChip() {
+  const presets = useLibrary((s) => s.meta?.look ?? NO_LOOK);
+  const look = useForm((s) => s.look);
+  const set = useForm((s) => s.set);
+  const [open, setOpen] = useState(false);
+  const list = presets.length ? presets : FALLBACK_LOOK;
+  const current = list.find((p) => p.id === look) ?? list.find((p) => p.id === "cinema") ?? list[0];
+  return (
+    <Popover
+      open={open}
+      onOpenChange={setOpen}
+      trigger={<Chip icon={<Film size={13} className="text-muted" />}>{current?.label ?? "Подача"}</Chip>}
+      className="w-72 p-1.5"
+      align="end"
+    >
+      <p className="px-2.5 pb-1.5 pt-1 text-[11px] text-faint">Свет и «киношность» в visual_style — не разрешение</p>
+      {list.map((p) => (
+        <button
+          key={p.id}
+          onClick={() => {
+            set({ look: p.id });
+            setOpen(false);
+          }}
+          className={clsx("flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left", p.id === look ? "bg-accent/10" : "hover:bg-hover")}
+        >
+          <span className="w-4">{p.id === look && <Check size={14} className="text-accent" />}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13px] font-medium">{p.label}</span>
+            <span className="block text-[11px] text-muted">{p.hint}</span>
+          </span>
+        </button>
+      ))}
     </Popover>
   );
 }

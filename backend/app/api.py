@@ -18,7 +18,8 @@ from .hub import hub
 from .jobs.estimator import estimate as estimate_time
 from .jobs.queue import push_generation, register_asset
 from .media import library
-from .workflow import face, presets
+from .workflow import face, presets, quality as quality_cfg
+from .workflow.look import look_presets
 from .workflow.params import ASPECT_RATIOS, FPS, MAX_REFS, EngineProfile, FaceUIParams, UIParams, frame_count
 
 router = APIRouter(prefix="/api")
@@ -32,16 +33,69 @@ def _state(request: Request):
 @router.get("/meta")
 def meta():
     d = settings.defaults()
-    qp = presets.quality_presets()
+    qp = quality_cfg.quality_presets()
     return {
         "fps": FPS,
         "aspects": [{"id": a, "ratio": list(r), "short": a.split(" ")[0]} for a, r in ASPECT_RATIOS.items()],
-        "quality": [{"id": k, "label": v["label"],
-                     "resolutions": {a: presets.resolution_for(a, k) for a in ASPECT_RATIOS}} for k, v in qp.items()],
+        "quality": [
+            {
+                "id": k,
+                "label": v["label"],
+                "megapixels": v["megapixels"],
+                "scale": v["scale"],
+                "workflow": quality_cfg.is_workflow_value(k, v),
+                "resolutions": {a: presets.resolution_for(a, k) for a in ASPECT_RATIOS},
+            }
+            for k, v in qp.items()
+        ],
         "duration": {"min": 1.0, "max": 20.0, "optimal": [5.0, 15.0]},
+        "look": look_presets(),
         "max_refs": MAX_REFS,
-        "defaults": d["ui"],
+        "defaults": {**d["ui"], "look": "cinema"},
         "face_strength": face.strength_presets(),
+    }
+
+
+# ---------------------------------------------------------------- quality presets (editable)
+@router.get("/quality")
+def get_quality():
+    return {
+        "presets": quality_cfg.quality_presets(),
+        "workflow": quality_cfg.workflow_quality_presets(),
+        "resolutions": {
+            k: {a: presets.resolution_for(a, k) for a in ASPECT_RATIOS}
+            for k in quality_cfg.PRESET_IDS
+        },
+    }
+
+
+@router.put("/quality")
+def put_quality(body: dict):
+    try:
+        presets_in = body.get("presets", body)
+        saved = quality_cfg.save_quality_presets(presets_in)
+    except (ValueError, TypeError, KeyError) as e:
+        raise HTTPException(400, str(e)) from e
+    return {
+        "presets": saved,
+        "workflow": quality_cfg.workflow_quality_presets(),
+        "resolutions": {
+            k: {a: presets.resolution_for(a, k) for a in ASPECT_RATIOS}
+            for k in quality_cfg.PRESET_IDS
+        },
+    }
+
+
+@router.post("/quality/reset")
+def reset_quality():
+    saved = quality_cfg.reset_quality_presets()
+    return {
+        "presets": saved,
+        "workflow": quality_cfg.workflow_quality_presets(),
+        "resolutions": {
+            k: {a: presets.resolution_for(a, k) for a in ASPECT_RATIOS}
+            for k in quality_cfg.PRESET_IDS
+        },
     }
 
 
@@ -88,6 +142,41 @@ async def engine_action(action: str, request: Request):
     else:
         raise HTTPException(404)
     return eng.snapshot()
+
+
+@router.post("/system/restart")
+async def system_restart(request: Request):
+    """Stop assistant + engine, exit the API process, and relaunch it (full ShellMax restart)."""
+    import asyncio
+
+    from .relaunch import spawn_relaunch
+
+    st = _state(request)
+
+    async def _shutdown_and_relaunch() -> None:
+        await asyncio.sleep(0.4)  # let the HTTP response reach the browser
+        with session() as s:
+            for g in s.exec(select(Generation).where(Generation.status.in_(["running", "queued"]))).all():
+                g.status, g.error, g.error_kind = "error", "Прервано перезапуском ShellMax", "generic"
+                s.add(g)
+            s.commit()
+        try:
+            await st.assistant.runner.stop()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            await st.jobs.stop()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            await st.engine.stop()
+        except Exception:  # noqa: BLE001
+            pass
+        spawn_relaunch()
+        os._exit(0)
+
+    asyncio.create_task(_shutdown_and_relaunch())
+    return {"ok": True}
 
 
 _FALLBACK_OPTIONS = {"sampler": ["seeds_2", "euler", "euler_ancestral", "res_multistep"],

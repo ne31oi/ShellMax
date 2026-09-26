@@ -106,6 +106,9 @@ export function RefsZone() {
           <ImagePlus size={20} className="text-muted" />
           <span className="text-[13px] text-fg">Перетащите картинки, видео или аудио</span>
           <span className="text-xs text-faint">или нажмите, чтобы выбрать · Ctrl+V вставит из буфера</span>
+          <span className="mt-1 max-w-xs text-[11px] leading-snug text-faint">
+            Для людей: нейтральный портрет лицом к камере, ровный свет — меньше «зловещей долины»
+          </span>
         </button>
       ) : (
         <div

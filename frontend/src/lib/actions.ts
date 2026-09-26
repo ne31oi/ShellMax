@@ -32,6 +32,7 @@ export async function generate(): Promise<void> {
     aspect: f.aspect,
     duration: f.duration,
     quality: f.quality,
+    look: f.look,
     styles: f.styles.map((s) => ({ style_id: s.style_id, strength: s.strength })),
     seed: f.seedLocked && f.seed != null ? f.seed : null,
     variants: f.variants,

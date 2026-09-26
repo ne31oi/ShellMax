@@ -15,12 +15,10 @@ from .params import (
     frame_count,
     upscaled_resolution,
 )
+from .quality import quality_presets  # noqa: F401 — re-exported for callers / tests
+from .look import apply_look
 
 MAX_SEED = 2**50  # RandomNoise accepts up to 2**64-1; keep seeds short enough to read
-
-
-def quality_presets() -> dict[str, dict]:
-    return settings.defaults()["quality_presets"]
 
 
 def default_profile() -> EngineProfile:
@@ -105,8 +103,10 @@ def expand(
     q = presets[ui.quality]
 
     triggers = [t for _, trig in styles for t in trig]
+    prompt_text = with_lora_triggers(with_style_triggers(ui.prompt, triggers), lora_triggers(profile))
+    prompt_text = apply_look(prompt_text, getattr(ui, "look", None))
     return FullParams(
-        prompt=with_lora_triggers(with_style_triggers(ui.prompt, triggers), lora_triggers(profile)),
+        prompt=prompt_text,
         refs=refs,
         aspect=ui.aspect,
         megapixels=q["megapixels"],

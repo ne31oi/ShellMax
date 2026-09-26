@@ -1,7 +1,8 @@
 import clsx from "clsx";
-import { Play, RefreshCw, Square } from "lucide-react";
+import { Play, Power, RefreshCw, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../api/client";
+import { useRestartAll } from "../../lib/restart";
 import { notifySettings } from "../../lib/notify";
 import { useLibrary } from "../../store/library";
 import { Button, SectionTitle, Switch } from "../ui";
@@ -11,6 +12,7 @@ export function SystemSettings() {
   const engine = useLibrary((s) => s.engine);
   const [lines, setLines] = useState<string[]>([]);
   const [notify, setNotify] = useState(notifySettings.get());
+  const { restarting, restartAll, overlay } = useRestartAll();
   const logBox = useRef<HTMLPreElement>(null);
 
   useEffect(() => {
@@ -85,6 +87,19 @@ export function SystemSettings() {
       </section>
 
       <section>
+        <SectionTitle>ShellMax</SectionTitle>
+        <div className="rounded-xl border border-line p-4">
+          <p className="mb-3 text-xs leading-relaxed text-muted">
+            Полный перезапуск: API, ComfyUI и ассистент. Та же кнопка — в шапке рядом со статусом движка. После обновления
+            бэкенда или если всё «зависло». Модели загрузятся снова.
+          </p>
+          <Button size="sm" variant="danger" disabled={restarting} onClick={restartAll}>
+            <Power size={12} /> Перезапустить всё
+          </Button>
+        </div>
+      </section>
+
+      <section>
         <SectionTitle>Уведомления</SectionTitle>
         <div className="space-y-3">
           <label className="flex items-center justify-between">
@@ -97,6 +112,8 @@ export function SystemSettings() {
           </label>
         </div>
       </section>
+
+      {overlay}
     </div>
   );
 }

@@ -10,7 +10,7 @@ import { useForm } from "../../store/form";
 import { defaultProfile, sortedGenerations, useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
 import { Menu, MenuItem, MenuLabel, MenuSeparator, SectionTitle, Spinner, Tip } from "../ui";
-import { DurationChip, FormatChip, QualityChip, StyleChip, useEstimates } from "./Chips";
+import { DurationChip, FormatChip, LookChip, QualityChip, StyleChip, useEstimates } from "./Chips";
 import { PromptEditor } from "./PromptEditor";
 import { RefsZone } from "./RefsZone";
 
@@ -31,6 +31,7 @@ export function GeneratePanel() {
           <FormatChip />
           <DurationChip />
           <QualityChip estimates={estimates} />
+          <LookChip />
           <StyleChip />
         </section>
       </div>
@@ -134,7 +135,7 @@ function GenerateBar({ estimates }: { estimates: Record<string, Estimate | undef
               <MenuItem
                 onSelect={() => {
                   const d = useLibrary.getState().meta?.defaults;
-                  if (d) set({ aspect: d.aspect, duration: d.duration, quality: d.quality, styles: [], variants: 1, seedLocked: false });
+                  if (d) set({ aspect: d.aspect, duration: d.duration, quality: d.quality, look: d.look ?? "cinema", styles: [], variants: 1, seedLocked: false });
                 }}
               >
                 <RotateCcw size={13} /> Сбросить к значениям воркфлоу

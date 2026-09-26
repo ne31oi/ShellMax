@@ -87,7 +87,7 @@ class FaceRecipe(BaseModel):
     # H3FaceStitch (node 22)
     mask_dilation: int = 24
     feather: int = 24
-    colour_match: float = 1.0
+    colour_match: float = 0.9
     blend: float = 1.0
     crf: int = 16
 
@@ -133,10 +133,18 @@ class UIParams(BaseModel):
     aspect: str = "16:9 (Widescreen)"
     duration: float = Field(2.0, ge=0.2, le=150)
     quality: str = "standard"
+    look: str = "cinema"  # natural | documentary | cinema | social — visual_style delivery, not resolution
     styles: list[StyleSpec] = Field(default_factory=list)
     seed: int | None = None  # None -> random
     variants: int = Field(1, ge=1, le=8)
     profile_id: int | None = None
+
+    @field_validator("look")
+    @classmethod
+    def _known_look(cls, v: str) -> str:
+        from .look import normalize_look
+
+        return normalize_look(v)
 
     @field_validator("aspect")
     @classmethod

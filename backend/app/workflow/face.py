@@ -106,17 +106,21 @@ def closeup_prompt(source_prompt: str = "") -> str:
         "<Audio 1>: reference - exact spoken words and timing drive the lip movement.",
         "",
         "detailed_description:",
-        "[Shot 1] A continuous photorealistic close-up of <Subject 1>. The framing, head position, head size, head "
-        "turn and all body and camera movement stay exactly as they already are in the footage; only the face gains "
-        "real detail. The face is sharp and in focus, with two clearly defined, symmetric, natural eyes, natural "
-        "eyelids and lashes, a well-defined nose and a clearly readable mouth with natural teeth.",
-        "Lips, jaw and cheeks move naturally with <Audio 1> while the facial structure and identity stay stable.",
-        "Preserve facial identity, readable eyes and mouth. No facial morphing, no duplicated features, no warping, "
-        "no face blur, no plastic skin.",
+        "[Shot 1] A continuous living photorealistic close-up of <Subject 1>. The framing, head position, head size, "
+        "head turn and all body and camera movement stay exactly as they already are in the footage; only the face "
+        "gains real detail. The face is sharp and in focus: two natural eyes with moist catchlights (slight natural "
+        "asymmetry is fine — not a perfect mirror), natural eyelids and lashes, a well-defined nose and a clearly "
+        "readable mouth with natural teeth.",
+        "Lips, jaw, cheeks and brows move naturally with <Audio 1> and the emotion of the speech; between phrases "
+        "there are natural blinks and tiny micro-expression shifts — never a frozen mask. Facial structure and "
+        "identity stay stable.",
+        "Preserve facial identity, readable living eyes and mouth. No facial morphing, no duplicated features, no "
+        "warping, no face blur, no plastic skin, no doll-like or mannequin face, no CGI wax skin, no frozen expression.",
         "",
         "visual_style:",
-        "Real photographic footage. Natural skin microtexture, visible pores, realistic tonal variation, individual "
-        "hair strands and flyaways. Lighting matching the surrounding frame.",
+        "Real photographic footage of a living person. Natural skin microtexture with visible pores and subtle "
+        "subsurface blood-tone variation (not matte CGI plastic), realistic tonal variation, individual hair strands "
+        "and flyaways. Lighting matching the surrounding frame.",
         "",
         "overall_soundscape:",
         "Only the exact supplied sound from <Audio 1>.",
