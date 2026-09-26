@@ -134,8 +134,9 @@ def face_system() -> str:
   Закончи запретами: No facial morphing, no duplicated features, no warping, no face blur, no plastic skin.
 - visual_style (можно внутри detailed_description или отдельной строкой в конце описания): реальная фотографическая
   съёмка, микротекстура кожи, поры, пряди волос, свет как в окружающем кадре (по прикреплённому кадру клипа).
-- overall_soundscape: Only the exact supplied sound from <Audio 1>.
-- non_diegetic_music: N/A
+- overall_soundscape: ровно одна строка «Only the exact supplied sound from <Audio 1>.» — дословно, ничего не добавляй:
+  звук берётся из клипа как есть, любое описание звука уводит губы от <Audio 1>.
+- non_diegetic_music: ровно «N/A».
 - Не описывай общий план, окружение подробно и действия всего тела — только то, что видно в крупном плане.
 
 {SPEC_BLOCK}
@@ -173,6 +174,13 @@ def edit_system(refs: list[RefInfo], duration: float, face: bool = False) -> str
 {HONESTY}
 
 {OUTPUT_CONTRACT}"""
+
+
+def dialogue_lines(source_prompt: str) -> list[str]:
+    """Spoken lines of a clip's prompt, exactly as written (<d>...</d>)."""
+    import re
+
+    return re.findall(r"<d>[\s\S]*?</d>", source_prompt or "")
 
 
 def extract_prompt(text: str) -> str:

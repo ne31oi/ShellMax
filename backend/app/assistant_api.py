@@ -196,8 +196,13 @@ async def face_prompt(body: FaceIn, request: Request):
     except RuntimeError:
         frame_path = None
     images = [Path(identity.path), crop_path] + ([frame_path] if frame_path else [])
-    user = ("Исходный промпт клипа (для реплик в <d>...</d> и общего контекста; не описывай общий план):\n"
+    # the model tends to paraphrase ("says the Russian phrase"); hand it the exact lines instead
+    lines = prompt.dialogue_lines(source_prompt)
+    must = ("Реплики клипа — ОБЯЗАТЕЛЬНО вставь каждую в detailed_description дословно, в том же порядке:\n"
+            + "\n".join(lines) + "\n\n") if lines else "Реплик в клипе нет — <d>...</d> не пиши.\n\n"
+    user = ("Исходный промпт клипа (для общего контекста; не описывай общий план):\n"
             f"{source_prompt.strip() or '(нет — клип импортирован, реплик не известно)'}\n\n"
+            f"{must}"
             "Прикреплены: 1) <Picture 1> — фото персонажа; 2) <Picture 2> — крупный план лица из него; "
             f"{'3) кадр исходного клипа (НЕ референс). ' if frame_path else ''}"
             "Напиши промпт крупного плана для улучшения лица.")

@@ -46,3 +46,9 @@ def test_edit_system_keeps_spec_and_refs():
     assert "<Picture 1> = girl.png" in s and "~5.0 с" in s
     face = prompt.edit_system([], 2.0, face=True)
     assert "УЛУЧШЕНИЯ ЛИЦА" in face and "<Picture 2>" in face and "РЕФЕРЕНСЫ" not in face
+
+
+def test_dialogue_lines_verbatim():
+    src = 'She smiles. <d>[Russian] Я Мисс Фортуна.</d> Then <d>Hi!</d>'
+    assert prompt.dialogue_lines(src) == ["<d>[Russian] Я Мисс Фортуна.</d>", "<d>Hi!</d>"]
+    assert prompt.dialogue_lines("") == []
