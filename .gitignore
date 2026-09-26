@@ -1,0 +1,19 @@
+# standalone ComfyUI engine (installed by scripts/install_comfy.ps1)
+/comfy/
+
+# runtime data: db, media library, uploads
+/data/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# frontend
+node_modules/
+/frontend/dist/
+
+# misc
+*.log
+.DS_Store

@@ -1,0 +1,330 @@
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import clsx from "clsx";
+import { Check, ChevronDown, ChevronRight, Copy, Plus, RotateCcw, Star, Trash2, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { api } from "../../api/client";
+import type { EngineProfile, ExpertParams, LoraSpec, ProfileRow } from "../../api/types";
+import { defaultProfile, useLibrary } from "../../store/library";
+import { useUI } from "../../store/ui";
+import { Button, IconButton, SectionTitle, Slider, Switch, Tip } from "../ui";
+import { PathField, type ModelCategory } from "./PathField";
+
+const MODEL_FIELDS: { key: keyof EngineProfile; label: string; hint: string; category: ModelCategory }[] = [
+  { key: "unet", label: "Модель", hint: "Диффузионная модель MiniMax H3", category: "unet" },
+  { key: "text_encoder", label: "Текстовый энкодер", hint: "Qwen3-VL для MiniMax H3", category: "text_encoder" },
+  { key: "vae_video", label: "VAE видео", hint: "", category: "vae" },
+  { key: "vae_audio", label: "VAE аудио", hint: "", category: "vae" },
+  { key: "upscaler", label: "Латентный апскейлер", hint: "Для второго прохода", category: "upscaler" },
+];
+
+export function EngineSettings() {
+  const profiles = useLibrary((s) => s.profiles);
+  const reload = useLibrary((s) => s.reloadProfiles);
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const row = profiles.find((p) => p.id === activeId) ?? defaultProfile(profiles);
+  const [draft, setDraft] = useState<EngineProfile | null>(null);
+  const [saved, setSaved] = useState<"idle" | "saving" | "saved">("idle");
+  const [problems, setProblems] = useState<ProfileRow["problems"]>([]);
+  const [expert, setExpert] = useState(false);
+  const [options, setOptions] = useState<{ sampler: string[]; scheduler: string[] }>({ sampler: [], scheduler: [] });
+  useEffect(() => {
+    if (expert) api.engineOptions().then(setOptions).catch(() => undefined);
+  }, [expert]);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => {
+    if (row) {
+      setDraft(structuredClone(row.data));
+      setProblems(row.problems);
+    }
+  }, [row?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!row || !draft) return null;
+
+  // autosave: settings are "fill once", no Save button to forget
+  const update = (patch: Partial<EngineProfile>) => {
+    const next = { ...draft, ...patch };
+    setDraft(next);
+    setSaved("saving");
+    clearTimeout(timer.current);
+    timer.current = setTimeout(async () => {
+      const res = await api.updateProfile(row.id, next, row.is_default);
+      setProblems(res.problems);
+      setSaved("saved");
+      reload();
+    }, 600);
+  };
+  const updateExpert = (patch: Partial<ExpertParams>) => update({ expert: { ...draft.expert, ...patch } });
+  const bad = new Set(problems.map((p) => p.field));
+
+  const duplicate = async () => {
+    const { id } = await api.createProfile({ ...draft, name: `${draft.name} (копия)` });
+    await reload();
+    setActiveId(id);
+  };
+  const resetToWorkflow = async () => {
+    const wf = await api.workflowDefaults();
+    update({ expert: wf.expert, low_vram: wf.low_vram });
+    useUI.getState().toast("Внутренние параметры сброшены к воркфлоу", "ok");
+  };
+
+  return (
+    <div className="space-y-6 p-5">
+      {/* profile bar */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap gap-1 rounded-lg bg-raised p-1">
+          {profiles.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => setActiveId(p.id)}
+              className={clsx("flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs", p.id === row.id ? "bg-hover text-fg" : "text-muted hover:text-fg")}
+            >
+              {p.is_default && <Star size={11} className="fill-current text-warn" />}
+              {p.name}
+              {p.problems.length > 0 && <span className="h-1.5 w-1.5 rounded-full bg-bad" />}
+            </button>
+          ))}
+        </div>
+        <IconButton label="Новый профиль (копия текущего)" size="sm" onClick={duplicate}>
+          <Copy size={13} />
+        </IconButton>
+        {!row.is_default && (
+          <>
+            <IconButton
+              label="Сделать основным"
+              size="sm"
+              onClick={async () => {
+                await api.updateProfile(row.id, draft, true);
+                reload();
+              }}
+            >
+              <Star size={13} />
+            </IconButton>
+            <IconButton
+              label="Удалить профиль"
+              size="sm"
+              onClick={async () => {
+                await api.deleteProfile(row.id).catch((e) => useUI.getState().toast(e.message, "bad"));
+                setActiveId(null);
+                reload();
+              }}
+            >
+              <Trash2 size={13} />
+            </IconButton>
+          </>
+        )}
+        <span className="ml-auto text-[11px] text-faint">
+          {saved === "saving" ? "Сохраняю…" : saved === "saved" ? (
+            <span className="inline-flex items-center gap-1 text-ok"><Check size={12} /> Сохранено</span>
+          ) : "Изменения сохраняются сами"}
+        </span>
+      </div>
+
+      <label className="block">
+        <span className="mb-1 block text-xs text-muted">Название профиля</span>
+        <input
+          value={draft.name}
+          onChange={(e) => update({ name: e.target.value })}
+          className="h-8 w-full max-w-xs rounded-lg border border-line bg-raised px-2.5 text-[13px] outline-none focus:border-accent/60"
+        />
+      </label>
+
+      <section>
+        <SectionTitle>Модели</SectionTitle>
+        <div className="space-y-3">
+          {MODEL_FIELDS.map((f) => (
+            <div key={f.key} className="grid grid-cols-[150px_1fr] items-center gap-3">
+              <div>
+                <p className={clsx("text-[13px]", bad.has(f.key) && "text-bad")}>{f.label}</p>
+                {f.hint && <p className="text-[11px] text-faint">{f.hint}</p>}
+              </div>
+              <PathField value={draft[f.key] as string} onChange={(v) => update({ [f.key]: v })} category={f.category} />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <SectionTitle>Технические LoRA</SectionTitle>
+        <p className="-mt-1 mb-3 text-xs text-muted">
+          Часть рецепта воркфлоу. Творческие LoRA добавляйте во вкладке «Стили», они выбираются прямо в панели генерации.
+        </p>
+        <LoraGroup
+          title="Ускорение · основной проход"
+          hint="Применяется к модели и энкодеру во всех проходах"
+          items={draft.loras_main}
+          onChange={(loras_main) => update({ loras_main })}
+          badPrefix="loras_main"
+          bad={bad}
+        />
+        <LoraGroup
+          title="Финальная детализация"
+          hint="Только финальный проход: детали, реализм, звук"
+          items={draft.loras_final}
+          onChange={(loras_final) => update({ loras_final })}
+          badPrefix="loras_final"
+          bad={bad}
+        />
+      </section>
+
+      <section className="flex items-start justify-between gap-6 rounded-xl border border-line bg-raised/50 p-4">
+        <div>
+          <p className="text-[13px]">Экономия видеопамяти</p>
+          <p className="mt-0.5 text-xs text-muted">
+            Считает внимание по частям. Результат тот же, генерация немного медленнее. Включайте, если видите ошибку «не хватило видеопамяти».
+          </p>
+        </div>
+        <Switch checked={draft.low_vram} onChange={(low_vram) => update({ low_vram })} label="Экономия видеопамяти" />
+      </section>
+
+      <section>
+        <button onClick={() => setExpert(!expert)} className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-faint hover:text-muted">
+          <ChevronRight size={13} className={clsx("transition-transform", expert && "rotate-90")} /> Эксперт
+        </button>
+        {expert && (
+          <div className="mt-3 rounded-xl border border-warn/30 bg-warn/5 p-4">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <p className="text-xs text-warn">Эти параметры меняют результат относительно оригинального воркфлоу.</p>
+              <Button size="sm" variant="outline" onClick={resetToWorkflow}>
+                <RotateCcw size={12} /> Сбросить к воркфлоу
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+              <NumField label="Шаги планировщика" value={draft.expert.steps} onChange={(steps) => updateExpert({ steps })} min={1} max={60} />
+              <NumField label="Шаг разделения сигм" value={draft.expert.split_step} onChange={(split_step) => updateExpert({ split_step })} min={0} max={60} />
+              <SelectField label="Сэмплер" value={draft.expert.sampler} onChange={(sampler) => updateExpert({ sampler })}
+                options={options.sampler.map((v) => ({ value: v, label: v }))} defaultValue="seeds_2" />
+              <SelectField label="Планировщик" value={draft.expert.scheduler} onChange={(scheduler) => updateExpert({ scheduler })}
+                options={options.scheduler.map((v) => ({ value: v, label: v }))} defaultValue="simple" />
+              <NumField label="Доп. промежуточные сигмы" value={draft.expert.extend_steps} onChange={(extend_steps) => updateExpert({ extend_steps })} min={0} max={20} />
+              <SelectField
+                label="Размер референсов"
+                value={draft.expert.ref_image_size}
+                onChange={(v) => updateExpert({ ref_image_size: v as "match" | "max" })}
+                options={[
+                  { value: "match", label: "Как у видео — быстрее" },
+                  { value: "max", label: "Максимальный — лицо точнее, медленнее" },
+                ]}
+                defaultValue="match"
+              />
+              <NumField label="Sparse attention τ" value={draft.expert.sparse_tau} onChange={(sparse_tau) => updateExpert({ sparse_tau })} step={0.05} min={0} max={4} />
+              <div className="grid grid-cols-2 gap-2">
+                <NumField label="Sparse от" value={draft.expert.sparse_start} onChange={(sparse_start) => updateExpert({ sparse_start })} step={0.05} min={0} max={1} />
+                <NumField label="Sparse до" value={draft.expert.sparse_end} onChange={(sparse_end) => updateExpert({ sparse_end })} step={0.05} min={0} max={1} />
+              </div>
+              <NumField label="ChunkFeedForward: частей" value={draft.expert.chunk_ff_chunks} onChange={(chunk_ff_chunks) => updateExpert({ chunk_ff_chunks })} min={1} max={16} />
+              <NumField label="Экономия VRAM: групп голов" value={draft.expert.low_vram_heads} onChange={(low_vram_heads) => updateExpert({ low_vram_heads })} min={1} max={56} />
+              <SelectField
+                label="Частота кадров видео-референса"
+                value={String(draft.expert.video_force_rate)}
+                onChange={(v) => updateExpert({ video_force_rate: Number(v) })}
+                options={[
+                  { value: "0", label: "Исходная" },
+                  { value: "24", label: "24 fps — как ждёт модель" },
+                  { value: "25", label: "25 fps" },
+                  { value: "30", label: "30 fps" },
+                ]}
+                defaultValue="0"
+              />
+              <NumField label="CRF итогового mp4" value={draft.expert.crf} onChange={(crf) => updateExpert({ crf })} min={0} max={51} />
+            </div>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function LoraGroup({ title, hint, items, onChange, badPrefix, bad }: {
+  title: string; hint: string; items: LoraSpec[]; onChange: (v: LoraSpec[]) => void; badPrefix: string; bad: Set<string>;
+}) {
+  const set = (i: number, patch: Partial<LoraSpec>) => onChange(items.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  return (
+    <div className="mb-4 rounded-xl border border-line p-3">
+      <div className="mb-2 flex items-baseline justify-between">
+        <p className="text-[13px]">{title}</p>
+        <p className="text-[11px] text-faint">{hint}</p>
+      </div>
+      <div className="space-y-2">
+        {items.map((l, i) => (
+          <div key={i} className={clsx("grid grid-cols-[auto_1fr_150px_auto] items-center gap-2.5", !l.enabled && "opacity-50")}>
+            <Switch checked={l.enabled} onChange={(enabled) => set(i, { enabled })} label="Включить" />
+            <div className={clsx(bad.has(`${badPrefix}.${i}`) && "rounded-lg ring-1 ring-bad/50")}>
+              <PathField compact value={l.path} onChange={(path) => set(i, { path })} category="lora" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Slider value={l.strength} min={0} max={2} step={0.05} onChange={(strength) => set(i, { strength })} />
+              <span className="w-8 text-right text-xs tabular-nums text-muted">{l.strength.toFixed(2)}</span>
+            </div>
+            <Tip text="Убрать">
+              <button onClick={() => onChange(items.filter((_, j) => j !== i))} className="rounded p-1 text-faint hover:text-bad">
+                <X size={13} />
+              </button>
+            </Tip>
+          </div>
+        ))}
+      </div>
+      <Button size="sm" variant="ghost" className="mt-2" onClick={() => onChange([...items, { path: "", strength: 1, enabled: true }])}>
+        <Plus size={13} /> Добавить LoRA
+      </Button>
+    </div>
+  );
+}
+
+function NumField({ label, value, onChange, min, max, step = 1 }: { label: string; value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs text-muted">{label}</span>
+      <input
+        type="number"
+        value={value}
+        min={min}
+        max={max}
+        step={step}
+        onChange={(e) => e.target.value !== "" && onChange(Number(e.target.value))}
+        className="h-8 w-full rounded-lg border border-line bg-raised px-2.5 text-[13px] tabular-nums outline-none focus:border-accent/60"
+      />
+    </label>
+  );
+}
+
+/** Dropdown for fields with a fixed set of choices; the workflow's value is marked. */
+function SelectField({ label, value, onChange, options, defaultValue }: {
+  label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; defaultValue?: string;
+}) {
+  const all = options.some((o) => o.value === value) ? options : [{ value, label: value }, ...options];
+  const current = all.find((o) => o.value === value);
+  // long lists: current value and the workflow's value pinned on top, the rest below
+  const pinnedValues = all.length > 6 ? [...new Set([value, defaultValue].filter(Boolean) as string[])] : [];
+  const pinned = pinnedValues.map((v) => all.find((o) => o.value === v)).filter(Boolean) as typeof all;
+  const rest = all.filter((o) => !pinnedValues.includes(o.value));
+  return (
+    <div>
+      <p className="mb-1 text-xs text-muted">{label}</p>
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger asChild>
+          <button className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-line bg-raised px-2.5 text-left text-[13px] outline-none hover:bg-hover focus-visible:border-accent/60 data-[state=open]:border-accent/60">
+            <span className="truncate">{current?.label ?? value}</span>
+            <ChevronDown size={13} className="shrink-0 text-faint" />
+          </button>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content align="start" sideOffset={4} collisionPadding={12}
+            className="z-50 max-h-72 min-w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto rounded-xl border border-line bg-panel p-1 shadow-2xl">
+            {[...pinned, ...rest].map((o, i) => (
+              <div key={o.value}>
+                {i === pinned.length && pinned.length > 0 && <DropdownMenu.Separator className="my-1 h-px bg-line" />}
+                <DropdownMenu.Item onSelect={() => onChange(o.value)}
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] outline-none data-[highlighted]:bg-hover">
+                  <span className="w-4">{o.value === value && <Check size={13} className="text-accent" />}</span>
+                  <span className="flex-1">{o.label}</span>
+                  {o.value === defaultValue && <span className="text-[10px] text-faint">воркфлоу</span>}
+                </DropdownMenu.Item>
+              </div>
+            ))}
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
+    </div>
+  );
+}

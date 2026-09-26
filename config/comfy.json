@@ -1,0 +1,21 @@
+{
+  "portable_dir": "comfy/ComfyUI_windows_portable",
+  "host": "127.0.0.1",
+  "port": 8288,
+  "legacy_models_dir": "F:/ComfyUI_LTX/ComfyUI_windows_portable/ComfyUI/models",
+  "env": {
+    "TORCHDYNAMO_DISABLE": "1"
+  },
+  "args": [
+    "-s",
+    "ComfyUI/main.py",
+    "--windows-standalone-build",
+    "--disable-auto-launch",
+    "--reserve-vram", "1",
+    "--fast-disk",
+    "--use-pytorch-cross-attention",
+    "--disable-cuda-malloc",
+    "--fast", "fp16_accumulation",
+    "--preview-method", "auto"
+  ]
+}

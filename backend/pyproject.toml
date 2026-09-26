@@ -1,0 +1,26 @@
+[project]
+name = "shellmax-backend"
+version = "0.1.0"
+description = "ShellMax: video editor backend driving a standalone ComfyUI (MiniMax H3)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "httpx>=0.28",
+    "websockets>=14",
+    "sqlmodel>=0.0.22",
+    "pydantic>=2.9",
+    "python-multipart>=0.0.18",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.3", "pytest-asyncio>=0.24"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-p no:cacheprovider"
+asyncio_mode = "auto"
+
+[tool.uv]
+package = false
