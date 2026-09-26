@@ -1,5 +1,8 @@
 import type {
   AssistantEvent,
+  Chat,
+  ChatAttachment,
+  ChatInfo,
   Estimate,
   AssistantModel,
   AssistantSettings,
@@ -101,6 +104,15 @@ export const api = {
     return request<Upload>("POST", "/api/uploads", fd);
   },
   uploadInfo: (id: string) => get<Upload>(`/api/uploads/${id}`),
+  chats: () => get<ChatInfo[]>("/api/assistant/chats"),
+  chat: (id: string) => get<Chat>(`/api/assistant/chats/${id}`),
+  createChat: () => post<Chat>("/api/assistant/chats"),
+  deleteChat: (id: string) => del<{ ok: boolean }>(`/api/assistant/chats/${id}`),
+  uploadChatAttachment: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<ChatAttachment>("POST", "/api/assistant/attachments", fd);
+  },
   editUpload: (id: string, body: { crop: CropBox | null; start: number | null; end: number | null }) =>
     post<Upload>(`/api/uploads/${id}/edit`, body),
   uploadPeaks: (id: string) => get<{ peaks: number[]; duration: number | null }>(`/api/uploads/${id}/peaks`),
@@ -138,6 +150,7 @@ export const api = {
 export const urls = {
   uploadThumb: (id: string) => `/api/uploads/${id}/thumb`,
   uploadFile: (id: string) => `/api/uploads/${id}/file`,
+  chatAttachment: (id: string) => `/api/assistant/attachments/${id}`,
   assetFile: (id: number) => `/api/assets/${id}/file`,
   assetThumb: (id: number) => `/api/assets/${id}/thumb`,
 };

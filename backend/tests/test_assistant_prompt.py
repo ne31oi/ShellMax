@@ -58,3 +58,20 @@ def test_picture_gives_appearance_not_action():
     s = compose_system([RefInfo(kind="image", name="girl.png")], 2.0)
     assert "КАРТИНКА ЗАДАЁТ ТОЛЬКО ВНЕШНОСТЬ" in s and "НЕ действие видео" in s
     assert "КАРТИНКА ЗАДАЁТ" not in compose_system([], 2.0)
+
+
+def test_chat_system_fresh_hides_panel_state():
+    refs = [RefInfo(kind="image", name="girl.png")]
+    fresh = prompt.chat_system(refs, 5.0, "old draft about a donut", fresh=True)
+    assert "girl.png" not in fresh and "donut" not in fresh and prompt.SPEC in fresh
+    later = prompt.chat_system(refs, 5.0, "old draft about a donut", fresh=False)
+    assert "<Picture 1> = girl.png" in later and "donut" in later
+    assert "3–5 пронумерованных вариантов" in later and "существуют ТОЛЬКО в чате" in later
+
+
+def test_alternate_merges_failed_turns():
+    from app.llm.service import _alternate
+
+    out = _alternate([{"role": "assistant", "content": "hi"}, {"role": "user", "content": "a"},
+                      {"role": "user", "content": "b"}, {"role": "assistant", "content": "c"}])
+    assert out == [{"role": "user", "content": "a\n\nb"}, {"role": "assistant", "content": "c"}]

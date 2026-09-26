@@ -70,8 +70,9 @@ ShellMax — локальное веб-приложение (FastAPI + React), �
 | `backend/app/api.py` | Все HTTP-роуты `/api/*` и WS `/api/ws` |
 | `backend/app/services.py` | Бутстрап (проект и профиль при первом запуске), загрузки, создание генераций |
 | `backend/app/llm/` | Ассистент: `registry` (модели/URL как в студии), `downloader`, `runner` (llama-server :8090), `prompt` (системные промпты compose/face), `service` (арбитраж VRAM, стрим) |
-| `backend/app/assistant_api.py` | `/api/assistant/*`: status, models, download, settings, compose (SSE), edit (SSE, правка готового промпта словами), face-prompt (SSE), stop, unload |
+| `backend/app/assistant_api.py` | `/api/assistant/*`: status, models, download, settings, compose (SSE), edit (SSE, правка готового промпта словами), face-prompt (SSE), chats (CRUD) + `chats/{id}/send` (SSE, чат идей; ответ сохраняет сервер), attachments (картинки только для чата), stop, unload |
 | `backend/app/jobs/estimator.py` | Оценка времени по реальным готовым задачам: `exact` (среднее по тому же `kind` и `work_units`), `scaled`, `prior`; холодные (`info.cold`) исключаются. Время задачи — `elapsed_s`, по этапам — `info.stage_seconds` (пишет `jobs/queue.py`) |
+| `frontend/src/components/assistant/ChatView.tsx`, `store/chats.ts` | Вкладка «Ассистент»: чаты идей, карточка промпта с «В промпт» (правила — `llm/prompt.chat_system`, по `assistant-stream.ts` студии) |
 | `frontend/src/components/generate/RefEditor.tsx`, `TrimBar.tsx` | Редактор референса (область через `face/CropEditor`, фрагмент по волне `/api/uploads/{id}/peaks`) |
 | `backend/app/db/models.py` | SQLModel/SQLite: Project, EngineProfileRow, StyleLora, Upload, MediaAsset, Generation, KV |
 | `frontend/src/store/` | zustand: `library` (данные с сервера), `form` (панель генерации, sticky), `ui`, `timeline` (команды) |

@@ -104,6 +104,17 @@ class Generation(SQLModel, table=True):
     info: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))  # e.g. face tracking report
 
 
+class AssistantChat(SQLModel, table=True):
+    """A conversation with the ideas assistant; the whole (capped) history is replayed on every turn."""
+    __tablename__ = "assistant_chat"
+    id: str = Field(primary_key=True)
+    title: str = "Новый чат"
+    # [{role: user|assistant, content, attachment?: {id, name}}]
+    messages: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
+    created: datetime = Field(default_factory=utcnow)
+    updated: datetime = Field(default_factory=utcnow)
+
+
 class KV(SQLModel, table=True):
     """Small persistent settings, e.g. sticky UI values."""
     key: str = Field(primary_key=True)

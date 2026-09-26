@@ -4,12 +4,12 @@ import json
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from . import settings
-from .db.models import Generation, MediaAsset, Upload, session
+from .db.models import AssistantChat, Generation, MediaAsset, Upload, select, session, utcnow
 from .llm import config, prompt
 from .llm.downloader import downloads
 from .llm.registry import CHOICES, FILES
@@ -230,3 +230,144 @@ def _crop(src: Path, crop: dict | None, dest: Path) -> Path:
         dest.write_bytes(buf.tobytes())
         return dest
     return src
+
+
+# ---------------------------------------------------------------- ideas chat
+ATTACH_DIR = settings.DATA_DIR / "chat_attachments"  # chat-only files: never generation references
+MAX_CHATS = 20
+HISTORY_LIMIT = 60  # studio pre-cap; the service trims further by tokens
+
+
+def _chat_title(text: str) -> str:
+    line = " ".join(text.split())
+    return (line[:40] + "…") if len(line) > 40 else (line or "Новый чат")
+
+
+@router.get("/chats")
+def list_chats():
+    with session() as s:
+        rows = s.exec(select(AssistantChat).order_by(AssistantChat.updated.desc())).all()
+    return [{"id": c.id, "title": c.title, "updated": c.updated, "count": len(c.messages or [])} for c in rows]
+
+
+@router.post("/chats")
+def create_chat():
+    chat = AssistantChat(id=uuid.uuid4().hex[:12])
+    with session() as s:
+        s.add(chat)
+        # keep the most recent MAX_CHATS, as the studio does
+        old = s.exec(select(AssistantChat).order_by(AssistantChat.updated.desc()).offset(MAX_CHATS)).all()
+        for c in old:
+            s.delete(c)
+        s.commit()
+    return chat
+
+
+@router.get("/chats/{cid}")
+def get_chat(cid: str):
+    with session() as s:
+        return s.get(AssistantChat, cid) or _404()
+
+
+@router.delete("/chats/{cid}")
+def delete_chat(cid: str, request: Request):
+    svc = _svc(request)
+    if svc.chat_id == cid:
+        svc.cancel()
+    with session() as s:
+        if chat := s.get(AssistantChat, cid):
+            s.delete(chat)
+            s.commit()
+    return {"ok": True}
+
+
+@router.post("/attachments")
+async def upload_attachment(file: UploadFile = File(...)):
+    if library.kind_of(file.filename or "") != "image":
+        raise HTTPException(415, "Во вложения чата можно добавить только картинку")
+    ATTACH_DIR.mkdir(parents=True, exist_ok=True)
+    aid = uuid.uuid4().hex[:16] + Path(file.filename).suffix.lower()
+    (ATTACH_DIR / aid).write_bytes(await file.read())
+    return {"id": aid, "name": file.filename}
+
+
+@router.get("/attachments/{aid}")
+def get_attachment(aid: str):
+    path = ATTACH_DIR / Path(aid).name
+    if not path.exists():
+        raise HTTPException(404)
+    return FileResponse(path)
+
+
+class ChatIn(BaseModel):
+    text: str
+    attachment: dict | None = None  # {id, name} from /attachments
+    refs: list[ComposeRef] = []  # the generation panel's current references
+    draft: str = ""  # the generation panel's current prompt
+    duration: float = 2.0
+
+
+@router.post("/chats/{cid}/send")
+def send(cid: str, body: ChatIn, request: Request):
+    svc = _svc(request)
+    if not body.text.strip() and not body.attachment:
+        raise HTTPException(422, "Напишите сообщение")
+    if (busy := _precheck(svc)) is not None:
+        return busy
+    with session() as s:
+        chat = s.get(AssistantChat, cid) or _404()
+        msg = {"role": "user", "content": body.text.strip()}
+        if body.attachment:
+            msg["attachment"] = {"id": Path(body.attachment["id"]).name, "name": body.attachment.get("name", "")}
+        chat.messages = [*(chat.messages or []), msg]
+        if chat.title == "Новый чат":
+            chat.title = _chat_title(body.text or msg.get("attachment", {}).get("name", ""))
+        chat.updated = utcnow()
+        s.add(chat)
+        s.commit()
+        infos, images = [], []
+        fresh = sum(m["role"] == "user" for m in chat.messages) <= 1  # studio правка 166
+        if not fresh:
+            for ref in body.refs:
+                up = s.get(Upload, ref.upload_id)
+                if up is None:
+                    continue
+                infos.append(prompt.RefInfo(kind=up.kind, name=up.orig_name, with_audio=ref.with_audio))
+                if up.kind == "image":
+                    images.append(Path(up.path))
+        history = [_as_llm_message(m) for m in chat.messages[-HISTORY_LIMIT:]]
+    if body.attachment and (ATTACH_DIR / msg["attachment"]["id"]).exists():
+        images.append(ATTACH_DIR / msg["attachment"]["id"])
+        history[-1]["content"] += (f"\n\n[Вложение чата: {msg['attachment']['name']} — прикреплено для описания/анализа, "
+                                   "НЕ референс генерации, не называй его <Picture N>]")
+    system = prompt.chat_system(infos, body.duration, body.draft, fresh)
+
+    async def run():
+        svc.chat_id = cid
+        text = ""
+        try:
+            async for event in svc.chat(system, history, images):
+                if "delta" in event:
+                    text += event["delta"]
+                yield event
+        finally:  # commit even a stopped answer, so the chat keeps what was shown
+            svc.chat_id = None
+            if text.strip():
+                with session() as s:
+                    if chat := s.get(AssistantChat, cid):
+                        chat.messages = [*(chat.messages or []), {"role": "assistant", "content": text}]
+                        chat.updated = utcnow()
+                        s.add(chat)
+                        s.commit()
+    return _sse(run())
+
+
+def _as_llm_message(m: dict) -> dict:
+    content = m.get("content", "")
+    if m.get("attachment"):  # older attachments are not re-sent: only named, so the model knows they existed
+        content = (content + f"\n\n[Вложение чата: {m['attachment'].get('name', '')}]").strip()
+    return {"role": m["role"], "content": content}
+
+
+def _404():
+    raise HTTPException(404, "не найдено")

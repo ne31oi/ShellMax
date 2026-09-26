@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { AssistantSetup } from "./components/assistant/AssistantSetup";
 import { FaceRefineDialog } from "./components/face/FaceRefineDialog";
 import { RefEditor } from "./components/generate/RefEditor";
+import { ChatView } from "./components/assistant/ChatView";
 import { GeneratePanel } from "./components/generate/GeneratePanel";
 import { EngineStatus } from "./components/layout/EngineStatus";
 import { Resizer, usePanelSize } from "./components/layout/Resizer";
@@ -78,6 +79,7 @@ export default function App() {
               [
                 ["generate", "Генерация"],
                 ["edit", "Монтаж"],
+                ["assistant", "Ассистент"],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -100,6 +102,11 @@ export default function App() {
         </header>
 
         {/* body */}
+        {workspace === "assistant" ? (
+          <div className="min-h-0 flex-1">
+            <ChatView />
+          </div>
+        ) : (
         <div className="flex min-h-0 flex-1">
           <aside style={{ width: binW }} className="shrink-0 bg-panel">
             <MediaBin />
@@ -140,6 +147,7 @@ export default function App() {
             </>
           )}
         </div>
+        )}
       </div>
       <SettingsDialog />
       <FaceRefineDialog />

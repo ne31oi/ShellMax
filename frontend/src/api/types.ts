@@ -285,6 +285,28 @@ export interface AssistantSettings {
   repeat_penalty: number;
 }
 
+/** Ideas assistant chats (backend AssistantChat). */
+export interface ChatAttachment {
+  id: string;
+  name: string;
+}
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+  attachment?: ChatAttachment;
+}
+export interface ChatInfo {
+  id: string;
+  title: string;
+  updated: string;
+  count: number;
+}
+export interface Chat {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+}
+
 /** Time estimate from this machine's finished jobs (backend jobs/estimator.py). */
 export interface Estimate {
   seconds: number;

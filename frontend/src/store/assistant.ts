@@ -3,7 +3,8 @@ import { api, ApiError, streamAssistant } from "../api/client";
 import type { AssistantStatus } from "../api/types";
 import { useUI } from "./ui";
 
-export type AssistantTarget = "compose" | "edit" | "face"; // edit: fix the generation prompt in plain words
+// edit: fix the generation prompt in plain words; chat: the ideas assistant tab
+export type AssistantTarget = "compose" | "edit" | "face" | "chat";
 
 interface AssistantJob {
   target: AssistantTarget;

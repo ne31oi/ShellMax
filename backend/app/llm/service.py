@@ -36,6 +36,7 @@ class AssistantService:
         self._jobs_busy = jobs_busy  # () -> bool: a video job is running or queued
         self._on_models_freed = on_models_freed  # the next video job will be a cold start
         self.active = 0  # answers in flight
+        self.chat_id: str | None = None  # chat whose answer is in flight (deleting it stops the answer)
         self._cancel: asyncio.Event | None = None
 
     # ------------------------------------------------------------------ status
@@ -78,7 +79,12 @@ class AssistantService:
 
     # ------------------------------------------------------------------ one answer
     async def stream(self, system: str, user_text: str, images: list[Path]) -> AsyncIterator[dict]:
-        """Yields {"stage"}, {"delta"}, then {"done", "prompt"} or {"error"}."""
+        """Yields {"stage"}, {"delta"}, then {"done", "prompt", "text"} or {"error"}."""
+        async for event in self.chat(system, [{"role": "user", "content": user_text}], images):
+            yield event
+
+    async def chat(self, system: str, history: list[dict], images: list[Path]) -> AsyncIterator[dict]:
+        """A multi-turn answer; `images` go with the last user message (studio: refs sit next to it)."""
         s = config.load()
         choice = CHOICES[s.model]
         if not all(FILES[f].ready() for f in choice.all_files()):
@@ -99,17 +105,23 @@ class AssistantService:
             self.runner.touch()
             yield {"stage": "writing"}
 
-            content: list[dict] = [{"type": "text", "text": user_text}]
+            history = _alternate(history)
+            content: list[dict] = [{"type": "text", "text": history[-1]["content"]}]
             for img in images:
                 uri = await asyncio.to_thread(_image_data_uri, img)
                 if uri:
                     content.append({"type": "image_url", "image_url": {"url": uri}})
-            messages = [{"role": "system", "content": system}, {"role": "user", "content": content}]
             smp = choice.sampling
             if s.sampling_override:
                 smp = type(smp)(s.temperature, s.top_p, s.top_k, s.min_p, s.presence_penalty,
                                 s.frequency_penalty, s.repeat_penalty)
-            input_tokens = int(len(system + user_text) * 0.4) + 384 * len(images)  # studio estimate
+            # studio estimate: ~0.4 token per char, 384 per image; the oldest turns go first when over budget
+            est = lambda msgs: int(sum(len(m["content"]) for m in msgs) * 0.4)  # noqa: E731
+            budget = s.context_size - min(s.max_output_tokens, s.context_size // 4) - 384 * len(images) - int(len(system) * 0.4)
+            while len(history) > 1 and est(history) > budget:
+                history = _alternate(history[1:])
+            messages = [{"role": "system", "content": system}, *history[:-1], {"role": "user", "content": content}]
+            input_tokens = int(len(system) * 0.4) + est(history) + 384 * len(images)
             body = {
                 "messages": messages, "stream": True,
                 "max_tokens": max(256, min(s.max_output_tokens, s.context_size - input_tokens - 128)),
@@ -140,7 +152,7 @@ class AssistantService:
                             text += delta
                             self.runner.touch()
                             yield {"delta": delta}
-            yield {"done": True, "prompt": extract_prompt(text), "cancelled": cancel.is_set()}
+            yield {"done": True, "prompt": extract_prompt(text), "text": text, "cancelled": cancel.is_set()}
         except Exception as e:  # noqa: BLE001 - shown to the user
             log.exception("assistant failed")
             yield {"error": str(e)}
@@ -169,6 +181,19 @@ class AssistantService:
                 return
             last = free_mb
             await asyncio.sleep(1)
+
+
+def _alternate(msgs: list[dict]) -> list[dict]:
+    """Roles must alternate and start with user: merge repeats (a failed turn leaves two user messages)."""
+    out: list[dict] = []
+    for m in msgs:
+        if out and out[-1]["role"] == m["role"]:
+            out[-1] = {"role": m["role"], "content": out[-1]["content"] + "\n\n" + m["content"]}
+        else:
+            out.append({"role": m["role"], "content": m["content"]})
+    while out and out[0]["role"] != "user":
+        out.pop(0)
+    return out
 
 
 def _image_data_uri(path: Path) -> str | None:
