@@ -26,6 +26,7 @@ interface UIState {
   binFilter: "all" | "video" | "draft" | "imported";
   toasts: Toast[];
   faceDialog: FaceDialogState | null;
+  refEditor: string | null; // uid of the reference card being edited
 
   setWorkspace: (w: Workspace) => void;
   selectGen: (id: number | null) => void;
@@ -36,6 +37,7 @@ interface UIState {
   setBinFilter: (f: UIState["binFilter"]) => void;
   toast: (text: string, tone?: Toast["tone"], action?: Toast["action"]) => void;
   openFaceDialog: (state: FaceDialogState | null) => void;
+  openRefEditor: (uid: string | null) => void;
   dismiss: (id: number) => void;
 }
 
@@ -51,6 +53,7 @@ export const useUI = create<UIState>((set) => ({
   binFilter: "all",
   toasts: [],
   faceDialog: null,
+  refEditor: null,
 
   setWorkspace: (workspace) => {
     localStorage.setItem("sm.workspace", workspace);
@@ -69,4 +72,5 @@ export const useUI = create<UIState>((set) => ({
   },
   dismiss: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
   openFaceDialog: (faceDialog) => set({ faceDialog }),
+  openRefEditor: (refEditor) => set({ refEditor }),
 }));

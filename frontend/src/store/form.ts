@@ -27,6 +27,8 @@ interface FormState {
   removeRef: (uid: string) => void;
   moveRef: (from: number, to: number) => void;
   toggleRefAudio: (uid: string) => void;
+  /** An edited (or reset) file for the same card: tag, order and 🔊 stay. */
+  replaceRefUpload: (uid: string, upload: Upload) => void;
   loadFromGeneration: (g: Generation) => Promise<void>;
   rememberPrompt: () => void;
 }
@@ -99,6 +101,11 @@ export const useForm = create<FormState>((set, get) => ({
 
   toggleRefAudio: (uid) =>
     set((s) => ({ refs: s.refs.map((r) => (r.uid === uid ? { ...r, withAudio: !r.withAudio } : r)) })),
+
+  replaceRefUpload: (uid, upload) =>
+    set((s) => ({
+      refs: s.refs.map((r) => (r.uid === uid ? { ...r, upload, withAudio: r.withAudio && upload.has_audio } : r)),
+    })),
 
   loadFromGeneration: async (g) => {
     const p = g.ui_params;

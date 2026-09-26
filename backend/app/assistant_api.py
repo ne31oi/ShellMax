@@ -118,7 +118,10 @@ def compose(body: ComposeIn, request: Request):
             if up.kind == "image":
                 images.append(Path(up.path))
     system = prompt.compose_system(infos, body.duration)
-    user = f"Описание пользователя:\n{body.text.strip()}\n\nПреобразуй его в промпт."
+    # the huge spec comes first; restate at the end that the action is the user's, not the photo's
+    user = (f"Описание пользователя (ГЛАВНОЕ — действие видео берётся только отсюда):\n{body.text.strip()}\n\n"
+            "Преобразуй его в промпт. summary и detailed_description описывают именно это действие; "
+            "позу, жесты и предметы с картинок не переносить.")
     return _sse(svc.stream(system, user, images))
 
 

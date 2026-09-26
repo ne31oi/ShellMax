@@ -101,6 +101,9 @@ export const api = {
     return request<Upload>("POST", "/api/uploads", fd);
   },
   uploadInfo: (id: string) => get<Upload>(`/api/uploads/${id}`),
+  editUpload: (id: string, body: { crop: CropBox | null; start: number | null; end: number | null }) =>
+    post<Upload>(`/api/uploads/${id}/edit`, body),
+  uploadPeaks: (id: string) => get<{ peaks: number[]; duration: number | null }>(`/api/uploads/${id}/peaks`),
 
   generations: () => get<Generation[]>("/api/generations"),
   generate: (params: UIParams) => post<Generation[]>("/api/generations", params),

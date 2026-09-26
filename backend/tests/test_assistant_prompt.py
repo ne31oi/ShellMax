@@ -52,3 +52,9 @@ def test_dialogue_lines_verbatim():
     src = 'She smiles. <d>[Russian] Я Мисс Фортуна.</d> Then <d>Hi!</d>'
     assert prompt.dialogue_lines(src) == ["<d>[Russian] Я Мисс Фортуна.</d>", "<d>Hi!</d>"]
     assert prompt.dialogue_lines("") == []
+
+
+def test_picture_gives_appearance_not_action():
+    s = compose_system([RefInfo(kind="image", name="girl.png")], 2.0)
+    assert "КАРТИНКА ЗАДАЁТ ТОЛЬКО ВНЕШНОСТЬ" in s and "НЕ действие видео" in s
+    assert "КАРТИНКА ЗАДАЁТ" not in compose_system([], 2.0)

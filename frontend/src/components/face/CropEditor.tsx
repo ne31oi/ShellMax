@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 import type { CropBox } from "../../api/types";
 
 type Handle = "move" | "nw" | "ne" | "sw" | "se" | "new";
@@ -10,7 +10,23 @@ const clamp = (v: number, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, v));
  * Rectangle over an image, normalized 0..1 (what LoadImageCrop expects).
  * Drag inside to move, drag corners to resize, drag outside to draw a new one.
  */
-export function CropEditor({ src, value, onChange }: { src: string; value: CropBox | null; onChange: (c: CropBox) => void }) {
+export function CropEditor({
+  src,
+  value,
+  onChange,
+  ratio,
+  mediaAspect = 1,
+  media,
+  heightClass = "max-h-72",
+}: {
+  src: string;
+  value: CropBox | null;
+  onChange: (c: CropBox) => void;
+  ratio?: number | null; // lock the region to this width/height (in pixels)
+  mediaAspect?: number; // image width/height, to convert the pixel ratio to normalized units
+  media?: ReactNode; // e.g. a <video>; defaults to an <img> of src
+  heightClass?: string;
+}) {
   const box = useRef<HTMLDivElement>(null);
   const crop = value ?? { x: 0, y: 0, w: 1, h: 1 };
 
@@ -41,6 +57,20 @@ export function CropEditor({ src, value, onChange }: { src: string; value: CropB
         const y1 = handle.includes("s") ? clamp(initial.y + initial.h + dy, initial.y + MIN) : initial.y + initial.h;
         next = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
       }
+      if (ratio && handle !== "move") {
+        // normalized height follows width; anchor on the side opposite to the dragged one
+        const k = mediaAspect / ratio;
+        const bottom = next.y + next.h;
+        const up = handle.includes("n") || (handle === "new" && p.y < origin.y);
+        const left = handle.includes("w") || (handle === "new" && p.x < origin.x);
+        const right = next.x + next.w;
+        let w = next.w, h = w * k;
+        const maxH = up ? bottom : 1 - next.y;
+        const maxW = left ? right : 1 - next.x;
+        if (h > maxH) [h, w] = [maxH, maxH / k];
+        if (w > maxW) [w, h] = [maxW, maxW * k];
+        next = { x: left ? right - w : next.x, y: up ? bottom - h : next.y, w, h };
+      }
       if (next.w >= MIN && next.h >= MIN) onChange(round(next));
     };
     const up = () => {
@@ -52,8 +82,8 @@ export function CropEditor({ src, value, onChange }: { src: string; value: CropB
   };
 
   return (
-    <div ref={box} className="relative inline-block max-h-72 cursor-crosshair select-none overflow-hidden rounded-lg bg-black" onPointerDown={(e) => start(e, "new")}>
-      <img src={src} alt="" className="block max-h-72 w-auto" draggable={false} />
+    <div ref={box} className={clsx("relative inline-block cursor-crosshair select-none overflow-hidden rounded-lg bg-black", heightClass)} onPointerDown={(e) => start(e, "new")}>
+      {media ?? <img src={src} alt="" className={clsx("block w-auto", heightClass)} draggable={false} />}
       {/* dim everything outside the crop */}
       <div
         className="pointer-events-none absolute border-2 border-accent shadow-[0_0_0_9999px_rgba(0,0,0,0.55)]"

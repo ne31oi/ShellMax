@@ -56,6 +56,38 @@ def with_style_triggers(prompt: str, triggers: list[str]) -> str:
     return prompt.rstrip() + "\n\n" + ", ".join(missing)
 
 
+# Trigger words of the engine's technical LoRAs, by file name. The workflow's prompt (node 84) carries
+# "visual_style: r34l1sm." because node 199 loads h3-realism-people; a prompt written here must too.
+LORA_TRIGGERS = {"h3-realism-people-t2v-i2v-r2v": "r34l1sm"}
+
+
+def lora_triggers(profile: EngineProfile) -> list[str]:
+    out = []
+    for lora in [*profile.loras_main, *profile.loras_final]:
+        stem = lora.path.replace("\\", "/").rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        if lora.enabled and lora.strength and (t := LORA_TRIGGERS.get(stem)) and t not in out:
+            out.append(t)
+    return out
+
+
+def with_lora_triggers(prompt: str, triggers: list[str]) -> str:
+    """Put each missing trigger first in visual_style (created before overall_soundscape if absent)."""
+    missing = [t for t in triggers if t.lower() not in prompt.lower()]
+    if not missing:
+        return prompt
+    words = " ".join(f"{t}." for t in missing)
+    lines = prompt.splitlines()
+    heads = {l.strip().lower(): i for i, l in reversed(list(enumerate(lines)))}
+    if (i := heads.get("visual_style:")) is not None:
+        at = i + 2 if i + 1 < len(lines) and not lines[i + 1].strip() else i + 1
+        lines[at:at] = [words, ""] if at == i + 2 else [words]
+    elif (i := heads.get("overall_soundscape:")) is not None:
+        lines[i:i] = ["visual_style:", "", words, ""]
+    else:
+        return prompt.rstrip() + "\n\n" + words
+    return "\n".join(lines)
+
+
 def expand(
     ui: UIParams,
     profile: EngineProfile,
@@ -74,7 +106,7 @@ def expand(
 
     triggers = [t for _, trig in styles for t in trig]
     return FullParams(
-        prompt=with_style_triggers(ui.prompt, triggers),
+        prompt=with_lora_triggers(with_style_triggers(ui.prompt, triggers), lora_triggers(profile)),
         refs=refs,
         aspect=ui.aspect,
         megapixels=q["megapixels"],

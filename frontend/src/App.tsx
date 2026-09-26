@@ -3,6 +3,7 @@ import { Clapperboard, Settings, Wand2, X } from "lucide-react";
 import { useEffect } from "react";
 import { AssistantSetup } from "./components/assistant/AssistantSetup";
 import { FaceRefineDialog } from "./components/face/FaceRefineDialog";
+import { RefEditor } from "./components/generate/RefEditor";
 import { GeneratePanel } from "./components/generate/GeneratePanel";
 import { EngineStatus } from "./components/layout/EngineStatus";
 import { Resizer, usePanelSize } from "./components/layout/Resizer";
@@ -142,6 +143,7 @@ export default function App() {
       </div>
       <SettingsDialog />
       <FaceRefineDialog />
+      <RefEditor />
       <AssistantSetup />
       <Toasts />
     </TipProvider>

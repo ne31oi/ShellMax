@@ -53,6 +53,9 @@ class Upload(SQLModel, table=True):
     height: int | None = None
     has_audio: bool = False
     comfy_name: str | None = None  # name in ComfyUI input dir once uploaded there
+    # an edited reference (crop / trimmed fragment) is a derived file; the original stays untouched
+    source_id: str | None = None
+    edit: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))  # {crop:{x,y,w,h}, start, end}
     created: datetime = Field(default_factory=utcnow)
 
 
@@ -118,6 +121,8 @@ _ADDED_COLUMNS = [
     ("generation", "kind", "VARCHAR DEFAULT 'generate' NOT NULL"),
     ("generation", "source_asset_id", "INTEGER"),
     ("generation", "info", "JSON"),
+    ("upload", "source_id", "VARCHAR"),
+    ("upload", "edit", "JSON"),
 ]
 
 

@@ -2,7 +2,7 @@ import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type D
 import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
-import { AlertTriangle, AudioLines, ImagePlus, Plus, Volume2, VolumeX, X } from "lucide-react";
+import { AlertTriangle, AudioLines, Crop, ImagePlus, Plus, Scissors, Volume2, VolumeX, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { urls } from "../../api/client";
 import type { MediaAsset, RefItem } from "../../api/types";
@@ -12,6 +12,7 @@ import { fmtSeconds } from "../../lib/format";
 import { KIND_COLOR, KIND_LABEL, mentionedUids, tagOf } from "../../lib/refs";
 import { useForm } from "../../store/form";
 import { useLibrary } from "../../store/library";
+import { useUI } from "../../store/ui";
 import { Spinner, Tip } from "../ui";
 
 export const ASSET_DRAG_TYPE = "application/x-shellmax-asset";
@@ -149,6 +150,7 @@ function RefCard({ item, tag, mentioned }: { item: RefItem; tag: string; mention
   const removeRef = useForm((s) => s.removeRef);
   const toggleAudio = useForm((s) => s.toggleRefAudio);
   const { upload } = item;
+  const edited = !!upload.source_id;
   const color = KIND_COLOR[upload.kind];
   const badDuration = upload.kind === "video" && upload.duration != null && (upload.duration < 2 || upload.duration > 15);
 
@@ -190,7 +192,10 @@ function RefCard({ item, tag, mentioned }: { item: RefItem; tag: string; mention
 
       {upload.kind === "video" && (
         <div className="absolute inset-x-1 bottom-1 flex items-center justify-between">
-          <span className="rounded bg-black/70 px-1 text-[10px] text-white">{upload.duration ? fmtSeconds(upload.duration) : ""}</span>
+          <span className="flex items-center gap-0.5 rounded bg-black/70 px-1 text-[10px] text-white">
+            {edited && <Scissors size={9} />}
+            {upload.duration ? fmtSeconds(upload.duration) : ""}
+          </span>
           {upload.has_audio && (
             <Tip text={item.withAudio ? "Звук видео передаётся модели" : "Звук видео не используется (как в воркфлоу)"}>
               <button
@@ -210,6 +215,21 @@ function RefCard({ item, tag, mentioned }: { item: RefItem; tag: string; mention
         </Tip>
       )}
 
+      {edited && upload.kind !== "video" && (
+        <span className="pointer-events-none absolute bottom-1 left-1 rounded bg-black/70 p-0.5 text-white">
+          <Scissors size={9} />
+        </span>
+      )}
+      <Tip text={upload.kind === "image" ? "Обрезать" : upload.kind === "audio" ? "Вырезать фрагмент" : "Обрезать кадр и выбрать фрагмент"}>
+        <button
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => useUI.getState().openRefEditor(item.uid)}
+          aria-label="Изменить референс"
+          className="absolute -top-1.5 right-4 hidden h-5 w-5 items-center justify-center rounded-full border border-line bg-panel text-muted hover:text-fg group-hover:flex"
+        >
+          {upload.kind === "image" ? <Crop size={11} /> : <Scissors size={11} />}
+        </button>
+      </Tip>
       <button
         onPointerDown={(e) => e.stopPropagation()}
         onClick={() => removeRef(item.uid)}

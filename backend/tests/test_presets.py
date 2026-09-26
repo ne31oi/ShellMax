@@ -2,7 +2,7 @@
 
 from app.jobs.queue import asset_title, humanize_error
 from app.workflow.params import EngineProfile, LoraSpec, ResolvedRef, UIParams, clean_path
-from app.workflow.presets import expand, resolution_for
+from app.workflow.presets import default_profile, expand, resolution_for
 
 
 def profile(**over) -> EngineProfile:
@@ -56,3 +56,21 @@ def test_asset_title_skips_header_and_tags():
     assert asset_title("", 3) == "Генерация 3"
     structured = "subject_definitions:\n<Subject 1> is the woman in <Picture 1>.\n\nsummary:\n[reference] A woman dances in the rain"
     assert asset_title(structured, 4) == "Woman dances in the rain"
+
+
+def test_realism_lora_trigger_goes_into_visual_style():
+    from app.workflow.presets import lora_triggers, with_lora_triggers
+
+    prof = default_profile()
+    assert lora_triggers(prof) == ["r34l1sm"]  # realism-people is on in the workflow's recipe
+    off = prof.model_copy(update={"loras_final": [l.model_copy(update={"enabled": "realism" not in l.path})
+                                                  for l in prof.loras_final]})
+    assert lora_triggers(off) == []
+
+    six = "summary:\nA.\n\ndetailed_description:\nB.\n\noverall_soundscape:\nC.\n\nnon_diegetic_music:\nN/A"
+    out = with_lora_triggers(six, ["r34l1sm"])
+    assert "detailed_description:\nB.\n\nvisual_style:\n\nr34l1sm.\n\noverall_soundscape:" in out
+    styled = "detailed_description:\nB.\n\nvisual_style:\n\nReal footage.\n\noverall_soundscape:\nC."
+    assert "visual_style:\n\nr34l1sm.\n\nReal footage." in with_lora_triggers(styled, ["r34l1sm"])
+    assert with_lora_triggers(out, ["r34l1sm"]) == out  # already there: unchanged
+    assert with_lora_triggers("девушка танцует", ["r34l1sm"]) == "девушка танцует\n\nr34l1sm."

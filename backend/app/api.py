@@ -1,5 +1,6 @@
 """REST + websocket API consumed by the frontend."""
 
+import json
 import os
 import subprocess
 import uuid
@@ -277,6 +278,26 @@ def upload_file(uid: str):
     with session() as s:
         up = s.get(Upload, uid) or _404()
     return FileResponse(up.path)
+
+
+@router.post("/uploads/{uid}/edit")
+async def edit_upload(uid: str, body: services.RefEdit):
+    """Crop / fragment of a reference as a derived upload (the original is kept)."""
+    return await services.edit_upload(uid, body)
+
+
+@router.get("/uploads/{uid}/peaks")
+async def upload_peaks(uid: str):
+    with session() as s:
+        up = s.get(Upload, uid) or _404()
+    cache = settings.THUMBS_DIR / f"peaks_{uid}.json"
+    if cache.exists():
+        return json.loads(cache.read_text(encoding="utf-8"))
+    out = {"peaks": await library.peaks(Path(up.path)), "duration": up.duration}
+    if out["peaks"]:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text(json.dumps(out), encoding="utf-8")
+    return out
 
 
 @router.get("/uploads/{uid}/thumb")

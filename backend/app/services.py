@@ -1,9 +1,13 @@
 """Domain operations shared by API routes: profiles, generations, uploads."""
 
+import asyncio
+import hashlib
+import json
 import uuid
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
+from pydantic import BaseModel
 
 from . import settings
 from .db.models import EngineProfileRow, Generation, MediaAsset, Project, StyleLora, Upload, select, session
@@ -69,6 +73,77 @@ async def save_upload(file: UploadFile) -> Upload:
         s.add(up)
         s.commit()
     return up
+
+
+class RefEdit(BaseModel):
+    """What to keep of a reference: an image/video region and/or an audio/video fragment."""
+    crop: dict[str, float] | None = None  # normalized {x, y, w, h}
+    start: float | None = None  # seconds
+    end: float | None = None
+
+
+MIN_CROP_PX = 64
+MIN_FRAGMENT_S = 0.5
+
+
+async def edit_upload(upload_id: str, edit: RefEdit) -> Upload:
+    """Derived upload with the edit applied to the ORIGINAL file; an empty edit returns the original.
+
+    The engine graph never changes: the edited file simply replaces the original in the loader node.
+    Same original + same edit -> same id, so re-applying is instant.
+    """
+    with session() as s:
+        up = s.get(Upload, upload_id)
+        if up is None:
+            raise HTTPException(404, "референс не найден")
+        src = s.get(Upload, up.source_id) if up.source_id else up
+    if src is None:
+        raise HTTPException(404, "оригинал референса не найден")
+
+    crop = edit.crop if src.kind in ("image", "video") else None
+    if crop and crop["x"] <= 0.001 and crop["y"] <= 0.001 and crop["w"] >= 0.999 and crop["h"] >= 0.999:
+        crop = None  # whole frame
+    start = end = None
+    if src.kind in ("audio", "video") and src.duration:
+        start = edit.start if edit.start and edit.start > 0.01 else None
+        end = edit.end if edit.end is not None and edit.end < src.duration - 0.01 else None
+    if crop is None and start is None and end is None:
+        return src
+
+    if crop and src.width and src.height:
+        if crop["w"] * src.width < MIN_CROP_PX or crop["h"] * src.height < MIN_CROP_PX:
+            raise HTTPException(422, f"Область слишком маленькая: нужно хотя бы {MIN_CROP_PX}×{MIN_CROP_PX} пикселей")
+    if (start is not None or end is not None) and (end if end is not None else src.duration) - (start or 0) < MIN_FRAGMENT_S:
+        raise HTTPException(422, "Фрагмент слишком короткий: нужно хотя бы полсекунды")
+
+    spec = {k: v for k, v in {"crop": crop and {k: round(v, 4) for k, v in crop.items()},
+                              "start": start and round(start, 3), "end": end and round(end, 3)}.items() if v is not None}
+    uid = "e_" + hashlib.sha1(f"{src.id}:{json.dumps(spec, sort_keys=True)}".encode()).hexdigest()[:14]
+    with session() as s:
+        if (existing := s.get(Upload, uid)) and Path(existing.path).exists():
+            return existing
+
+    src_path = Path(src.path)
+    try:
+        if src.kind == "image":
+            dest = await asyncio.to_thread(library.crop_image, src_path, settings.UPLOADS_DIR / f"{uid}.png", spec["crop"])
+        else:
+            ext = ".wav" if src.kind == "audio" else ".mp4"
+            dest = await library.edit_media(src_path, settings.UPLOADS_DIR / f"{uid}{ext}", src.kind,
+                                            crop=spec.get("crop"), start=spec.get("start"), end=spec.get("end"),
+                                            width=src.width, height=src.height)
+    except RuntimeError as e:
+        raise HTTPException(500, f"Не удалось обрезать референс: {e}")
+    meta = await library.probe(dest)
+    await library.thumbnail(dest, settings.THUMBS_DIR / f"up_{uid}.jpg", src.kind, at=0.0)
+    stem, suffix = Path(src.orig_name).stem, dest.suffix
+    derived = Upload(id=uid, kind=src.kind, orig_name=f"{stem} (обрезано){suffix}", path=str(dest),
+                     duration=meta.duration, width=meta.width, height=meta.height,
+                     has_audio=meta.has_audio, source_id=src.id, edit=spec)
+    with session() as s:
+        s.merge(derived)
+        s.commit()
+    return derived
 
 
 # ---------------------------------------------------------------- generations
