@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import {
-  AlertCircle, Camera, Copy, Dices, Maximize2, Pause, Pencil, Play, Repeat, ScanFace, SkipBack, SkipForward,
+  AlertCircle, Camera, Copy, Dices, Maximize2, Minimize2, Pause, Pencil, Play, Repeat, ScanFace, SkipBack, SkipForward,
   Sparkles, SplitSquareHorizontal, Square, Volume2, VolumeX, X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -273,12 +273,24 @@ export function Player({ asset, badge, overlay }: { asset: MediaAsset; badge?: s
     setMutedState(m);
   };
   const [loop, setLoop] = useState(true);
+  const [fullscreen, setFullscreen] = useState(false);
   const fps = asset.fps || 24;
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else box.current?.requestFullscreen?.();
+  };
 
   useEffect(() => {
     setTime(0);
     setPlaying(false);
   }, [asset.id]);
+
+  useEffect(() => {
+    const sync = () => setFullscreen(document.fullscreenElement === box.current);
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
+  }, []);
 
   useEffect(() => {
     const offs = [
@@ -302,7 +314,7 @@ export function Player({ asset, badge, overlay }: { asset: MediaAsset; badge?: s
           v.play();
         }
       }),
-      on("viewerFullscreen", () => box.current?.requestFullscreen?.()),
+      on("viewerFullscreen", toggleFullscreen),
     ];
     return () => offs.forEach((f) => f());
   }, [fps]);
@@ -371,7 +383,13 @@ export function Player({ asset, badge, overlay }: { asset: MediaAsset; badge?: s
           <IconButton label={muted ? "Включить звук" : "Выключить звук"} size="sm" onClick={() => setMuted(!muted)}>
             {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
           </IconButton>
-          <IconButton label="Во весь экран (F)" size="sm" onClick={() => box.current?.requestFullscreen?.()}><Maximize2 size={14} /></IconButton>
+          <IconButton
+            label={fullscreen ? "Свернуть (F / Esc)" : "Во весь экран (F)"}
+            size="sm"
+            onClick={toggleFullscreen}
+          >
+            {fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          </IconButton>
         </div>
       </div>
     </div>
