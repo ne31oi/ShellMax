@@ -164,6 +164,7 @@ export const api = {
     return request<MediaAsset>("POST", "/api/assets/import", fd);
   },
   reveal: (assetId: number) => post(`/api/assets/${assetId}/reveal`),
+  deleteAsset: (assetId: number) => del(`/api/assets/${assetId}`),
 };
 
 export const urls = {

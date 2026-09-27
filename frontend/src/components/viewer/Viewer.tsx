@@ -247,9 +247,14 @@ function ErrorView({ gen }: { gen: Generation }) {
             </>
           )}
           {gen.error_kind === "oom" && gen.kind === "enhance" && gen.source_asset_id && (
-            <Button size="sm" variant="primary" onClick={() => useUI.getState().openEnhanceDialog({ assetId: gen.source_asset_id! })}>
-              Открыть детализацию (уменьшите масштаб)
-            </Button>
+            <>
+              <Button size="sm" variant="primary" onClick={() => useUI.getState().openEnhanceDialog({ assetId: gen.source_asset_id! })}>
+                Уменьшить масштаб и повторить
+              </Button>
+              <Button size="sm" onClick={() => actions.fixes.enableLowVram().then(() => actions.retry(gen, true))}>
+                Включить экономию VRAM и повторить
+              </Button>
+            </>
           )}
           {gen.error_kind === "oom" && gen.kind === "face" && (
             <Button size="sm" onClick={() => actions.fixes.enableLowVram().then(() => actions.retry(gen, true))}>

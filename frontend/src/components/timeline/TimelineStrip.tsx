@@ -48,6 +48,11 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
       <div className="flex items-center gap-2 px-3 py-1.5">
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-faint">Таймлайн</h2>
         <span className="text-[11px] text-faint tabular-nums">{track.clips.length ? `${track.clips.length} клип. · ${fmtDuration(total)}` : ""}</span>
+        {track.clips.length > 0 && (
+          <span className="text-[11px] text-faint/80" title="Склейка и экспорт ролика появятся на этапе 3">
+            · клик открывает клип · склейки пока нет
+          </span>
+        )}
         <span className="ml-auto" />
         <IconButton label={past.length ? `Отменить: ${past.at(-1)!.label} (Ctrl+Z)` : "Нечего отменять"} size="sm" disabled={!past.length} onClick={undo}>
           <Undo2 size={13} />
@@ -73,8 +78,11 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
         onClick={() => setSelected(null)}
       >
         {track.clips.length === 0 ? (
-          <div className="flex h-full items-center justify-center gap-2 text-xs text-faint">
-            <Film size={14} /> Перетащите клип из медиатеки или дважды щёлкните по нему
+          <div className="flex h-full flex-col items-center justify-center gap-1 px-4 text-center text-xs text-faint">
+            <span className="flex items-center gap-2">
+              <Film size={14} /> Перетащите клип из медиатеки или дважды щёлкните по нему
+            </span>
+            <span className="text-[11px] text-faint/70">Пока это очередь клипов: воспроизводится выбранный файл, не склейка. Экспорт ролика — следующий этап.</span>
           </div>
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>

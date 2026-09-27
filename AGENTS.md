@@ -85,7 +85,7 @@ ShellMax — локальное веб-приложение (FastAPI + React), �
 | `backend/app/db/models.py` | SQLModel/SQLite: Project, EngineProfileRow, StyleLora, Upload, MediaAsset, Generation, KV |
 | `frontend/src/store/` | zustand: `library` (данные с сервера), `form` (панель генерации, sticky), `ui`, `timeline` (команды) |
 | `frontend/src/lib/` | `actions` (общие действия), `live` (WS), `refs` (токены промпта), `stages`, `hotkeys`, `bus` (события между панелями) |
-| `frontend/src/components/` | `generate/`, `face/` (диалог улучшения лица, редактор рамки), `library/`, `viewer/`, `timeline/`, `settings/`, `layout/`, `ui.tsx` (примитивы на Radix, в т.ч. `Select`) |
+| `frontend/src/components/` | `generate/`, `face/` (диалог улучшения лица, редактор рамки), `enhance/` (диалог SeedVR2), `library/`, `viewer/`, `timeline/`, `settings/`, `layout/`, `ui.tsx` (примитивы на Radix, в т.ч. `Select`) |
 
 ### Поток данных
 

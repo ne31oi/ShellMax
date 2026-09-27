@@ -81,10 +81,58 @@ export async function cancel(g: Generation) {
 }
 
 export async function remove(g: Generation) {
+  const gens = useLibrary.getState().generations;
+  const kids = descendantGens(g, gens);
+  if (kids.length) {
+    const n = kids.length;
+    const ok = window.confirm(
+      `Также удалятся ${n} ${n === 1 ? "связанное улучшение" : "связанных улучшений"} (лицо / детализация). Продолжить?`,
+    );
+    if (!ok) return;
+  }
   try {
     await api.deleteGeneration(g.id);
-    useLibrary.getState().removeGeneration(g.id);
-    if (useUI.getState().selectedGen === g.id) useUI.getState().selectGen(null);
+    const lib = useLibrary.getState();
+    lib.removeGeneration(g.id);
+    for (const k of kids) lib.removeGeneration(k.id);
+    const sel = useUI.getState().selectedGen;
+    if (sel === g.id || kids.some((k) => k.id === sel)) useUI.getState().selectGen(null);
+  } catch (e) {
+    handleError(e);
+  }
+}
+
+/** Face/enhance jobs that refine this generation's draft or output (transitively). */
+function descendantGens(root: Generation, gens: Record<number, Generation>): Generation[] {
+  const assetIds = new Set<number>();
+  if (root.draft_asset_id) assetIds.add(root.draft_asset_id);
+  if (root.output_asset_id) assetIds.add(root.output_asset_id);
+  const found: Generation[] = [];
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const g of Object.values(gens)) {
+      if (g.id === root.id || found.some((f) => f.id === g.id)) continue;
+      if (g.source_asset_id != null && assetIds.has(g.source_asset_id)) {
+        found.push(g);
+        if (g.draft_asset_id) assetIds.add(g.draft_asset_id);
+        if (g.output_asset_id) assetIds.add(g.output_asset_id);
+        changed = true;
+      }
+    }
+  }
+  return found;
+}
+
+export async function removeAsset(asset: MediaAsset) {
+  if (asset.source !== "imported") {
+    toast("Сгенерированные клипы удаляются вместе с задачей", "info");
+    return;
+  }
+  try {
+    await api.deleteAsset(asset.id);
+    useLibrary.getState().removeAsset(asset.id);
+    if (useUI.getState().selectedAsset === asset.id) useUI.getState().selectAsset(null);
   } catch (e) {
     handleError(e);
   }

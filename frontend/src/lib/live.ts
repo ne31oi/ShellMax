@@ -7,6 +7,7 @@ type LiveEvent =
   | { type: "generation"; generation: Generation }
   | { type: "generation_deleted"; id: number }
   | { type: "asset"; asset: MediaAsset }
+  | { type: "asset_deleted"; id: number }
   | { type: "preview"; generation_id: number; data: string }
   | { type: "engine"; engine: EngineState }
   | { type: "assistant_download" };
@@ -55,6 +56,9 @@ function handle(ev: LiveEvent) {
       break;
     case "asset":
       lib.upsertAsset(ev.asset);
+      break;
+    case "asset_deleted":
+      lib.removeAsset(ev.id);
       break;
     case "preview":
       lib.setPreview(ev.generation_id, ev.data);

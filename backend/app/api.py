@@ -519,16 +519,37 @@ async def delete_generation(gid: int, request: Request):
     if jobs.running and jobs.running.gen_id == gid:
         raise HTTPException(409, "Генерация ещё идёт — сначала остановите её")
     with session() as s:
-        g = s.get(Generation, gid) or _404()
-        for aid in (g.draft_asset_id, g.output_asset_id):
-            asset = s.get(MediaAsset, aid) if aid else None
-            if asset:
-                _remove_files(asset)
-                s.delete(asset)
-        s.delete(g)
+        root = s.get(Generation, gid) or _404()
+        # Cascade: face/enhance that refine this gen's draft/output (and their descendants).
+        to_delete: list[Generation] = [root]
+        asset_ids: set[int] = {aid for aid in (root.draft_asset_id, root.output_asset_id) if aid}
+        changed = True
+        while changed:
+            changed = False
+            for g in s.exec(select(Generation)).all():
+                if g.id in {x.id for x in to_delete}:
+                    continue
+                if g.source_asset_id and g.source_asset_id in asset_ids:
+                    if jobs.running and jobs.running.gen_id == g.id:
+                        raise HTTPException(409, "Связанная задача ещё идёт — сначала остановите её")
+                    to_delete.append(g)
+                    for aid in (g.draft_asset_id, g.output_asset_id):
+                        if aid:
+                            asset_ids.add(aid)
+                    changed = True
+        deleted_ids: list[int] = []
+        for g in to_delete:
+            for aid in (g.draft_asset_id, g.output_asset_id):
+                asset = s.get(MediaAsset, aid) if aid else None
+                if asset:
+                    _remove_files(asset)
+                    s.delete(asset)
+            deleted_ids.append(g.id)
+            s.delete(g)
         s.commit()
-    await hub.broadcast({"type": "generation_deleted", "id": gid})
-    return {"ok": True}
+    for did in deleted_ids:
+        await hub.broadcast({"type": "generation_deleted", "id": did})
+    return {"ok": True, "deleted_ids": deleted_ids}
 
 
 # ---------------------------------------------------------------- assets
@@ -537,6 +558,27 @@ def list_assets(project_id: int = 1):
     with session() as s:
         return s.exec(select(MediaAsset).where(MediaAsset.project_id == project_id)
                       .order_by(MediaAsset.id.desc())).all()
+
+
+@router.delete("/assets/{aid}")
+async def delete_asset(aid: int):
+    """Remove an imported library file. Generated/draft assets are deleted with their generation."""
+    with session() as s:
+        a = s.get(MediaAsset, aid) or _404()
+        if a.source != "imported":
+            raise HTTPException(400, "Удалять можно только импортированные файлы — сгенерированные удаляются вместе с задачей")
+        dependents = [g for g in s.exec(select(Generation)).all() if g.source_asset_id == aid]
+        if dependents:
+            raise HTTPException(
+                409,
+                f"Файл используется в {len(dependents)} "
+                f"{'задаче' if len(dependents) == 1 else 'задачах'} улучшения — сначала удалите их",
+            )
+        _remove_files(a)
+        s.delete(a)
+        s.commit()
+    await hub.broadcast({"type": "asset_deleted", "id": aid})
+    return {"ok": True}
 
 
 @router.get("/assets/{aid}/file")

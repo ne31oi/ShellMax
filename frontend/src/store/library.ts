@@ -18,6 +18,7 @@ interface LibraryState {
   upsertGeneration: (g: Generation) => void;
   removeGeneration: (id: number) => void;
   upsertAsset: (a: MediaAsset) => void;
+  removeAsset: (id: number) => void;
   setPreview: (genId: number, data: string) => void;
   setEngine: (e: EngineState) => void;
 }
@@ -66,9 +67,21 @@ export const useLibrary = create<LibraryState>((set, get) => ({
     set((s) => {
       const generations = { ...s.generations };
       delete generations[id];
-      return { generations };
+      const assets = { ...s.assets };
+      for (const [aid, a] of Object.entries(assets)) {
+        if (a.generation_id === id) delete assets[Number(aid)];
+      }
+      const previews = { ...s.previews };
+      delete previews[id];
+      return { generations, assets, previews };
     }),
   upsertAsset: (a) => set((s) => ({ assets: { ...s.assets, [a.id]: a } })),
+  removeAsset: (id) =>
+    set((s) => {
+      const assets = { ...s.assets };
+      delete assets[id];
+      return { assets };
+    }),
   setPreview: (genId, data) => {
     if (get().generations[genId]?.status === "running") set((s) => ({ previews: { ...s.previews, [genId]: data } }));
   },

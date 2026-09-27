@@ -275,7 +275,7 @@ function GenerationCard({ gen }: { gen: Generation }) {
 
 function AssetCard({ asset }: { asset: MediaAsset }) {
   const selected = useUI((s) => s.selectedAsset === asset.id);
-  return (
+  const card = (
     <div
       role="button"
       tabIndex={0}
@@ -290,6 +290,22 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
       </Thumb>
       <p className="truncate px-1 pt-1 text-xs">{asset.name}</p>
     </div>
+  );
+  return (
+    <ContextMenu.Root>
+      <ContextMenu.Trigger asChild>{card}</ContextMenu.Trigger>
+      <ContextMenu.Portal>
+        <ContextMenu.Content className="z-40 min-w-56 rounded-xl border border-line bg-panel p-1 shadow-2xl">
+          <CtxItem icon={<Film size={13} />} onSelect={() => actions.addToTimeline(asset)} disabled={asset.kind !== "video"}>В таймлайн</CtxItem>
+          <CtxItem icon={<ImagePlus size={13} />} onSelect={() => actions.assetAsRef(asset)}>Использовать как референс</CtxItem>
+          <CtxItem icon={<ScanFace size={13} />} onSelect={() => useUI.getState().openFaceDialog({ assetId: asset.id })} disabled={asset.kind !== "video"}>Улучшить лицо…</CtxItem>
+          <CtxItem icon={<Sparkles size={13} />} onSelect={() => useUI.getState().openEnhanceDialog({ assetId: asset.id })} disabled={asset.kind !== "video"}>Детализация (SeedVR2)…</CtxItem>
+          <CtxItem icon={<FolderOpen size={13} />} onSelect={() => actions.reveal(asset)}>Показать в папке</CtxItem>
+          <ContextMenu.Separator className="my-1 h-px bg-line" />
+          <CtxItem icon={<Trash2 size={13} />} danger onSelect={() => actions.removeAsset(asset)}>Удалить</CtxItem>
+        </ContextMenu.Content>
+      </ContextMenu.Portal>
+    </ContextMenu.Root>
   );
 }
 
