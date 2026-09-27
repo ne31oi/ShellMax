@@ -441,7 +441,9 @@ function CompareView({ a, b, labelA, labelB, onClose, closeLabel = "Закрыт
   const va = useRef<HTMLVideoElement>(null);
   const vb = useRef<HTMLVideoElement>(null);
   const [split, setSplit] = useState(0.5);
+  const [playing, setPlaying] = useState(true);
   const box = useRef<HTMLDivElement>(null);
+  const scrubbing = useRef(false);
 
   useEffect(() => {
     // keep B locked to A's clock
@@ -453,6 +455,32 @@ function CompareView({ a, b, labelA, labelB, onClose, closeLabel = "Закрыт
     return () => clearInterval(t);
   }, []);
 
+  useEffect(() => {
+    return on("viewerToggle", () => {
+      const v = va.current;
+      if (!v) return;
+      if (v.paused) {
+        void v.play();
+        void vb.current?.play();
+      } else {
+        v.pause();
+        vb.current?.pause();
+      }
+    });
+  }, []);
+
+  const togglePlay = () => {
+    const v = va.current;
+    if (!v) return;
+    if (v.paused) {
+      void v.play();
+      void vb.current?.play();
+    } else {
+      v.pause();
+      vb.current?.pause();
+    }
+  };
+
   return (
     <div className="flex h-full flex-col">
       <div
@@ -460,24 +488,65 @@ function CompareView({ a, b, labelA, labelB, onClose, closeLabel = "Закрыт
         className="relative m-3 flex-1 cursor-ew-resize overflow-hidden rounded-md bg-black"
         onMouseMove={(e) => {
           if (e.buttons !== 1) return;
+          scrubbing.current = true;
           const r = box.current!.getBoundingClientRect();
           setSplit(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)));
         }}
         onMouseDown={(e) => {
+          scrubbing.current = false;
           const r = box.current!.getBoundingClientRect();
           setSplit(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)));
         }}
+        onClick={() => {
+          // Don't toggle play when the user was dragging the wipe.
+          if (scrubbing.current) {
+            scrubbing.current = false;
+            return;
+          }
+          togglePlay();
+        }}
       >
-        <video ref={va} src={urls.assetFile(a.id)} autoPlay loop muted className="absolute inset-0 h-full w-full object-contain"
-          onPlay={() => vb.current?.play()} onPause={() => vb.current?.pause()} />
-        <video ref={vb} src={urls.assetFile(b.id)} autoPlay loop muted className="absolute inset-0 h-full w-full object-contain"
-          style={{ clipPath: `inset(0 0 0 ${split * 100}%)` }} />
+        <video
+          ref={va}
+          src={urls.assetFile(a.id)}
+          autoPlay
+          loop
+          muted
+          className="absolute inset-0 h-full w-full object-contain"
+          onPlay={() => {
+            setPlaying(true);
+            void vb.current?.play();
+          }}
+          onPause={() => {
+            setPlaying(false);
+            vb.current?.pause();
+          }}
+        />
+        <video
+          ref={vb}
+          src={urls.assetFile(b.id)}
+          autoPlay
+          loop
+          muted
+          className="pointer-events-none absolute inset-0 h-full w-full object-contain"
+          style={{ clipPath: `inset(0 0 0 ${split * 100}%)` }}
+        />
         <div className="pointer-events-none absolute inset-y-0 w-0.5 bg-white/80" style={{ left: `${split * 100}%` }} />
-        <span className="absolute left-3 top-3 rounded bg-black/70 px-1.5 text-xs">{labelA}</span>
-        <span className="absolute right-3 top-3 rounded bg-black/70 px-1.5 text-xs">{labelB}</span>
+        <span className="pointer-events-none absolute left-3 top-3 rounded bg-black/70 px-1.5 text-xs">{labelA}</span>
+        <span className="pointer-events-none absolute right-3 top-3 rounded bg-black/70 px-1.5 text-xs">{labelB}</span>
+        {!playing && (
+          <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <span className="rounded-full bg-black/55 p-3 text-white">
+              <Play size={28} fill="currentColor" />
+            </span>
+          </span>
+        )}
       </div>
       <div className="flex items-center justify-center gap-2 pb-2 text-xs text-muted">
-        Тяните по кадру, чтобы сдвинуть шторку
+        <IconButton label={playing ? "Пауза (Пробел)" : "Пуск (Пробел)"} onClick={togglePlay}>
+          {playing ? <Pause size={16} /> : <Play size={16} />}
+        </IconButton>
+        <span>Тяните по кадру — шторка · клик / Пробел — пуск и пауза</span>
         <Button size="sm" variant="ghost" onClick={onClose ?? (() => useUI.getState().compare(null))}>
           <X size={12} /> {closeLabel}
         </Button>
