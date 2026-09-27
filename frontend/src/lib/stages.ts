@@ -27,6 +27,14 @@ export const STAGES_BY_KIND: Record<JobKind, StageDef[]> = {
     { id: "stitch", label: "Вклейка лица в кадр", short: "Вклейка" },
     { id: "save", label: "Сохранение видео", short: "Сохранение" },
   ],
+  enhance: [
+    { id: "load", label: "Загрузка моделей", short: "Загрузка" },
+    { id: "resize", label: "Увеличение кадра", short: "Масштаб" },
+    { id: "encode", label: "Кодирование", short: "Код" },
+    { id: "sample", label: "SeedVR2 — детализация", short: "SeedVR2" },
+    { id: "decode", label: "Сборка кадров", short: "Декод" },
+    { id: "save", label: "Сохранение видео", short: "Сохранение" },
+  ],
 };
 
 /** Backwards-compatible default list (generation). */

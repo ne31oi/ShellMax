@@ -15,6 +15,8 @@ from ..db.models import Generation, select, session
 DEFAULT_SEC_PER_UNIT = {
     "generate": 180 / (1440 * 832 * 53),
     "face": 150 / (768 * 768 * 56),
+    # SeedVR2 1-step restore ≈ 2–4 min for a short 720p×2 clip on 16 GB
+    "enhance": 180 / (1280 * 720 * 48 * 4),
 }
 FIXED_OVERHEAD_S = 20.0  # prompt encoding, decode, muxing - roughly size independent
 EXACT_SAMPLES = 10

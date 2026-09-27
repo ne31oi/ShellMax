@@ -224,6 +224,46 @@ class FaceFullParams(BaseModel):
     filename_prefix: str = "ShellMax/face"
 
 
+class EnhanceRecipe(BaseModel):
+    """ShellMax SeedVR2 enhance (flattened ComfyUI SeedVR2 3B Int8 blueprint)."""
+
+    unet: str = ""
+    vae: str = ""
+    scale: float = 2.0
+    steps: int = 1
+    cfg: float = 1.0
+    sampler: str = "euler"
+    scheduler: str = "simple"
+    denoise: float = 1.0
+    color_correction: Literal["lab", "wavelet", "adain", "none"] = "lab"
+    tile_size: int = 512
+    overlap: int = 128
+    temporal_size: int = 64
+    temporal_overlap: int = 8  # VAE tiled
+    chunk_overlap: int = 0  # unused: graph does not temporal-chunk (blueprint default)
+    crf: int = 17
+
+
+class EnhanceUIParams(BaseModel):
+    """Post-enhance decisions: which clip, scale, optional color match."""
+
+    source_asset_id: int
+    scale: float | None = None  # None -> recipe (2.0)
+    color_correction: Literal["lab", "wavelet", "adain", "none"] | None = None
+    seed: int | None = None
+
+
+class EnhanceFullParams(BaseModel):
+    schema_version: int = SCHEMA_VERSION
+    source_path: str
+    frame_load_cap: int = 0
+    force_rate: float = 0
+    frame_rate: float = FPS  # output fps (match source when known)
+    seed: int
+    recipe: EnhanceRecipe
+    filename_prefix: str = "ShellMax/enhance"
+
+
 # ------------------------------------------------------------------ derived values
 
 

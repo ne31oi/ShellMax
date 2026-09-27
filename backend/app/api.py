@@ -18,9 +18,9 @@ from .hub import hub
 from .jobs.estimator import estimate as estimate_time
 from .jobs.queue import push_generation, register_asset
 from .media import library
-from .workflow import face, presets, quality as quality_cfg
+from .workflow import enhance, face, presets, quality as quality_cfg
 from .workflow.look import look_presets
-from .workflow.params import ASPECT_RATIOS, FPS, MAX_REFS, EngineProfile, FaceUIParams, UIParams, frame_count
+from .workflow.params import ASPECT_RATIOS, FPS, MAX_REFS, EnhanceUIParams, EngineProfile, FaceUIParams, UIParams, frame_count
 
 router = APIRouter(prefix="/api")
 
@@ -53,6 +53,8 @@ def meta():
         "max_refs": MAX_REFS,
         "defaults": {**d["ui"], "look": "cinema"},
         "face_strength": face.strength_presets(),
+        "enhance_scale": enhance.scale_presets(),
+        "enhance_color": enhance.color_presets(),
     }
 
 
@@ -430,6 +432,13 @@ async def retry_generation(gid: int, body: RetryIn, request: Request):
             seed = g.seed if body.same_seed and i == 0 else presets.new_seed()
             created.append(await create_face(FaceUIParams(**{**g.ui_params, "seed": seed}), request, g.project_id))
         return created
+    if g.kind == "enhance":
+        created = []
+        for i in range(body.variants):
+            seed = g.seed if body.same_seed and i == 0 else presets.new_seed()
+            created.append(await create_enhance_job(
+                EnhanceUIParams(**{**g.ui_params, "seed": seed}), request, g.project_id))
+        return created
     ui = UIParams(**{**g.ui_params, "seed": g.seed if body.same_seed else None, "variants": body.variants})
     return await create_generation(ui, request, g.project_id)
 
@@ -465,6 +474,30 @@ def face_detect(body: FaceDetectIn):
 @router.post("/face")
 async def create_face(ui: FaceUIParams, request: Request, project_id: int = 1):
     g = services.create_face_refine(ui, project_id)
+    await push_generation(g)
+    _state(request).jobs.enqueue(g.id)
+    return g
+
+
+# ---------------------------------------------------------------- enhance (SeedVR2 upscale / restore)
+@router.get("/enhance/defaults")
+def enhance_defaults(asset_id: int):
+    return services.enhance_defaults(asset_id)
+
+
+@router.get("/enhance/estimate")
+def enhance_estimate(asset_id: int, scale: float = 2.0):
+    with session() as s:
+        asset = s.get(MediaAsset, asset_id) or _404()
+    frames = max(1, round((asset.duration or 1) * (asset.fps or 24)))
+    recipe = enhance.default_recipe().model_copy(update={"scale": scale})
+    units = enhance.enhance_work_units(recipe, frames, int(asset.width or 1280), int(asset.height or 720))
+    return estimate_time(units, "enhance")
+
+
+@router.post("/enhance")
+async def create_enhance_job(ui: EnhanceUIParams, request: Request, project_id: int = 1):
+    g = services.create_enhance(ui, project_id)
     await push_generation(g)
     _state(request).jobs.enqueue(g.id)
     return g

@@ -80,7 +80,7 @@ class MediaAsset(SQLModel, table=True):
 class Generation(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     project_id: int = Field(index=True)
-    kind: str = "generate"  # generate | face (MiniMax_H3_FaceRefine_Best on an existing clip)
+    kind: str = "generate"  # generate | face | enhance (SeedVR2 on an existing clip)
     source_asset_id: int | None = None  # face: the clip being refined
     # queued | running | done | draft_only | error | cancelled
     status: str = "queued"

@@ -61,7 +61,11 @@ $RequiredClasses = @(
     'ShellMaxLoraLoaderByPath', 'ShellMaxLoraModelOnlyByPath', 'ShellMaxLatentUpscalerByPath',
     # face refine
     'VHS_LoadVideoPath', 'H3FaceTrackCrop', 'H3InjectVideoLatent', 'H3PerFrameDenoise', 'H3FaceStitch',
-    'MiniMaxH3NativeAudioLock', 'LoadImageCrop', 'PreviewAny'
+    'MiniMaxH3NativeAudioLock', 'LoadImageCrop', 'PreviewAny',
+    # SeedVR2 enhance
+    'SeedVR2Preprocess', 'SeedVR2PostProcessing', 'SeedVR2Conditioning',
+    'SeedVR2TemporalChunk', 'SeedVR2TemporalMerge', 'ImageScaleBy',
+    'VAEEncodeTiled', 'VAEDecodeTiled', 'KSampler'
 )
 
 # ---------------------------------------------------------------- paths
@@ -216,6 +220,35 @@ if ((Test-Path $insightSrc) -and -not (Test-Path (Join-Path $insightDst 'w600k_r
     Ok 'insightface buffalo_l уже на месте'
 } else {
     Write-Host '    insightface buffalo_l скачается при первом улучшении лица' -ForegroundColor Yellow
+}
+
+# SeedVR2 models for enhance (shared models folder; no copy of weights into the engine)
+Step '6b/7 модели SeedVR2 (детализация)'
+$seedVrDir = Join-Path $Config.legacy_models_dir 'diffusion_models'
+$seedVaeDir = Join-Path $Config.legacy_models_dir 'vae'
+$seed3b = Join-Path $seedVrDir 'seedvr2_3b_int8_convrot.safetensors'
+$seed7b = Join-Path $seedVrDir 'seedvr2_7b_int8_convrot.safetensors'
+$seedVae = Join-Path $seedVaeDir 'seedvr2_ema_vae_fp16.safetensors'
+$emaVae = Join-Path $seedVaeDir 'ema_vae_fp16.safetensors'
+New-Item -ItemType Directory -Force -Path $seedVrDir, $seedVaeDir | Out-Null
+if (-not (Test-Path $seedVae)) {
+    if (Test-Path $emaVae) {
+        Copy-Item $emaVae $seedVae
+        Ok 'vae/seedvr2_ema_vae_fp16.safetensors (копия ema_vae_fp16)'
+    } else {
+        Write-Host '    скачиваю seedvr2_ema_vae_fp16…' -ForegroundColor Yellow
+        Invoke-WebRequest -Uri 'https://huggingface.co/Comfy-Org/SeedVR2/resolve/main/vae/seedvr2_ema_vae_fp16.safetensors' -OutFile $seedVae -UseBasicParsing
+        Ok 'vae/seedvr2_ema_vae_fp16.safetensors'
+    }
+} else { Ok 'vae/seedvr2_ema_vae_fp16.safetensors уже на месте' }
+if (-not (Test-Path $seed3b) -and -not (Test-Path $seed7b)) {
+    Write-Host '    скачиваю seedvr2_3b_int8_convrot (для 16 ГБ VRAM)…' -ForegroundColor Yellow
+    Invoke-WebRequest -Uri 'https://huggingface.co/Comfy-Org/SeedVR2/resolve/main/diffusion_models/seedvr2_3b_int8_convrot.safetensors' -OutFile $seed3b -UseBasicParsing
+    Ok 'diffusion_models/seedvr2_3b_int8_convrot.safetensors'
+} elseif (Test-Path $seed3b) {
+    Ok 'seedvr2_3b_int8 уже на месте'
+} else {
+    Ok 'seedvr2_7b_int8 будет использован как fallback (3B предпочтительнее на 16 ГБ)'
 }
 
 # ---------------------------------------------------------------- 7. verify

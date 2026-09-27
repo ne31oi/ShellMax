@@ -37,7 +37,7 @@ function Body({ item, onDone }: { item: RefItem; onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const media = useRef<HTMLVideoElement & HTMLAudioElement>(null);
-  const formAspect = useForm((s) => s.aspect.split(" ")[0]); // "16:9"
+  const formAspect = useForm((s) => (s.aspect || "16:9 (Widescreen)").split(" ")[0]); // "16:9"
 
   useEffect(() => {
     if (cur.source_id) api.uploadInfo(cur.source_id).then(setSrc).catch(() => setError("Оригинал референса не найден"));

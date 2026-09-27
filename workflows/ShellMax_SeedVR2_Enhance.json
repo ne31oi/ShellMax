@@ -1,0 +1,112 @@
+{
+  "_comment": "Golden API graph for ShellMax SeedVR2 enhance. Direct path (no temporal chunk) like ComfyUI blueprint default.",
+  "1": {
+    "class_type": "VHS_LoadVideoPath",
+    "inputs": {
+      "video": "__SOURCE__",
+      "force_rate": 0,
+      "custom_width": 0,
+      "custom_height": 0,
+      "frame_load_cap": 0,
+      "skip_first_frames": 0,
+      "select_every_nth": 1,
+      "format": "None"
+    }
+  },
+  "2": {
+    "class_type": "ImageScaleBy",
+    "inputs": {
+      "image": ["1", 0],
+      "upscale_method": "lanczos",
+      "scale_by": 2.0
+    }
+  },
+  "3": {
+    "class_type": "SeedVR2Preprocess",
+    "inputs": {
+      "resized_images": ["2", 0]
+    }
+  },
+  "4": {
+    "class_type": "ShellMaxVAELoaderByPath",
+    "inputs": {
+      "vae_path": "__VAE__"
+    }
+  },
+  "5": {
+    "class_type": "ShellMaxUNETLoaderByPath",
+    "inputs": {
+      "unet_path": "__UNET__",
+      "weight_dtype": "default"
+    }
+  },
+  "6": {
+    "class_type": "VAEEncodeTiled",
+    "inputs": {
+      "pixels": ["3", 0],
+      "vae": ["4", 0],
+      "tile_size": 512,
+      "overlap": 128,
+      "temporal_size": 64,
+      "temporal_overlap": 8
+    }
+  },
+  "8": {
+    "class_type": "SeedVR2Conditioning",
+    "inputs": {
+      "model": ["5", 0],
+      "vae_conditioning": ["6", 0]
+    }
+  },
+  "9": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["5", 0],
+      "seed": 42,
+      "steps": 1,
+      "cfg": 1.0,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1.0,
+      "positive": ["8", 0],
+      "negative": ["8", 1],
+      "latent_image": ["6", 0]
+    }
+  },
+  "11": {
+    "class_type": "VAEDecodeTiled",
+    "inputs": {
+      "samples": ["9", 0],
+      "vae": ["4", 0],
+      "tile_size": 512,
+      "overlap": 128,
+      "temporal_size": 64,
+      "temporal_overlap": 8
+    }
+  },
+  "12": {
+    "class_type": "SeedVR2PostProcessing",
+    "inputs": {
+      "images": ["11", 0],
+      "original_resized_images": ["2", 0],
+      "color_correction_method": "lab"
+    }
+  },
+  "13": {
+    "class_type": "VHS_VideoCombine",
+    "inputs": {
+      "images": ["12", 0],
+      "audio": ["1", 2],
+      "filename_prefix": "ShellMax/enhance",
+      "frame_rate": 24.0,
+      "loop_count": 0,
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 17,
+      "save_metadata": true,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true
+    }
+  }
+}

@@ -13,8 +13,8 @@ from . import settings
 from .db.models import EngineProfileRow, Generation, MediaAsset, Project, StyleLora, Upload, select, session
 from .jobs.estimator import estimate_seconds
 from .media import library
-from .workflow import face, presets
-from .workflow.params import EngineProfile, FaceUIParams, LoraSpec, ResolvedRef, UIParams
+from .workflow import enhance, face, presets
+from .workflow.params import EnhanceUIParams, EngineProfile, FaceUIParams, LoraSpec, ResolvedRef, UIParams
 
 
 # ---------------------------------------------------------------- bootstrap
@@ -260,6 +260,65 @@ def create_face_refine(ui: FaceUIParams, project_id: int) -> Generation:
         s.commit()
         s.refresh(g)
         g.full_params = {**g.full_params, "filename_prefix": f"ShellMax/face{g.id:05d}"}
+        s.add(g)
+        s.commit()
+    return g
+
+
+def enhance_defaults(asset_id: int) -> dict:
+    with session() as s:
+        asset = s.get(MediaAsset, asset_id)
+    if asset is None or asset.kind != "video":
+        raise HTTPException(404, "клип не найден")
+    frames = max(1, round((asset.duration or 0) * (asset.fps or 24)))
+    recipe = enhance.default_recipe()
+    return {
+        "asset": asset,
+        "scale": recipe.scale,
+        "color_correction": recipe.color_correction,
+        "frames": frames,
+        "scale_presets": enhance.scale_presets(),
+        "color_presets": enhance.color_presets(),
+        "unet": recipe.unet,
+        "vae": recipe.vae,
+    }
+
+
+def create_enhance(ui: EnhanceUIParams, project_id: int) -> Generation:
+    with session() as s:
+        asset = s.get(MediaAsset, ui.source_asset_id)
+    if asset is None or asset.kind != "video":
+        raise HTTPException(404, "клип не найден")
+    recipe = enhance.default_recipe()
+    from .fs.browse import check
+    missing = [p for p in (recipe.unet, recipe.vae) if not check(p)["exists"]]
+    if missing:
+        raise HTTPException(422, {
+            "kind": "missing_file",
+            "problems": [{"field": "enhance", "path": p} for p in missing],
+            "message": "Не найдены модели SeedVR2 — скачайте seedvr2_* и seedvr2_ema_vae "
+                       "(или ema_vae_fp16) в папку моделей, затем перезапустите установщик",
+        })
+    force_rate = 0.0
+    frame_rate = float(asset.fps or 24)
+    # Resample non-24 clips to 24 so SeedVR's 4n+1 padding stays predictable; keep output at 24.
+    if asset.fps and abs(asset.fps - 24) > 0.05:
+        force_rate = 24.0
+        frame_rate = 24.0
+    frames = max(1, round((asset.duration or 1) * frame_rate))
+    seed = ui.seed if ui.seed is not None else enhance.WORKFLOW_SEED
+    full = enhance.expand_enhance(ui, asset.path, force_rate, frame_rate, seed, "ShellMax/enhance")
+    units = enhance.enhance_work_units(
+        full.recipe, frames, int(asset.width or 1280), int(asset.height or 720))
+    g = Generation(project_id=project_id, kind="enhance", source_asset_id=asset.id,
+                   ui_params=ui.model_dump(), full_params=full.model_dump(), seed=seed,
+                   profile_name="SeedVR2", work_units=units,
+                   estimate_s=estimate_seconds(units, "enhance"))
+    with session() as s:
+        s.add(g)
+        s.commit()
+        s.refresh(g)
+        g.full_params = {**g.full_params, "filename_prefix": f"ShellMax/enhance{g.id:05d}"}
         s.add(g)
         s.commit()
     return g

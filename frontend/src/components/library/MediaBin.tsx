@@ -2,7 +2,7 @@ import * as ContextMenu from "@radix-ui/react-context-menu";
 import clsx from "clsx";
 import {
   AlertCircle, Clapperboard, Copy, Dices, Film, FolderOpen, ImagePlus, Pencil, ScanFace, Shuffle,
-  SplitSquareHorizontal, Square, Trash2, Upload as UploadIcon,
+  Sparkles, SplitSquareHorizontal, Square, Trash2, Upload as UploadIcon,
 } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { api, urls } from "../../api/client";
@@ -10,7 +10,7 @@ import type { Generation, MediaAsset } from "../../api/types";
 import * as actions from "../../lib/actions";
 import { fmtDuration, fmtEstimate } from "../../lib/format";
 import { promptTitle } from "../../lib/refs";
-import { stageInfo, stepProgress } from "../../lib/stages";
+import { stageInfo, stepProgress, timeBreakdown } from "../../lib/stages";
 import { sortedGenerations, useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
 import { ASSET_DRAG_TYPE } from "../generate/RefsZone";
@@ -155,7 +155,13 @@ function GenerationCard({ gen }: { gen: Generation }) {
   const preview = useLibrary((s) => s.previews[gen.id]);
   const selected = useUI((s) => s.selectedGen === gen.id);
   const asset = actions.outputAsset(gen, assets);
-  const title = asset?.name ?? (promptTitle(gen.ui_params.prompt) || `Генерация ${gen.id}`);
+  const title =
+    asset?.name ??
+    (gen.kind === "face"
+      ? "Улучшение лица"
+      : gen.kind === "enhance"
+        ? "Детализация"
+        : promptTitle(gen.ui_params.prompt) || `Генерация ${gen.id}`);
   const active = gen.status === "running" || gen.status === "queued";
 
   const card = (
@@ -191,6 +197,11 @@ function GenerationCard({ gen }: { gen: Generation }) {
             <ScanFace size={10} /> лицо
           </span>
         )}
+        {gen.kind === "enhance" && gen.status !== "running" && (
+          <span className="absolute left-1 top-1 flex items-center gap-0.5 rounded bg-accent px-1 text-[10px] font-semibold text-accent-fg">
+            <Sparkles size={10} /> деталь
+          </span>
+        )}
         {gen.status === "draft_only" && (
           <span className="absolute left-1 top-1 rounded bg-warn px-1 text-[10px] font-semibold text-black">черновик</span>
         )}
@@ -205,9 +216,15 @@ function GenerationCard({ gen }: { gen: Generation }) {
       </Thumb>
       <div className="px-1 pb-0.5 pt-1">
         <p className="truncate text-xs text-fg">{title}</p>
-        <p className="text-[10px] text-faint tabular-nums">
+        <p
+          className="text-[10px] text-faint tabular-nums"
+          title={gen.elapsed_s != null ? timeBreakdown(gen) || `затрачено ${fmtDuration(gen.elapsed_s)}` : undefined}
+        >
           #{gen.id}
           {gen.status === "running" && gen.estimate_s ? ` · ${fmtEstimate(gen.estimate_s)}` : ""}
+          {gen.elapsed_s != null && (gen.status === "done" || gen.status === "draft_only" || gen.status === "error")
+            ? ` · ${fmtDuration(gen.elapsed_s)}`
+            : ""}
           {gen.status === "cancelled" ? " · отменено" : ""}
         </p>
       </div>
@@ -221,7 +238,7 @@ function GenerationCard({ gen }: { gen: Generation }) {
         <ContextMenu.Content className="z-40 min-w-56 rounded-xl border border-line bg-panel p-1 shadow-2xl">
           {active && <CtxItem icon={<Square size={13} />} onSelect={() => actions.cancel(gen)}>{gen.draft_asset_id ? "Остановить, оставить черновик" : "Отменить"}</CtxItem>}
           <CtxItem icon={<Dices size={13} />} onSelect={() => actions.retry(gen, false)}>Повторить с новым сидом</CtxItem>
-          {gen.kind !== "face" && (
+          {gen.kind !== "face" && gen.kind !== "enhance" && (
             <>
               <CtxItem icon={<Copy size={13} />} onSelect={() => actions.retry(gen, true)}>Повторить точно (тот же сид)</CtxItem>
               <CtxItem icon={<Shuffle size={13} />} onSelect={() => actions.retry(gen, false, 4)}>Вариации ×4</CtxItem>
@@ -232,6 +249,7 @@ function GenerationCard({ gen }: { gen: Generation }) {
             <>
               <ContextMenu.Separator className="my-1 h-px bg-line" />
               <CtxItem icon={<ScanFace size={13} />} onSelect={() => useUI.getState().openFaceDialog({ assetId: asset.id })} disabled={gen.status !== "done"}>Улучшить лицо…</CtxItem>
+              <CtxItem icon={<Sparkles size={13} />} onSelect={() => useUI.getState().openEnhanceDialog({ assetId: asset.id })} disabled={gen.status !== "done"}>Детализация (SeedVR2)…</CtxItem>
               <CtxItem icon={<Film size={13} />} onSelect={() => actions.addToTimeline(asset)} disabled={gen.status !== "done"}>В таймлайн</CtxItem>
               <CtxItem icon={<ImagePlus size={13} />} onSelect={() => actions.assetAsRef(asset)}>Использовать как видео-референс</CtxItem>
               <CtxItem icon={<SplitSquareHorizontal size={13} />} onSelect={() => {

@@ -76,5 +76,71 @@
       "denoise": 0.42,
       "hint": "Если изменений почти не видно"
     }
+  ],
+  "enhance": {
+    "_comment": "SeedVR2 native (ComfyUI blueprint Upscale Video 3B Int8). Paths relative to legacy_models_dir.",
+    "unet": "diffusion_models/seedvr2_3b_int8_convrot.safetensors",
+    "unet_fallbacks": [
+      "diffusion_models/seedvr2_7b_int8_convrot.safetensors"
+    ],
+    "vae": "vae/seedvr2_ema_vae_fp16.safetensors",
+    "vae_fallbacks": [
+      "vae/ema_vae_fp16.safetensors"
+    ],
+    "scale": 2.0,
+    "steps": 1,
+    "cfg": 1.0,
+    "sampler": "euler",
+    "scheduler": "simple",
+    "denoise": 1.0,
+    "color_correction": "lab",
+    "tile_size": 512,
+    "overlap": 128,
+    "temporal_size": 64,
+    "temporal_overlap": 8,
+    "chunk_overlap": 0,
+    "crf": 17
+  },
+  "enhance_scale_presets": [
+    {
+      "id": "soft",
+      "label": "×1.5",
+      "scale": 1.5,
+      "hint": "Мягче к VRAM; меньше риска «перерисовать» картинку"
+    },
+    {
+      "id": "standard",
+      "label": "×2",
+      "scale": 2.0,
+      "hint": "Как в воркфлоу SeedVR2"
+    },
+    {
+      "id": "strong",
+      "label": "×3",
+      "scale": 3.0,
+      "hint": "Дольше и тяжелее; на уже резком клипе может добавить артефакты"
+    }
+  ],
+  "enhance_color_presets": [
+    {
+      "id": "lab",
+      "label": "Цвет LAB",
+      "hint": "Рекомендуется — сохранить цвет оригинала"
+    },
+    {
+      "id": "wavelet",
+      "label": "Wavelet",
+      "hint": "Цвет + сохранить детали апскейла"
+    },
+    {
+      "id": "adain",
+      "label": "AdaIN",
+      "hint": "Быстрый глобальный оттенок"
+    },
+    {
+      "id": "none",
+      "label": "Без коррекции",
+      "hint": "Цвет может уйти от оригинала"
+    }
   ]
 }

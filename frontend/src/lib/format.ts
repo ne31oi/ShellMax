@@ -52,7 +52,8 @@ export function frameCount(duration: number, fps = 24): number {
   return n + ((((5 - (n % 17)) % 17) + 17) % 17);
 }
 
-export function fileName(path: string): string {
+export function fileName(path: string | null | undefined): string {
+  if (!path) return "";
   return path.split(/[\\/]/).pop() || path;
 }
 

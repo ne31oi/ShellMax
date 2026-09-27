@@ -9,6 +9,8 @@ import type {
   AssistantStatus,
   CropBox,
   EngineProfile,
+  EnhanceDefaults,
+  EnhanceUIParams,
   FaceDefaults,
   FaceUIParams,
   EngineState,
@@ -79,7 +81,6 @@ export const api = {
   meta: () => get<Meta>("/api/meta"),
   estimate: (aspect: string, quality: string, duration: number) =>
     get<Estimate>("/api/estimate" + q({ aspect, quality, duration })),
-  faceEstimate: (assetId: number) => get<Estimate>("/api/face/estimate" + q({ asset_id: assetId })),
 
   uiState: () => get<Record<string, unknown>>("/api/state/ui"),
   saveUiState: (value: Record<string, unknown>) => put("/api/state/ui", value),
@@ -139,6 +140,12 @@ export const api = {
   faceDefaults: (assetId: number) => get<FaceDefaults>("/api/face/defaults" + q({ asset_id: assetId })),
   faceDetect: (uploadId: string) => post<{ found: boolean; crop: CropBox }>("/api/face/detect", { upload_id: uploadId }),
   faceRefine: (params: FaceUIParams) => post<Generation>("/api/face", params),
+  faceEstimate: (assetId: number) => get<Estimate>("/api/face/estimate" + q({ asset_id: assetId })),
+
+  enhanceDefaults: (assetId: number) => get<EnhanceDefaults>("/api/enhance/defaults" + q({ asset_id: assetId })),
+  enhanceEstimate: (assetId: number, scale: number) =>
+    get<Estimate>("/api/enhance/estimate" + q({ asset_id: assetId, scale })),
+  enhance: (params: EnhanceUIParams) => post<Generation>("/api/enhance", params),
 
   assistantStatus: () => get<AssistantStatus>("/api/assistant/status"),
   assistantModels: () => get<AssistantModel[]>("/api/assistant/models"),

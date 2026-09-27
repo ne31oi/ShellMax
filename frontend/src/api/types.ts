@@ -101,6 +101,37 @@ export interface FaceDefaults {
   presets: FaceStrength[];
 }
 
+export interface EnhanceUIParams {
+  source_asset_id: number;
+  scale: number | null;
+  color_correction: "lab" | "wavelet" | "adain" | "none" | null;
+  seed: number | null;
+}
+
+export interface EnhanceScalePreset {
+  id: string;
+  label: string;
+  scale: number;
+  hint: string;
+}
+
+export interface EnhanceColorPreset {
+  id: string;
+  label: string;
+  hint: string;
+}
+
+export interface EnhanceDefaults {
+  asset: MediaAsset;
+  scale: number;
+  color_correction: string;
+  frames: number;
+  scale_presets: EnhanceScalePreset[];
+  color_presets: EnhanceColorPreset[];
+  unet: string;
+  vae: string;
+}
+
 export interface EngineProfile {
   name: string;
   unet: string;
@@ -153,7 +184,7 @@ export interface UIParams {
 export type GenStatus = "queued" | "running" | "done" | "draft_only" | "error" | "cancelled";
 export type Stage = "load" | "encode" | "pass1" | "draft" | "upscale" | "pass2" | "final" | "decode" | "done";
 
-export type JobKind = "generate" | "face";
+export type JobKind = "generate" | "face" | "enhance";
 
 export interface Generation {
   id: number;
@@ -165,7 +196,7 @@ export interface Generation {
   status: GenStatus;
   stage: Stage | null;
   progress: number;
-  ui_params: UIParams & Partial<FaceUIParams>;
+  ui_params: UIParams & Partial<FaceUIParams> & Partial<EnhanceUIParams>;
   full_params: Record<string, unknown> | null;
   seed: number;
   profile_name: string;
@@ -245,6 +276,8 @@ export interface Meta {
   max_refs: Record<RefKind, number>;
   defaults: { aspect: string; duration: number; quality: string; look?: string; prompt_template: string };
   face_strength: FaceStrength[];
+  enhance_scale?: EnhanceScalePreset[];
+  enhance_color?: EnhanceColorPreset[];
 }
 
 export interface FsListing {

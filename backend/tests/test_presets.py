@@ -50,6 +50,37 @@ def test_error_humanization():
     assert humanize_error("ValueError", "boom", "KSampler")[0] == "generic"
 
 
+def test_apply_history_status_oom():
+    from app.jobs.queue import Running, apply_history_status
+
+    r = Running(gen_id=1)
+    hist = {
+        "status": {
+            "status_str": "error",
+            "completed": False,
+            "messages": [
+                ["execution_start", {"prompt_id": "x"}],
+                ["execution_error", {
+                    "exception_type": "torch.OutOfMemoryError",
+                    "exception_message": "CUDA out of memory. Tried to allocate 9.17 GiB.",
+                    "node_type": "SamplerCustomAdvanced",
+                }],
+            ],
+        }
+    }
+    assert apply_history_status(r, hist) is True
+    assert r.done.is_set()
+    assert r.error and r.error[0] == "oom"
+
+
+def test_apply_history_status_empty():
+    from app.jobs.queue import Running, apply_history_status
+
+    r = Running(gen_id=1)
+    assert apply_history_status(r, {}) is False
+    assert not r.done.is_set()
+
+
 def test_asset_title_skips_header_and_tags():
     prompt = "subject_definitions:\n<Subject 1> walks in <Picture 1> city streets at night"
     assert asset_title(prompt, 3) == "walks in city streets at night"

@@ -16,6 +16,12 @@ export interface FaceDialogState {
   fromGenerationId?: number;
 }
 
+/** SeedVR2 enhance dialog. */
+export interface EnhanceDialogState {
+  assetId: number;
+  fromGenerationId?: number;
+}
+
 interface UIState {
   workspace: Workspace;
   selectedGen: number | null;
@@ -26,6 +32,7 @@ interface UIState {
   binFilter: "all" | "video" | "draft" | "imported";
   toasts: Toast[];
   faceDialog: FaceDialogState | null;
+  enhanceDialog: EnhanceDialogState | null;
   refEditor: string | null; // uid of the reference card being edited
 
   setWorkspace: (w: Workspace) => void;
@@ -37,6 +44,7 @@ interface UIState {
   setBinFilter: (f: UIState["binFilter"]) => void;
   toast: (text: string, tone?: Toast["tone"], action?: Toast["action"]) => void;
   openFaceDialog: (state: FaceDialogState | null) => void;
+  openEnhanceDialog: (state: EnhanceDialogState | null) => void;
   openRefEditor: (uid: string | null) => void;
   dismiss: (id: number) => void;
 }
@@ -53,6 +61,7 @@ export const useUI = create<UIState>((set) => ({
   binFilter: "all",
   toasts: [],
   faceDialog: null,
+  enhanceDialog: null,
   refEditor: null,
 
   setWorkspace: (workspace) => {
@@ -72,5 +81,6 @@ export const useUI = create<UIState>((set) => ({
   },
   dismiss: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
   openFaceDialog: (faceDialog) => set({ faceDialog }),
+  openEnhanceDialog: (enhanceDialog) => set({ enhanceDialog }),
   openRefEditor: (refEditor) => set({ refEditor }),
 }));

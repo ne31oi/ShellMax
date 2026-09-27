@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import {
   AlertCircle, Camera, Copy, Dices, Maximize2, Pause, Pencil, Play, Repeat, ScanFace, SkipBack, SkipForward,
-  SplitSquareHorizontal, Square, Volume2, VolumeX, X,
+  Sparkles, SplitSquareHorizontal, Square, Volume2, VolumeX, X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { urls } from "../../api/client";
@@ -25,8 +25,8 @@ export function Viewer() {
   const other = useLibrary((s) => (compareWith ? s.generations[compareWith] : undefined));
   const assets = useLibrary((s) => s.assets);
   const preview = useLibrary((s) => (selectedGen ? s.previews[selectedGen] : undefined));
-  const [faceResultOnly, setFaceResultOnly] = useState(false);
-  useEffect(() => setFaceResultOnly(false), [selectedGen]);
+  const [resultOnly, setResultOnly] = useState(false);
+  useEffect(() => setResultOnly(false), [selectedGen]);
 
   if (!gen && !selectedAsset) return <Welcome />;
 
@@ -42,14 +42,25 @@ export function Viewer() {
   const draft = gen.draft_asset_id ? assets[gen.draft_asset_id] : undefined;
   const final = gen.output_asset_id ? assets[gen.output_asset_id] : undefined;
   const otherAsset = actions.outputAsset(other, assets);
-  const faceSource = gen.kind === "face" && gen.source_asset_id ? assets[gen.source_asset_id] : undefined;
+  const sourceAsset =
+    (gen.kind === "face" || gen.kind === "enhance") && gen.source_asset_id
+      ? assets[gen.source_asset_id]
+      : undefined;
+  const showBeforeAfter = !!final && !!sourceAsset && !resultOnly && !otherAsset;
 
   return (
     <div className="flex h-full flex-col">
       <div className="relative min-h-0 flex-1">
-        {gen.kind === "face" && final && faceSource && !faceResultOnly && !otherAsset ? (
-          // a refined face is judged against the original: open straight into the before | after wipe
-          <CompareView a={faceSource} b={final} labelA="До" labelB="После" onClose={() => setFaceResultOnly(true)} closeLabel="Только результат" />
+        {showBeforeAfter ? (
+          // face / enhance: open straight into the before | after wipe against the source clip
+          <CompareView
+            a={sourceAsset}
+            b={final}
+            labelA="До"
+            labelB="После"
+            onClose={() => setResultOnly(true)}
+            closeLabel="Только результат"
+          />
         ) : gen.kind === "face" && gen.status === "running" && draft ? (
           <Player asset={draft} badge="Трекинг" overlay={<FaceTrackBanner gen={gen} />} />
         ) : final && otherAsset ? (
@@ -66,7 +77,12 @@ export function Viewer() {
           <div className="flex h-full items-center justify-center text-muted">Генерация отменена</div>
         )}
       </div>
-      <ClipInfo gen={gen} />
+      <ClipInfo
+        gen={gen}
+        comparing={showBeforeAfter}
+        canToggleCompare={!!final && !!sourceAsset && !otherAsset}
+        onToggleCompare={() => setResultOnly((v) => !v)}
+      />
     </div>
   );
 }
@@ -214,11 +230,21 @@ function ErrorView({ gen }: { gen: Generation }) {
         </div>
         <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-fg">{gen.error}</p>
         <div className="mt-4 flex flex-wrap gap-2">
-          {gen.error_kind === "oom" && gen.kind !== "face" && (
+          {gen.error_kind === "oom" && gen.kind === "generate" && (
             <>
               <Button size="sm" variant="primary" onClick={() => actions.fixes.lowerQuality(gen)}>Снизить качество</Button>
               <Button size="sm" onClick={() => actions.fixes.enableLowVram().then(() => actions.retry(gen, true))}>Включить экономию VRAM и повторить</Button>
             </>
+          )}
+          {gen.error_kind === "oom" && gen.kind === "enhance" && gen.source_asset_id && (
+            <Button size="sm" variant="primary" onClick={() => useUI.getState().openEnhanceDialog({ assetId: gen.source_asset_id! })}>
+              Открыть детализацию (уменьшите масштаб)
+            </Button>
+          )}
+          {gen.error_kind === "oom" && gen.kind === "face" && (
+            <Button size="sm" onClick={() => actions.fixes.enableLowVram().then(() => actions.retry(gen, true))}>
+              Включить экономию VRAM и повторить
+            </Button>
           )}
           {gen.error_kind === "missing_file" && (
             <Button size="sm" variant="primary" onClick={() => openSettings("engine")}>Открыть настройки движка</Button>
@@ -323,9 +349,14 @@ export function Player({ asset, badge, overlay }: { asset: MediaAsset; badge?: s
           </span>
           <span className="ml-auto" />
           {asset.kind === "video" && (
-            <IconButton label="Улучшить лицо" onClick={() => useUI.getState().openFaceDialog({ assetId: asset.id })}>
-              <ScanFace size={15} />
-            </IconButton>
+            <>
+              <IconButton label="Улучшить лицо" onClick={() => useUI.getState().openFaceDialog({ assetId: asset.id })}>
+                <ScanFace size={15} />
+              </IconButton>
+              <IconButton label="Детализация (SeedVR2)" onClick={() => useUI.getState().openEnhanceDialog({ assetId: asset.id })}>
+                <Sparkles size={15} />
+              </IconButton>
+            </>
           )}
           <IconButton
             label="Этот кадр — в референсы"
@@ -406,12 +437,125 @@ function CompareView({ a, b, labelA, labelB, onClose, closeLabel = "Закрыт
 }
 
 // ---------------------------------------------------------------- selected clip details + actions
-function ClipInfo({ gen }: { gen: Generation }) {
-  if (gen.kind === "face") return <FaceClipInfo gen={gen} />;
+function ClipInfo({
+  gen,
+  comparing,
+  canToggleCompare,
+  onToggleCompare,
+}: {
+  gen: Generation;
+  comparing?: boolean;
+  canToggleCompare?: boolean;
+  onToggleCompare?: () => void;
+}) {
+  if (gen.kind === "face") {
+    return (
+      <FaceClipInfo
+        gen={gen}
+        comparing={comparing}
+        canToggleCompare={canToggleCompare}
+        onToggleCompare={onToggleCompare}
+      />
+    );
+  }
+  if (gen.kind === "enhance") {
+    return (
+      <EnhanceClipInfo
+        gen={gen}
+        comparing={comparing}
+        canToggleCompare={canToggleCompare}
+        onToggleCompare={onToggleCompare}
+      />
+    );
+  }
   return <GenerationClipInfo gen={gen} />;
 }
 
-function FaceClipInfo({ gen }: { gen: Generation }) {
+function CompareToggle({
+  comparing,
+  canToggle,
+  onToggle,
+}: {
+  comparing?: boolean;
+  canToggle?: boolean;
+  onToggle?: () => void;
+}) {
+  if (!canToggle || !onToggle) return null;
+  return (
+    <Button
+      size="sm"
+      variant={comparing ? "subtle" : "ghost"}
+      onClick={onToggle}
+      title={comparing ? "Показать только результат" : "Сравнить с исходником"}
+    >
+      <SplitSquareHorizontal size={13} />
+      {comparing ? "Только результат" : "Сравнить"}
+    </Button>
+  );
+}
+
+function EnhanceClipInfo({
+  gen,
+  comparing,
+  canToggleCompare,
+  onToggleCompare,
+}: {
+  gen: Generation;
+  comparing?: boolean;
+  canToggleCompare?: boolean;
+  onToggleCompare?: () => void;
+}) {
+  const source = useLibrary((s) => (gen.source_asset_id ? s.assets[gen.source_asset_id] : undefined));
+  const scale = gen.ui_params.scale ?? 2;
+  const color = gen.ui_params.color_correction ?? "none";
+  const colorLabel =
+    useLibrary((s) => s.meta?.enhance_color?.find((c) => c.id === color)?.label) ?? color;
+  return (
+    <div className="border-t border-line bg-panel px-4 py-2.5">
+      <div className="flex items-start gap-4">
+        <div className="min-w-0 flex-1 text-xs leading-relaxed text-muted">
+          <p className="text-fg">
+            <Sparkles size={13} className="mr-1 inline text-accent" />
+            Детализация SeedVR2{source ? ` · «${source.name}»` : ""}
+          </p>
+        </div>
+        <div className="flex shrink-0 gap-1">
+          <CompareToggle comparing={comparing} canToggle={canToggleCompare} onToggle={onToggleCompare} />
+          {gen.status === "done" && source && (
+            <Button size="sm" variant="ghost" onClick={() => useUI.getState().selectAsset(source.id)} title="Открыть исходный клип">
+              Исходник
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" onClick={() => actions.retry(gen, false)} title="Ещё одна попытка с другим сидом">
+            <Dices size={13} /> Ещё раз
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => actions.editAndRetry(gen)}>
+            <Pencil size={13} /> Изменить
+          </Button>
+        </div>
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-faint tabular-nums">
+        <span>#{gen.id}</span>
+        <span>×{scale}</span>
+        <span>{colorLabel}</span>
+        <span>сид {gen.seed}</span>
+        {gen.elapsed_s && <span title={timeBreakdown(gen)}>готово за {fmtDuration(gen.elapsed_s)}</span>}
+      </div>
+    </div>
+  );
+}
+
+function FaceClipInfo({
+  gen,
+  comparing,
+  canToggleCompare,
+  onToggleCompare,
+}: {
+  gen: Generation;
+  comparing?: boolean;
+  canToggleCompare?: boolean;
+  onToggleCompare?: () => void;
+}) {
   const source = useLibrary((s) => (gen.source_asset_id ? s.assets[gen.source_asset_id] : undefined));
   const presets = useLibrary((s) => s.meta?.face_strength) ?? EMPTY_FACE_STRENGTH;
   const preset = presets.find((p) => Math.abs(p.denoise - (gen.ui_params.denoise ?? 0)) < 1e-6);
@@ -432,9 +576,10 @@ function FaceClipInfo({ gen }: { gen: Generation }) {
           )}
         </div>
         <div className="flex shrink-0 gap-1">
+          <CompareToggle comparing={comparing} canToggle={canToggleCompare} onToggle={onToggleCompare} />
           {gen.status === "done" && source && (
             <Button size="sm" variant="ghost" onClick={() => useUI.getState().selectAsset(source.id)} title="Открыть исходный клип">
-              <SplitSquareHorizontal size={13} /> Исходник
+              Исходник
             </Button>
           )}
           <Button size="sm" variant="ghost" onClick={() => actions.retry(gen, false)} title="Ещё одна попытка с другим сидом">
@@ -459,8 +604,9 @@ function GenerationClipInfo({ gen }: { gen: Generation }) {
   const styles = useLibrary((s) => s.styles);
   const quality = useLibrary((s) => s.meta?.quality.find((q) => q.id === gen.ui_params.quality));
   const p = gen.ui_params;
-  const res = quality?.resolutions[p.aspect]?.final;
-  const styleNames = p.styles.map((st) => styles.find((s) => s.id === st.style_id)?.name).filter(Boolean);
+  const aspect = p.aspect;
+  const res = aspect && quality?.resolutions?.[aspect]?.final;
+  const styleNames = (p.styles ?? []).map((st) => styles.find((s) => s.id === st.style_id)?.name).filter(Boolean);
 
   return (
     <div className="border-t border-line bg-panel px-4 py-2.5">
@@ -482,12 +628,12 @@ function GenerationClipInfo({ gen }: { gen: Generation }) {
       </div>
       <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-faint tabular-nums">
         <span>#{gen.id}</span>
-        <span>{p.aspect.split(" ")[0]}</span>
+        {aspect && <span>{aspect.split(" ")[0]}</span>}
         {res && <span>{res[0]}×{res[1]}</span>}
-        <span>{quality?.label}</span>
+        {quality?.label && <span>{quality.label}</span>}
         <span>сид {gen.seed}</span>
         {styleNames.length > 0 && <span>стиль: {styleNames.join(", ")}</span>}
-        {p.refs.length > 0 && <span>референсов: {p.refs.length}</span>}
+        {(p.refs?.length ?? 0) > 0 && <span>референсов: {p.refs!.length}</span>}
         {gen.elapsed_s && <span title={timeBreakdown(gen)}>создано за {fmtDuration(gen.elapsed_s)}</span>}
         <span className="ml-auto hidden xl:inline">
           <Kbd>Пробел</Kbd> пуск · <Kbd>←</Kbd>

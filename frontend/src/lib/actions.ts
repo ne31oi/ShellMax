@@ -64,6 +64,10 @@ export async function editAndRetry(g: Generation) {
     if (g.source_asset_id) useUI.getState().openFaceDialog({ assetId: g.source_asset_id, fromGenerationId: g.id });
     return;
   }
+  if (g.kind === "enhance") {
+    if (g.source_asset_id) useUI.getState().openEnhanceDialog({ assetId: g.source_asset_id, fromGenerationId: g.id });
+    return;
+  }
   await useForm.getState().loadFromGeneration(g);
   const ui = useUI.getState();
   if (ui.workspace === "edit" && !ui.genDrawer) ui.toggleGenDrawer();

@@ -15,8 +15,9 @@ from ..db.models import Generation, MediaAsset, Upload, select, session, utcnow
 from ..hub import hub
 from ..media import library
 from ..workflow.builder import build_prompt
+from ..workflow.builder_enhance import build_enhance_prompt
 from ..workflow.builder_face import build_face_prompt
-from ..workflow.params import FaceFullParams, FullParams
+from ..workflow.params import EnhanceFullParams, FaceFullParams, FullParams
 from .pipelines import PIPELINES, Pipeline
 
 log = logging.getLogger("shellmax.jobs")
@@ -56,11 +57,43 @@ class Running:
 def humanize_error(exc_type: str, message: str, node_type: str = "") -> tuple[str, str]:
     low = f"{exc_type} {message}".lower()
     if "out of memory" in low or "outofmemory" in low or "allocation on device" in low:
-        return "oom", "Не хватило видеопамяти. Снизьте качество или длительность, либо включите «Экономию VRAM»."
+        return ("oom",
+                "Не хватило видеопамяти. Снизьте качество или длительность, либо включите «Экономию VRAM».")
     if "filenotfound" in low or "файл не найден" in low or "путь к файлу" in low:
         return "missing_file", message.replace("ShellMax: ", "")
     where = f" ({node_type})" if node_type else ""
     return "generic", f"Ошибка движка{where}: {message.strip() or exc_type}"
+
+
+def apply_history_status(r: Running, hist: dict) -> bool:
+    """If ComfyUI history says the prompt finished, update `r` and return True.
+
+    Used when the websocket missed execution_error / executing(null) — e.g. after a long
+    OOM or an engine restart mid-job — so the UI does not stay on «running» forever.
+    """
+    if not hist:
+        return False
+    status = hist.get("status") or {}
+    messages = status.get("messages") or []
+    for kind, data in messages:
+        if not isinstance(data, dict):
+            data = {}
+        if kind == "execution_error":
+            r.error = humanize_error(data.get("exception_type", ""), data.get("exception_message", ""),
+                                     data.get("node_type", ""))
+            r.done.set()
+            return True
+        if kind == "execution_interrupted":
+            r.cancelled = True
+            r.done.set()
+            return True
+    # completed flag / status_str without a typed message (older Comfy builds)
+    if status.get("completed") or status.get("status_str") in ("success", "error"):
+        if status.get("status_str") == "error" and not r.error:
+            r.error = ("generic", "Движок завершил задачу с ошибкой")
+        r.done.set()
+        return True
+    return False
 
 
 class JobManager:
@@ -121,6 +154,14 @@ class JobManager:
                 s.add(g)
                 s.commit()
                 await push_generation(g)
+                return
+            # orphan "running" row (worker lost / backend restarted mid-poll): free the UI
+            if g and g.status == "running":
+                g.status, g.finished = "cancelled", utcnow()
+                g.error_kind, g.error = "generic", "Остановлено"
+                s.add(g)
+                s.commit()
+                await push_generation(g)
 
     # ------------------------------------------------------------------ worker
     async def _worker(self) -> None:
@@ -175,6 +216,9 @@ class JobManager:
         if g.kind == "face":
             full = await self._upload_face_refs(FaceFullParams(**g.full_params))
             prompt = build_face_prompt(full)
+        elif g.kind == "enhance":
+            full = EnhanceFullParams(**g.full_params)
+            prompt = build_enhance_prompt(full)
         else:
             full = await self._upload_refs(FullParams(**g.full_params), g.ui_params)
             prompt = build_prompt(full)
@@ -198,7 +242,7 @@ class JobManager:
             s.add(row)
             s.commit()
 
-        await r.done.wait()
+        await self._await_prompt(r)
         await self._collect_missing_outputs(r)
 
         if r.error:
@@ -212,6 +256,47 @@ class JobManager:
             await self._finish(g.id, "cancelled")
         else:
             await self._finish(g.id, "error", error=("generic", "Движок завершил работу без результата"))
+
+    async def _await_prompt(self, r: Running) -> None:
+        """Block until Comfy finishes this prompt; poll history so a missed WS event cannot hang forever."""
+        absent = 0  # consecutive polls: not in queue and not yet in history
+        while not r.done.is_set():
+            try:
+                await asyncio.wait_for(r.done.wait(), timeout=5.0)
+                return
+            except asyncio.TimeoutError:
+                pass
+            if await self._reconcile_prompt(r):
+                return
+            alive = False
+            try:
+                if self.engine.state in READY_STATES:
+                    q = await self.client.queue_state()
+                    alive = self.client.prompt_in_queue(q, r.prompt_id or "")
+            except Exception:  # noqa: BLE001
+                alive = False
+            if alive:
+                absent = 0
+            else:
+                absent += 1
+            # ~30 s outside the queue without history → treat as lost (covers engine crash)
+            if absent >= 6 and not r.done.is_set():
+                if await self._reconcile_prompt(r):
+                    return
+                r.error = ("engine_down",
+                           "Связь с движком потеряна во время генерации — задача прервалась. Запустите снова.")
+                r.done.set()
+                return
+
+    async def _reconcile_prompt(self, r: Running) -> bool:
+        """Pull Comfy history for the running prompt; True if the job is finished."""
+        if not r.prompt_id:
+            return False
+        try:
+            hist = await self.client.history(r.prompt_id)
+        except Exception:  # noqa: BLE001
+            return False
+        return apply_history_status(r, hist)
 
     async def _upload_refs(self, full: FullParams, ui_params: dict) -> FullParams:
         """Images/audio go into ComfyUI's input dir (LoadImage/LoadAudio); videos load by path."""
@@ -354,6 +439,10 @@ class JobManager:
                 src_asset = s.get(MediaAsset, g.source_asset_id) if g.source_asset_id else None
                 base = src_asset.name if src_asset else f"Клип {g.source_asset_id}"
                 title = f"{base} · {'трекинг' if is_draft else 'лицо'}"
+            elif g.kind == "enhance":
+                src_asset = s.get(MediaAsset, g.source_asset_id) if g.source_asset_id else None
+                base = src_asset.name if src_asset else f"Клип {g.source_asset_id}"
+                title = f"{base} · детализация"
             else:
                 title = asset_title((g.ui_params or {}).get("prompt", ""), r.gen_id)
         asset_id = await register_asset(dest, generation_id=r.gen_id, source="draft" if is_draft else "generated",
@@ -399,12 +488,11 @@ class JobManager:
             elif node == r.pipe.report_node:
                 await self._save_report(r, out)
         status = hist.get("status") or {}
-        if not r.error and status.get("status_str") == "error":
-            for m in status.get("messages", []):
-                if m[0] == "execution_error":
-                    d = m[1]
-                    r.error = humanize_error(d.get("exception_type", ""), d.get("exception_message", ""),
-                                             d.get("node_type", ""))
+        if not r.error:
+            apply_history_status(r, hist)
+            # apply_history_status sets done; we only need the error side-effect here
+            if not r.error and status.get("status_str") == "error":
+                r.error = ("generic", "Движок завершил задачу с ошибкой")
 
 
 def asset_title(prompt: str, gen_id: int) -> str:

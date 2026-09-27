@@ -111,6 +111,8 @@ export const useForm = create<FormState>((set, get) => ({
 
   loadFromGeneration: async (g) => {
     const p = g.ui_params;
+    // face / enhance have no generate fields — don't wipe the panel
+    if (g.kind === "face" || g.kind === "enhance" || !p.refs) return;
     const uploads = await Promise.all(p.refs.map((r) => api.uploadInfo(r.upload_id).catch(() => null)));
     const refs: RefItem[] = [];
     p.refs.forEach((r, i) => {
@@ -119,12 +121,12 @@ export const useForm = create<FormState>((set, get) => ({
     });
     set((s) => ({
       refs,
-      prompt: fromModelPrompt(p.prompt, refs),
-      aspect: p.aspect,
-      duration: p.duration,
-      quality: p.quality,
+      prompt: fromModelPrompt(p.prompt ?? "", refs),
+      aspect: p.aspect ?? s.aspect,
+      duration: p.duration ?? s.duration,
+      quality: p.quality ?? s.quality,
       look: p.look ?? get().look,
-      styles: p.styles.map((st) => ({ style_id: st.style_id, strength: st.strength ?? 1 })),
+      styles: (p.styles ?? []).map((st) => ({ style_id: st.style_id, strength: st.strength ?? 1 })),
       seed: g.seed,
       promptRevision: s.promptRevision + 1,
     }));

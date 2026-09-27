@@ -26,6 +26,15 @@ def test_compose_without_references_forbids_tags():
     assert "Референсов НЕТ" in s and "newly_generated" in s
 
 
+def test_compose_audio_lipsync_rules():
+    s = compose_system([RefInfo(kind="audio", name="track.mp3")], 5.0)
+    assert "<Audio 1> = track.mp3" in s
+    assert "fully_copy" in s and "липсинг" in s
+    assert "non_diegetic_music = N/A" in s or "non_diegetic_music = N/A" in s.replace(" ", "")
+    assert "ЗАПРЕЩЕНО при наличии аудио-рефа" in s
+    assert "ЗАПРЕЩЕНО при наличии аудио-рефа" not in compose_system([], 2.0)
+
+
 def test_extract_prompt_from_fence_and_fallback():
     reply = "Вот промпт:\n```text\nsubject_definitions:\n<Subject 1> ...\nnon_diegetic_music:\nN/A\n```\nГотово."
     assert extract_prompt(reply) == "subject_definitions:\n<Subject 1> ...\nnon_diegetic_music:\nN/A"

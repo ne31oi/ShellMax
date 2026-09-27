@@ -88,6 +88,19 @@ class ComfyClient:
         r.raise_for_status()
         return r.json().get(prompt_id, {})
 
+    async def queue_state(self) -> dict:
+        """Raw /queue: {queue_running: [[num, prompt_id, ...], ...], queue_pending: [...]}."""
+        r = await self._http.get("/queue", timeout=10)
+        r.raise_for_status()
+        return r.json()
+
+    def prompt_in_queue(self, queue: dict, prompt_id: str) -> bool:
+        for bucket in (queue.get("queue_running") or [], queue.get("queue_pending") or []):
+            for item in bucket:
+                if isinstance(item, (list, tuple)) and len(item) > 1 and item[1] == prompt_id:
+                    return True
+        return False
+
     async def upload_input(self, path: Path, name: str, subfolder: str = "shellmax") -> str:
         """Upload a file into ComfyUI's input dir; returns the value LoadImage/LoadAudio expect."""
         with path.open("rb") as f:

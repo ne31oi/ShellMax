@@ -60,7 +60,8 @@ export function newUid(): string {
 }
 
 /** Short human title for a clip: first meaningful prompt line without tags or the subject_definitions header. */
-export function promptTitle(prompt: string): string {
+export function promptTitle(prompt: string | null | undefined): string {
+  if (!prompt) return "";
   let raw = prompt.split("\n");
   const head = raw.findIndex((l) => l.trim().toLowerCase() === "summary:");
   if (head >= 0) raw = raw.slice(head + 1); // structured prompt: the summary describes the shot

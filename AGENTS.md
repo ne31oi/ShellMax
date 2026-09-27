@@ -7,8 +7,9 @@ ShellMax — локальное веб-приложение (FastAPI + React), �
 |---|---|---|---|
 | `generate` — генерация видео | `workflows/MiniMax_H3_Singularity_DualSampling_The_AI_Brief_EN.json` | `workflow/builder.py` | `tests/test_builder.py` |
 | `face` — улучшение лица на готовом клипе | `workflows/MiniMax_H3_FaceRefine_Best.json` | `workflow/builder_face.py` | `tests/test_builder_face.py` |
+| `enhance` — детализация / апскейл (SeedVR2) | `workflows/ShellMax_SeedVR2_Enhance.json` | `workflow/builder_enhance.py` | `tests/test_builder_enhance.py` |
 
-- **Сейчас:** готовы этапы 0–2 (движок, бэкенд, студия генерации) и улучшение лица.
+- **Сейчас:** готовы этапы 0–2 (движок, бэкенд, студия генерации), улучшение лица и детализация SeedVR2.
 - **Следующее:** этап 3 — NLE v1 (дорожки, обрезка, экспорт через ffmpeg).
 
 Пользовательская документация — `README.md`. Язык интерфейса и общения с пользователем — русский.
@@ -62,7 +63,9 @@ ShellMax — локальное веб-приложение (FastAPI + React), �
 | `backend/app/workflow/presets.py` | `expand()`: UI + профиль + пресет + стили → `FullParams` |
 | `backend/app/workflow/builder.py` | `FullParams` → API-граф; `STAGE_BY_NODE`, выходные ноды черновика (135) и финала (141) |
 | `backend/app/workflow/builder_face.py` | `FaceFullParams` → граф улучшения лица; превью трекинга (26), отчёт трекера (28), финал (23) |
+| `backend/app/workflow/builder_enhance.py` | `EnhanceFullParams` → граф SeedVR2; финал (13) |
 | `backend/app/workflow/face.py` | Улучшение лица: рецепт по умолчанию, шаблон промпта крупного плана, сетка кадров 17k+5, автодетекция лица для рамки `<Picture 2>` (YuNet → haar) |
+| `backend/app/workflow/enhance.py` | SeedVR2: рецепт, пресеты масштаба/цвета, work units |
 | `backend/app/jobs/pipelines.py` | Для каждого типа задачи: этапы с весами, нода → этап, выходные ноды, нода отчёта |
 | `backend/app/jobs/queue.py` | Очередь (одна задача за раз), WS-события ComfyUI → этапы, шаги, прогресс; сохранение черновика и финала; `humanize_error` |
 | `backend/app/comfy/supervisor.py` | Процесс движка: лог в `data/engine.log`, PID в `data/engine.pid`, повторный подхват после рестарта бэкенда |
