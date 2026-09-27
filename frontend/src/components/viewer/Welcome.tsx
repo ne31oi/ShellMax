@@ -8,6 +8,7 @@ export function Welcome() {
   const engine = useLibrary((s) => s.engine);
   const profiles = useLibrary((s) => s.profiles);
   const openSettings = useUI((s) => s.openSettings);
+  const setWorkspace = useUI((s) => s.setWorkspace);
   const profile = defaultProfile(profiles);
   const problems = profile?.problems ?? [];
 
@@ -65,12 +66,41 @@ export function Welcome() {
         </ul>
 
         {allReady && (
-          <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs text-muted">
-            <span><Kbd>Ctrl</Kbd>+<Kbd>Enter</Kbd> создать</span>
-            <span><Kbd>@</Kbd> сослаться на референс</span>
-            <span><Kbd>Ctrl</Kbd>+<Kbd>V</Kbd> вставить картинку</span>
-            <span><Kbd>↑</Kbd> прошлый промпт</span>
-          </div>
+          <>
+            <ol className="mt-6 space-y-1.5 text-xs text-muted">
+              <li>
+                <span className="mr-1.5 tabular-nums text-faint">1.</span>
+                Сгенерируйте короткий клип (2 с, «Стандарт»)
+              </li>
+              <li>
+                <span className="mr-1.5 tabular-nums text-faint">2.</span>
+                При необходимости — «Улучшить лицо» или детализация с карточки
+              </li>
+              <li>
+                <span className="mr-1.5 tabular-nums text-faint">3.</span>
+                Добавьте клип в таймлайн и экспортируйте ролик
+              </li>
+            </ol>
+            <div className="mt-4">
+              <Button size="sm" onClick={() => setWorkspace("edit")}>
+                Открыть монтаж
+              </Button>
+            </div>
+            <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs text-muted">
+              <span>
+                <Kbd>Ctrl</Kbd>+<Kbd>Enter</Kbd> создать
+              </span>
+              <span>
+                <Kbd>@</Kbd> сослаться на референс
+              </span>
+              <span>
+                <Kbd>Ctrl</Kbd>+<Kbd>V</Kbd> вставить картинку
+              </span>
+              <span>
+                <Kbd>↑</Kbd> прошлый промпт
+              </span>
+            </div>
+          </>
         )}
       </div>
     </div>
@@ -79,19 +109,21 @@ export function Welcome() {
 
 function Check({ state, title, detail, action }: { state: "ok" | "bad" | "busy"; title: string; detail?: React.ReactNode; action?: React.ReactNode }) {
   return (
-    <li className="flex items-start gap-3 rounded-xl border border-line bg-panel px-3.5 py-3">
-      {state === "ok" ? (
-        <CheckCircle2 size={18} className="mt-px shrink-0 text-ok" />
-      ) : state === "busy" ? (
-        <Loader2 size={18} className="mt-px shrink-0 animate-spin text-accent" />
-      ) : (
-        <CircleAlert size={18} className="mt-px shrink-0 text-warn" />
-      )}
+    <li className="flex items-start gap-2.5 rounded-xl border border-line bg-raised/40 px-3 py-2.5">
+      <span className="mt-0.5 shrink-0">
+        {state === "ok" ? (
+          <CheckCircle2 size={16} className="text-ok" />
+        ) : state === "busy" ? (
+          <Loader2 size={16} className="animate-spin text-accent" />
+        ) : (
+          <CircleAlert size={16} className="text-bad" />
+        )}
+      </span>
       <div className="min-w-0 flex-1">
-        <p className="text-[13px]">{title}</p>
-        {detail && <div className="mt-0.5 text-xs text-muted">{detail}</div>}
+        <p className="text-[13px] text-fg">{title}</p>
+        {detail && <p className="mt-0.5 text-xs text-muted">{detail}</p>}
+        {action && <div className="mt-2">{action}</div>}
       </div>
-      {action}
     </li>
   );
 }

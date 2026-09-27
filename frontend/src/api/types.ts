@@ -227,6 +227,16 @@ export type Stage = "load" | "encode" | "pass1" | "draft" | "upscale" | "pass2" 
 
 export type JobKind = "generate" | "face" | "enhance" | "interpolate";
 
+export interface Project {
+  id: number;
+  name: string;
+  fps: number;
+  width: number;
+  height: number;
+  timeline: { tracks?: unknown[] } & Record<string, unknown>;
+  created: string;
+}
+
 export interface Generation {
   id: number;
   project_id: number;

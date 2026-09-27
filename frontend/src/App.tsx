@@ -9,6 +9,7 @@ import { RefEditor } from "./components/generate/RefEditor";
 import { ChatView } from "./components/assistant/ChatView";
 import { GeneratePanel } from "./components/generate/GeneratePanel";
 import { EngineStatus } from "./components/layout/EngineStatus";
+import { ProjectSwitcher } from "./components/layout/ProjectSwitcher";
 import { RestartAllButton } from "./components/layout/RestartAllButton";
 import { Resizer, usePanelSize } from "./components/layout/Resizer";
 import { Toasts } from "./components/layout/Toasts";
@@ -17,12 +18,13 @@ import { SettingsDialog } from "./components/settings/SettingsDialog";
 import { TimelineStrip } from "./components/timeline/TimelineStrip";
 import { IconButton, Kbd, Spinner, TipProvider } from "./components/ui";
 import { Viewer } from "./components/viewer/Viewer";
+import { api } from "./api/client";
 import { useHotkeys } from "./lib/hotkeys";
 import { connectLive } from "./lib/live";
 import { useAssistant } from "./store/assistant";
 import { useForm } from "./store/form";
 import { useLibrary } from "./store/library";
-import { useTimeline } from "./store/timeline";
+import { type TimelineDoc, useTimeline } from "./store/timeline";
 import { useUI } from "./store/ui";
 
 export default function App() {
@@ -51,10 +53,12 @@ export default function App() {
         useForm.getState().hydrate(meta.defaults);
       });
     void useAssistant.getState().refresh();
-    fetch("/api/projects/1")
-      .then((r) => r.json())
-      .then((p) => useTimeline.getState().load(p.timeline))
-      .catch(() => undefined);
+    const loadTimeline = () =>
+      api
+        .project(useUI.getState().projectId)
+        .then((p) => useTimeline.getState().load(p.timeline as unknown as TimelineDoc))
+        .catch(() => undefined);
+    void loadTimeline();
     return stop;
   }, []);
 
@@ -76,6 +80,7 @@ export default function App() {
               <Clapperboard size={14} strokeWidth={2.5} />
             </div>
             <span className="text-[13px] font-semibold tracking-tight">ShellMax</span>
+            <ProjectSwitcher />
           </div>
           <div className="flex rounded-lg bg-raised p-0.5">
             {(

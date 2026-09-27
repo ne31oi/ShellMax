@@ -21,6 +21,7 @@ import type {
   MediaAsset,
   Meta,
   ProfileRow,
+  Project,
   QualityPresetValues,
   QualitySettings,
   ScannedModel,
@@ -28,6 +29,7 @@ import type {
   UIParams,
   Upload,
 } from "./types";
+import { useUI } from "../store/ui";
 
 export class ApiError extends Error {
   constructor(
@@ -79,6 +81,11 @@ const del = <T>(url: string) => request<T>("DELETE", url);
 const q = (params: Record<string, string | number>) =>
   "?" + new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString();
 
+/** Active project for REST calls that scope media/jobs. */
+function pid(explicit?: number): number {
+  return explicit ?? useUI.getState().projectId;
+}
+
 export const api = {
   meta: () => get<Meta>("/api/meta"),
   estimate: (aspect: string, quality: string, duration: number) =>
@@ -109,6 +116,15 @@ export const api = {
   saveQuality: (presets: Record<string, QualityPresetValues>) => put<QualitySettings>("/api/quality", { presets }),
   resetQuality: () => post<QualitySettings>("/api/quality/reset"),
 
+  projects: () => get<Project[]>("/api/projects"),
+  project: (id: number) => get<Project>(`/api/projects/${id}`),
+  createProject: (name: string) => post<Project>("/api/projects", { name }),
+  renameProject: (id: number, name: string) =>
+    request<Project>("PATCH", `/api/projects/${id}`, { name }),
+  saveTimeline: (projectId: number, timeline: unknown) =>
+    put(`/api/projects/${projectId}/timeline`, timeline),
+  exportTimeline: (projectId?: number) => post<MediaAsset>(`/api/projects/${pid(projectId)}/export`),
+
   fsList: (path: string) => get<FsListing>("/api/fs/list" + q({ path })),
   fsCheck: (path: string) => get<{ path: string; exists: boolean; size: number | null; name: string }>("/api/fs/check" + q({ path })),
   scanModels: () => get<Record<string, ScannedModel[]>>("/api/models/scan"),
@@ -132,8 +148,9 @@ export const api = {
     post<Upload>(`/api/uploads/${id}/edit`, body),
   uploadPeaks: (id: string) => get<{ peaks: number[]; duration: number | null }>(`/api/uploads/${id}/peaks`),
 
-  generations: () => get<Generation[]>("/api/generations"),
-  generate: (params: UIParams) => post<Generation[]>("/api/generations", params),
+  generations: (projectId?: number) => get<Generation[]>("/api/generations" + q({ project_id: pid(projectId) })),
+  generate: (params: UIParams, projectId?: number) =>
+    post<Generation[]>("/api/generations" + q({ project_id: pid(projectId) }), params),
   retry: (id: number, same_seed: boolean, variants = 1) =>
     post<Generation[]>(`/api/generations/${id}/retry`, { same_seed, variants }),
   cancel: (id: number) => post(`/api/generations/${id}/cancel`),
@@ -141,19 +158,22 @@ export const api = {
 
   faceDefaults: (assetId: number) => get<FaceDefaults>("/api/face/defaults" + q({ asset_id: assetId })),
   faceDetect: (uploadId: string) => post<{ found: boolean; crop: CropBox }>("/api/face/detect", { upload_id: uploadId }),
-  faceRefine: (params: FaceUIParams) => post<Generation>("/api/face", params),
+  faceRefine: (params: FaceUIParams, projectId?: number) =>
+    post<Generation>("/api/face" + q({ project_id: pid(projectId) }), params),
   faceEstimate: (assetId: number) => get<Estimate>("/api/face/estimate" + q({ asset_id: assetId })),
 
   enhanceDefaults: (assetId: number) => get<EnhanceDefaults>("/api/enhance/defaults" + q({ asset_id: assetId })),
   enhanceEstimate: (assetId: number, scale: number) =>
     get<Estimate>("/api/enhance/estimate" + q({ asset_id: assetId, scale })),
-  enhance: (params: EnhanceUIParams) => post<Generation>("/api/enhance", params),
+  enhance: (params: EnhanceUIParams, projectId?: number) =>
+    post<Generation>("/api/enhance" + q({ project_id: pid(projectId) }), params),
 
   interpolateDefaults: (assetId: number) =>
     get<InterpolateDefaults>("/api/interpolate/defaults" + q({ asset_id: assetId })),
   interpolateEstimate: (assetId: number, multiplier: number, model: string) =>
     get<Estimate>("/api/interpolate/estimate" + q({ asset_id: assetId, multiplier, model })),
-  interpolate: (params: InterpolateUIParams) => post<Generation>("/api/interpolate", params),
+  interpolate: (params: InterpolateUIParams, projectId?: number) =>
+    post<Generation>("/api/interpolate" + q({ project_id: pid(projectId) }), params),
 
   assistantStatus: () => get<AssistantStatus>("/api/assistant/status"),
   assistantModels: () => get<AssistantModel[]>("/api/assistant/models"),
@@ -163,17 +183,16 @@ export const api = {
   assistantStop: () => post("/api/assistant/stop"),
   assistantUnload: () => post("/api/assistant/unload"),
 
-  assets: () => get<MediaAsset[]>("/api/assets"),
+  assets: (projectId?: number) => get<MediaAsset[]>("/api/assets" + q({ project_id: pid(projectId) })),
   assetAsUpload: (assetId: number) => post<Upload>(`/api/assets/${assetId}/as-upload`),
   frameToRef: (assetId: number, t: number) => post<Upload>(`/api/assets/${assetId}/frame`, { t }),
-  importAsset: (file: File) => {
+  importAsset: (file: File, projectId?: number) => {
     const fd = new FormData();
     fd.append("file", file);
-    return request<MediaAsset>("POST", "/api/assets/import", fd);
+    return request<MediaAsset>("POST", "/api/assets/import" + q({ project_id: pid(projectId) }), fd);
   },
   reveal: (assetId: number) => post(`/api/assets/${assetId}/reveal`),
   deleteAsset: (assetId: number) => del(`/api/assets/${assetId}`),
-  exportTimeline: (projectId = 1) => post<MediaAsset>(`/api/projects/${projectId}/export`),
 };
 
 export const urls = {

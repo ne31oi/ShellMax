@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { api } from "../api/client";
-import type { EngineState, Generation, MediaAsset, Meta, ProfileRow, Style } from "../api/types";
+import type { EngineState, Generation, MediaAsset, Meta, ProfileRow, Project, Style } from "../api/types";
+import { useUI } from "./ui";
 
 interface LibraryState {
   meta: Meta | null;
@@ -10,9 +11,11 @@ interface LibraryState {
   previews: Record<number, string>; // generation id -> latest latent preview (data URL)
   profiles: ProfileRow[];
   styles: Style[];
+  projects: Project[];
   loaded: boolean;
 
   load: () => Promise<void>;
+  reloadProjects: () => Promise<void>;
   reloadProfiles: () => Promise<void>;
   reloadStyles: () => Promise<void>;
   upsertGeneration: (g: Generation) => void;
@@ -31,34 +34,44 @@ export const useLibrary = create<LibraryState>((set, get) => ({
   previews: {},
   profiles: [],
   styles: [],
+  projects: [],
   loaded: false,
 
   load: async () => {
-    const [meta, engine, gens, assets, profiles, styles] = await Promise.all([
+    const projectId = useUI.getState().projectId;
+    const [meta, engine, gens, assets, profiles, styles, projects] = await Promise.all([
       api.meta(),
       api.engine(),
-      api.generations(),
-      api.assets(),
+      api.generations(projectId),
+      api.assets(projectId),
       api.profiles(),
       api.styles(),
+      api.projects(),
     ]);
+    // Sticky id may point at a deleted project — fall back to the first one.
+    if (projects.length && !projects.some((p) => p.id === projectId)) {
+      useUI.getState().setProjectId(projects[0].id);
+      return get().load();
+    }
     const prev = get().generations;
     set({
       meta,
       engine,
-      // REST has no live step info; keep what the websocket already told us
       generations: Object.fromEntries(gens.map((g) => [g.id, g.status === "running" ? { ...g, step: prev[g.id]?.step } : g])),
       assets: Object.fromEntries(assets.map((a) => [a.id, a])),
       profiles,
       styles,
+      projects,
       loaded: true,
     });
   },
+  reloadProjects: async () => set({ projects: await api.projects() }),
   reloadProfiles: async () => set({ profiles: await api.profiles() }),
   reloadStyles: async () => set({ styles: await api.styles() }),
 
   upsertGeneration: (g) =>
     set((s) => {
+      if (g.project_id !== useUI.getState().projectId) return s;
       const previews = { ...s.previews };
       if (g.status !== "running") delete previews[g.id];
       return { generations: { ...s.generations, [g.id]: g }, previews };
@@ -75,7 +88,11 @@ export const useLibrary = create<LibraryState>((set, get) => ({
       delete previews[id];
       return { generations, assets, previews };
     }),
-  upsertAsset: (a) => set((s) => ({ assets: { ...s.assets, [a.id]: a } })),
+  upsertAsset: (a) =>
+    set((s) => {
+      if (a.project_id !== useUI.getState().projectId) return s;
+      return { assets: { ...s.assets, [a.id]: a } };
+    }),
   removeAsset: (id) =>
     set((s) => {
       const assets = { ...s.assets };

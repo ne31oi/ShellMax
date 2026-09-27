@@ -709,6 +709,33 @@ def list_projects():
         return s.exec(select(Project).order_by(Project.id)).all()
 
 
+class ProjectIn(BaseModel):
+    name: str = "Новый проект"
+
+
+@router.post("/projects")
+def create_project(body: ProjectIn):
+    name = (body.name or "").strip()[:80] or "Новый проект"
+    with session() as s:
+        p = Project(name=name)
+        s.add(p)
+        s.commit()
+        s.refresh(p)
+        return p
+
+
+@router.patch("/projects/{pid}")
+def rename_project(pid: int, body: ProjectIn):
+    name = (body.name or "").strip()[:80] or "Без названия"
+    with session() as s:
+        p = s.get(Project, pid) or _404()
+        p.name = name
+        s.add(p)
+        s.commit()
+        s.refresh(p)
+        return p
+
+
 @router.get("/projects/{pid}")
 def get_project(pid: int):
     from .timeline_schema import normalize_timeline

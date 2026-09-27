@@ -123,13 +123,9 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
     if (!track.clips.length || exporting) return;
     setExporting(true);
     try {
-      // flush pending persist
-      await fetch("/api/projects/1/timeline", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(useTimeline.getState().doc),
-      });
-      const asset = await api.exportTimeline(1);
+      const projectId = useUI.getState().projectId;
+      await api.saveTimeline(projectId, useTimeline.getState().doc);
+      const asset = await api.exportTimeline(projectId);
       useLibrary.getState().upsertAsset(asset);
       useUI.getState().selectAsset(asset.id);
       useUI.getState().setViewingSequence(false);

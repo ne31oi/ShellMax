@@ -30,6 +30,7 @@ export interface InterpolateDialogState {
 
 interface UIState {
   workspace: Workspace;
+  projectId: number;
   selectedGen: number | null;
   selectedAsset: number | null;
   compareWith: number | null; // generation id shown on the right side of the A/B wipe
@@ -47,6 +48,7 @@ interface UIState {
   timelineReplace: { clipId: string; expectSourceAssetId: number } | null;
 
   setWorkspace: (w: Workspace) => void;
+  setProjectId: (id: number) => void;
   selectGen: (id: number | null) => void;
   selectAsset: (id: number | null) => void;
   compare: (id: number | null) => void;
@@ -72,8 +74,14 @@ function readBool(key: string, fallback: boolean): boolean {
   return v === "1";
 }
 
+function readProjectId(): number {
+  const n = Number(localStorage.getItem("sm.projectId"));
+  return Number.isFinite(n) && n >= 1 ? n : 1;
+}
+
 export const useUI = create<UIState>((set) => ({
   workspace: (localStorage.getItem("sm.workspace") as Workspace) || "generate",
+  projectId: readProjectId(),
   selectedGen: null,
   selectedAsset: null,
   compareWith: null,
@@ -98,6 +106,17 @@ export const useUI = create<UIState>((set) => ({
     } else {
       set({ workspace, viewingSequence: false });
     }
+  },
+  setProjectId: (projectId) => {
+    localStorage.setItem("sm.projectId", String(projectId));
+    set({
+      projectId,
+      selectedGen: null,
+      selectedAsset: null,
+      compareWith: null,
+      viewingSequence: false,
+      timelineReplace: null,
+    });
   },
   selectGen: (selectedGen) => set({ selectedGen, selectedAsset: null, compareWith: null, viewingSequence: false }),
   selectAsset: (selectedAsset) => set({ selectedAsset, selectedGen: null, compareWith: null, viewingSequence: false }),

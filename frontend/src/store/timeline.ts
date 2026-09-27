@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { api } from "../api/client";
+import { useUI } from "./ui";
 
 /**
  * Timeline document + command history. Every mutation is a Command so undo/redo
@@ -69,11 +71,7 @@ let saveTimer: ReturnType<typeof setTimeout> | undefined;
 function persist(doc: TimelineDoc) {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    fetch("/api/projects/1/timeline", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(doc),
-    }).catch(() => undefined);
+    api.saveTimeline(useUI.getState().projectId, doc).catch(() => undefined);
   }, 500);
 }
 
