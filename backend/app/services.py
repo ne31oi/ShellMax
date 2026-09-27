@@ -32,6 +32,8 @@ def bootstrap() -> None:
 
 def _migrate_realism_to_styles() -> None:
     """h3-realism-people left the engine recipe: strip it from profiles and offer it as a style chip."""
+    from sqlalchemy.orm.attributes import flag_modified
+
     path = presets.realism_lora_path()
     with session() as s:
         for row in s.exec(select(EngineProfileRow)).all():
@@ -41,6 +43,7 @@ def _migrate_realism_to_styles() -> None:
             if after != before:
                 data["loras_final"] = after
                 row.data = data
+                flag_modified(row, "data")
                 s.add(row)
         have = any(presets.is_realism_lora(st.path) for st in s.exec(select(StyleLora)).all())
         if not have and Path(path).is_file():

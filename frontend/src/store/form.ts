@@ -94,7 +94,7 @@ interface FormState {
   promptHistory: string[];
   /** Last used uploads per kind (MRU, sticky). */
   recentRefs: RecentRefs;
-  /** bumps when the prompt is replaced from outside (retry/template) so the editor reloads */
+  /** bumps when the prompt is replaced from outside (retry/history) so the editor reloads */
   promptRevision: number;
 
   hydrate: (defaults: { aspect: string; duration: number; quality: string; look?: string; camera?: string; light?: string }) => Promise<void>;

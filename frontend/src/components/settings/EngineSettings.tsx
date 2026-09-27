@@ -37,6 +37,7 @@ export function EngineSettings() {
     if (expert) api.engineOptions().then(setOptions).catch(() => undefined);
   }, [expert]);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const pending = useRef<{ id: number; data: EngineProfile; isDefault: boolean } | null>(null);
 
   useEffect(() => {
     if (row) {
@@ -45,6 +46,41 @@ export function EngineSettings() {
     }
   }, [row?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const flushSave = async () => {
+    clearTimeout(timer.current);
+    const job = pending.current;
+    if (!job) return;
+    pending.current = null;
+    setSaved("saving");
+    try {
+      const res = await api.updateProfile(job.id, job.data, job.isDefault);
+      setProblems(res.problems);
+      setSaved("saved");
+      await reload();
+    } catch (e) {
+      setSaved("idle");
+      useUI.getState().toast(e instanceof Error ? e.message : "Не удалось сохранить профиль", "bad");
+    }
+  };
+
+  // Flush pending autosave on dialog close / tab hide / page unload.
+  useEffect(() => {
+    const onHide = () => {
+      void flushSave();
+    };
+    window.addEventListener("beforeunload", onHide);
+    const onVis = () => {
+      if (document.visibilityState === "hidden") onHide();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("beforeunload", onHide);
+      document.removeEventListener("visibilitychange", onVis);
+      void flushSave();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pending kept in ref
+  }, []);
+
   if (!row || !draft) return null;
 
   // autosave: settings are "fill once", no Save button to forget
@@ -52,12 +88,10 @@ export function EngineSettings() {
     const next = { ...draft, ...patch };
     setDraft(next);
     setSaved("saving");
+    pending.current = { id: row.id, data: next, isDefault: row.is_default };
     clearTimeout(timer.current);
-    timer.current = setTimeout(async () => {
-      const res = await api.updateProfile(row.id, next, row.is_default);
-      setProblems(res.problems);
-      setSaved("saved");
-      reload();
+    timer.current = setTimeout(() => {
+      void flushSave();
     }, 600);
   };
   const updateExpert = (patch: Partial<ExpertParams>) => update({ expert: { ...draft.expert, ...patch } });
@@ -82,7 +116,12 @@ export function EngineSettings() {
           {profiles.map((p) => (
             <button
               key={p.id}
-              onClick={() => setActiveId(p.id)}
+              onClick={() => {
+                void (async () => {
+                  await flushSave();
+                  setActiveId(p.id);
+                })();
+              }}
               className={clsx("flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs", p.id === row.id ? "bg-hover text-fg" : "text-muted hover:text-fg")}
             >
               {p.is_default && <Star size={11} className="fill-current text-warn" />}

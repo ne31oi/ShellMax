@@ -4,7 +4,7 @@ import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type 
 import StarterKit from "@tiptap/starter-kit";
 import type { JSONContent } from "@tiptap/core";
 import clsx from "clsx";
-import { AlertTriangle, AudioLines, FileText, History, Square } from "lucide-react";
+import { AlertTriangle, AudioLines, History, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { urls } from "../../api/client";
@@ -177,7 +177,6 @@ export function PromptEditor() {
   const refs = useForm((s) => s.refs);
   const prompt = useForm((s) => s.prompt);
   const history = useForm((s) => s.promptHistory);
-  const template = useLibrary((s) => s.meta?.defaults.prompt_template ?? "");
   const historyCursor = useRef(-1);
 
   const editor = useEditor({
@@ -227,7 +226,7 @@ export function PromptEditor() {
   const editorRef = useRef(editor);
   editorRef.current = editor;
 
-  // external replacements (retry, template, history, ref removal)
+  // external replacements (retry, history, ref removal)
   useEffect(() => {
     if (!editor) return;
     const current = fromDoc(editor.getJSON());
@@ -310,13 +309,6 @@ export function PromptEditor() {
     setAssistMode("compose");
   };
 
-  const applyTemplate = () => {
-    const tokens = fromModelPrompt(template, refs);
-    const current = useForm.getState().prompt.trim();
-    useForm.getState().setPrompt(current ? `${tokens}${current}` : tokens, true);
-    emit("focusPrompt");
-  };
-
   return (
     <div>
       <div className="prompt-editor relative rounded-xl border border-line bg-raised focus-within:border-accent/60">
@@ -336,9 +328,6 @@ export function PromptEditor() {
           </div>
         )}
         <div className="flex items-center gap-1 border-t border-line/60 px-1.5 py-1">
-          <Button variant="ghost" size="sm" onClick={applyTemplate} title="Вставить каркас описания субъекта из воркфлоу">
-            <FileText size={13} /> Шаблон
-          </Button>
           <Menu
             align="start"
             trigger={

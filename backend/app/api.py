@@ -256,9 +256,14 @@ def create_profile(body: ProfileIn):
 
 @router.put("/profiles/{pid}")
 def update_profile(pid: int, body: ProfileIn):
+    from sqlalchemy.orm.attributes import flag_modified
+
     with session() as s:
         row = s.get(EngineProfileRow, pid) or _404()
-        row.name, row.data = body.data.name, body.data.model_dump()
+        row.name = body.data.name
+        row.data = body.data.model_dump()
+        # JSON columns: reassignment alone is not always detected as dirty (same as kv_set).
+        flag_modified(row, "data")
         s.add(row)
         s.commit()
         if body.is_default:
