@@ -5,7 +5,7 @@ Stage lists are mirrored in frontend/src/lib/stages.ts - change both together.
 
 from dataclasses import dataclass, field
 
-from ..workflow import builder, builder_enhance, builder_face, builder_interpolate
+from ..workflow import builder, builder_enhance, builder_face, builder_interpolate, builder_nvfp4_fast, builder_nvfp4
 
 
 @dataclass(frozen=True)
@@ -36,6 +36,22 @@ PIPELINES = {
         sampler_nodes=builder.SAMPLER_NODES,
         final_node=builder.FINAL_OUTPUT_NODE,
         draft_node=builder.DRAFT_OUTPUT_NODE,
+    ),
+    "generate_nvfp4": Pipeline(
+        stages=[("load", 0.08), ("encode", 0.07), ("pass1", 0.25), ("draft", 0.05),
+                ("upscale", 0.05), ("pass2", 0.05), ("final", 0.35), ("decode", 0.10)],
+        stage_by_node=builder_nvfp4.STAGE_BY_NODE,
+        sampler_nodes=builder_nvfp4.SAMPLER_NODES,
+        final_node=builder_nvfp4.FINAL_OUTPUT_NODE,
+        draft_node=builder_nvfp4.DRAFT_OUTPUT_NODE,
+    ),
+    "generate_nvfp4_fast": Pipeline(
+        stages=[("load", 0.08), ("encode", 0.07), ("pass1", 0.25), ("draft", 0.05),
+                ("upscale", 0.05), ("pass2", 0.05), ("final", 0.35), ("decode", 0.10)],
+        stage_by_node=builder_nvfp4_fast.STAGE_BY_NODE,
+        sampler_nodes=builder_nvfp4_fast.SAMPLER_NODES,
+        final_node=builder_nvfp4_fast.FINAL_OUTPUT_NODE,
+        draft_node=builder_nvfp4_fast.DRAFT_OUTPUT_NODE,
     ),
     "face": Pipeline(
         stages=[("load", 0.05), ("track", 0.15), ("encode", 0.10), ("lipsync", 0.05),

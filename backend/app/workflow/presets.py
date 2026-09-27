@@ -167,6 +167,7 @@ def expand(
         duration=ui.duration,
         seed=seed,
         unet=profile.unet,
+        nvfp4_unet=profile.nvfp4_unet,
         text_encoder=profile.text_encoder,
         vae_video=profile.vae_video,
         vae_audio=profile.vae_audio,

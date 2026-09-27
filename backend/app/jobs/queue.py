@@ -18,6 +18,8 @@ from ..workflow.builder import build_prompt
 from ..workflow.builder_enhance import build_enhance_prompt
 from ..workflow.builder_face import build_face_prompt
 from ..workflow.builder_interpolate import build_interpolate_prompt
+from ..workflow.builder_nvfp4_fast import build_nvfp4_fast_prompt
+from ..workflow.builder_nvfp4 import build_nvfp4_prompt
 from ..workflow.params import EnhanceFullParams, FaceFullParams, FullParams, InterpolateFullParams
 from .pipelines import PIPELINES, Pipeline
 
@@ -247,6 +249,12 @@ class JobManager:
         elif g.kind == "interpolate":
             full = InterpolateFullParams(**g.full_params)
             prompt = build_interpolate_prompt(full)
+        elif g.kind == "generate_nvfp4_fast":
+            full = await self._upload_refs(FullParams(**g.full_params), g.ui_params)
+            prompt = build_nvfp4_fast_prompt(full)
+        elif g.kind == "generate_nvfp4":
+            full = await self._upload_refs(FullParams(**g.full_params), g.ui_params)
+            prompt = build_nvfp4_prompt(full)
         else:
             full = await self._upload_refs(FullParams(**g.full_params), g.ui_params)
             prompt = build_prompt(full)

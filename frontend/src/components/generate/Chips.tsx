@@ -174,20 +174,22 @@ export function DurationChip() {
 
 // ---------------------------------------------------------------- quality
 export function useEstimates(): Record<string, Estimate | undefined> {
+  const profileId = useForm((s) => s.profileId);
   const aspect = useForm((s) => s.aspect);
   const duration = useForm((s) => s.duration);
   const quality = useLibrary((s) => s.meta?.quality ?? NO_QUALITY);
   const generationsCount = useLibrary((s) => Object.keys(s.generations).length);
   const [est, setEst] = useState<Record<string, Estimate | undefined>>({});
   useEffect(() => {
+    let cancelled = false;
     const t = setTimeout(async () => {
       const pairs = await Promise.all(
-        quality.map(async (q) => [q.id, await api.estimate(aspect, q.id, duration).catch(() => undefined)] as const),
+        quality.map(async (q) => [q.id, await api.estimate(aspect, q.id, duration, profileId).catch(() => undefined)] as const),
       );
-      setEst(Object.fromEntries(pairs));
+      if (!cancelled) setEst(Object.fromEntries(pairs));
     }, 250);
-    return () => clearTimeout(t);
-  }, [aspect, duration, quality, generationsCount]);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [aspect, duration, quality, generationsCount, profileId]);
   return est;
 }
 

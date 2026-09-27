@@ -217,7 +217,7 @@ export const useForm = create<FormState>((set, get) => ({
     if (!need.length) return;
 
     const gens = sortedGenerations(useLibrary.getState().generations).filter(
-      (g) => g.kind === "generate" && Array.isArray(g.ui_params?.refs) && g.ui_params.refs.length,
+      (g) => (g.kind === "generate" || g.kind === "generate_nvfp4" || g.kind === "generate_nvfp4_fast") && Array.isArray(g.ui_params?.refs) && g.ui_params.refs.length,
     );
 
     const want = new Set(need);

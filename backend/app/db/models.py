@@ -80,7 +80,7 @@ class MediaAsset(SQLModel, table=True):
 class Generation(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     project_id: int = Field(index=True)
-    kind: str = "generate"  # generate | face | enhance | interpolate
+    kind: str = "generate"  # generate | generate_nvfp4 | generate_nvfp4_fast | face | enhance | interpolate
     source_asset_id: int | None = None  # face/enhance/interpolate: the clip being processed
     # queued | running | done | draft_only | error | cancelled
     status: str = "queued"

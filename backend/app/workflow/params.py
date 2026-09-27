@@ -99,7 +99,10 @@ class FaceRecipe(BaseModel):
 
 class EngineProfile(BaseModel):
     name: str = "Singularity v1.3"
+    # Separate profiles preserve the reference recipe and the five-interval final variant.
+    pipeline: Literal["generate", "generate_nvfp4", "generate_nvfp4_fast"] = "generate"
     unet: str
+    nvfp4_unet: str = ""  # Separate final-pass model; ignored by existing pipelines.
     text_encoder: str
     vae_video: str
     vae_audio: str
@@ -110,7 +113,7 @@ class EngineProfile(BaseModel):
     expert: ExpertParams = Field(default_factory=ExpertParams)
     face: FaceRecipe = Field(default_factory=FaceRecipe)
 
-    @field_validator("unet", "text_encoder", "vae_video", "vae_audio", "upscaler")
+    @field_validator("unet", "nvfp4_unet", "text_encoder", "vae_video", "vae_audio", "upscaler")
     @classmethod
     def _clean(cls, v: str) -> str:
         return clean_path(v)
@@ -187,6 +190,7 @@ class FullParams(BaseModel):
     duration: float
     seed: int
     unet: str
+    nvfp4_unet: str = ""
     text_encoder: str
     vae_video: str
     vae_audio: str

@@ -175,6 +175,9 @@ export interface InterpolateDefaults {
 
 export interface EngineProfile {
   name: string;
+  /** Standard INT8 and the two retained NVFP4 recipes. */
+  pipeline?: "generate" | "generate_nvfp4" | "generate_nvfp4_fast";
+  nvfp4_unet?: string;
   unet: string;
   text_encoder: string;
   vae_video: string;
@@ -226,7 +229,7 @@ export interface UIParams {
 export type GenStatus = "queued" | "running" | "done" | "draft_only" | "error" | "cancelled";
 export type Stage = "load" | "encode" | "pass1" | "draft" | "upscale" | "pass2" | "final" | "decode" | "done";
 
-export type JobKind = "generate" | "face" | "enhance" | "interpolate";
+export type JobKind = "generate" | "generate_nvfp4" | "generate_nvfp4_fast" | "face" | "enhance" | "interpolate";
 
 export interface Project {
   id: number;

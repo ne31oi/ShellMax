@@ -115,10 +115,11 @@ def frames(duration: float):
 
 
 @router.get("/estimate")
-def estimate(aspect: str, quality: str, duration: float):
+def estimate(aspect: str, quality: str, duration: float, profile_id: int | None = None):
     """{seconds, basis: exact|scaled|prior, samples} from this machine's finished jobs."""
+    _, profile = services.get_profile(profile_id)
     res = presets.resolution_for(aspect, quality)["final"]
-    return estimate_time(res[0] * res[1] * frame_count(duration), "generate")
+    return estimate_time(res[0] * res[1] * frame_count(duration), profile.pipeline)
 
 
 # ---------------------------------------------------------------- sticky ui state

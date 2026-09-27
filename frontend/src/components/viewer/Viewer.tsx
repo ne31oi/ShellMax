@@ -262,7 +262,7 @@ function ErrorView({ gen }: { gen: Generation }) {
         </div>
         <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-fg">{gen.error}</p>
         <div className="mt-4 flex flex-wrap gap-2">
-          {gen.error_kind === "oom" && gen.kind === "generate" && (
+          {gen.error_kind === "oom" && (gen.kind === "generate" || gen.kind === "generate_nvfp4" || gen.kind === "generate_nvfp4_fast") && (
             <>
               <Button size="sm" variant="primary" onClick={() => actions.fixes.lowerQuality(gen)}>Снизить качество</Button>
               <Button size="sm" onClick={() => actions.fixes.enableLowVram().then(() => actions.retry(gen, true))}>Включить экономию VRAM и повторить</Button>

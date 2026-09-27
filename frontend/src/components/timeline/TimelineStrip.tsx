@@ -1689,7 +1689,7 @@ function ClipBlock({
           </TlCtxItem>
           <TlCtxItem
             icon={Film}
-            disabled={!gen || gen.kind !== "generate"}
+            disabled={!gen || (gen.kind !== "generate" && gen.kind !== "generate_nvfp4" && gen.kind !== "generate_nvfp4_fast")}
             onSelect={() => {
               if (gen) void actions.retry(gen, false);
             }}

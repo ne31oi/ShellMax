@@ -70,7 +70,10 @@ def profile_problems(profile: EngineProfile) -> list[dict]:
     from .fs.browse import check
 
     fields = {"unet": profile.unet, "text_encoder": profile.text_encoder, "vae_video": profile.vae_video,
-              "vae_audio": profile.vae_audio, "upscaler": profile.upscaler}
+              "vae_audio": profile.vae_audio}
+    fields["upscaler"] = profile.upscaler
+    if profile.pipeline in ("generate_nvfp4", "generate_nvfp4_fast"):
+        fields["nvfp4_unet"] = profile.nvfp4_unet
     out = [{"field": k, "path": v} for k, v in fields.items() if not check(v)["exists"]]
     for group in ("loras_main", "loras_final"):
         for i, lora in enumerate(getattr(profile, group)):
@@ -255,12 +258,14 @@ def create_generations(ui: UIParams, project_id: int) -> list[Generation]:
             styles.append((LoraSpec(path=lib.path, strength=strength), lib.triggers))
 
     created = []
+    kind = profile.pipeline
     for i in range(ui.variants):
         seed = ui.seed + i if ui.seed is not None else presets.new_seed()
         full = presets.expand(ui, profile, refs, styles, seed, filename_prefix="ShellMax/gen")
         units = presets.work_units(full)
-        g = Generation(project_id=project_id, ui_params=ui.model_dump(), full_params=full.model_dump(),
-                       seed=seed, profile_name=row.name, work_units=units, estimate_s=estimate_seconds(units))
+        g = Generation(project_id=project_id, kind=kind, ui_params=ui.model_dump(), full_params=full.model_dump(),
+                       seed=seed, profile_name=row.name, work_units=units,
+                       estimate_s=estimate_seconds(units, kind))
         with session() as s:
             s.add(g)
             s.commit()

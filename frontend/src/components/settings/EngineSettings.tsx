@@ -10,10 +10,17 @@ import { PathField, type ModelCategory } from "./PathField";
 
 const MODEL_FIELDS: { key: keyof EngineProfile; label: string; hint: string; category: ModelCategory }[] = [
   { key: "unet", label: "Модель", hint: "Диффузионная модель MiniMax H3", category: "unet" },
+  { key: "nvfp4_unet", label: "Финальная модель", hint: "Смешанная NVFP4 для финального прохода", category: "unet" },
   { key: "text_encoder", label: "Текстовый энкодер", hint: "Qwen3-VL для MiniMax H3", category: "text_encoder" },
   { key: "vae_video", label: "VAE видео", hint: "", category: "vae" },
   { key: "vae_audio", label: "VAE аудио", hint: "", category: "vae" },
-  { key: "upscaler", label: "Латентный апскейлер", hint: "Для второго прохода", category: "upscaler" },
+  { key: "upscaler", label: "Латентный апскейлер", hint: "Для второго прохода DualSampling", category: "upscaler" },
+];
+
+const PIPELINE_OPTIONS = [
+  { value: "generate_nvfp4", label: "NVFP4 · 10 интервалов финала" },
+  { value: "generate", label: "Singularity DualSampling (по умолчанию)" },
+  { value: "generate_nvfp4_fast", label: "NVFP4 · 5 интервалов финала" },
 ];
 
 export function EngineSettings() {
@@ -129,15 +136,29 @@ export function EngineSettings() {
       </label>
 
       <section>
+        <SectionTitle>Пайплайн</SectionTitle>
+        <SelectField
+          label="Граф генерации"
+          value={draft.pipeline ?? "generate"}
+          onChange={(pipeline) => update({ pipeline: pipeline as EngineProfile["pipeline"] })}
+          options={PIPELINE_OPTIONS}
+          defaultValue="generate"
+        />
+        <p className="mt-1.5 text-xs text-muted">
+          Singularity сохраняет исходный рецепт. Оба NVFP4 используют INT8 сначала и NVFP4 на финале: 10 интервалов ближе к эталону, 5 — быстрее.
+        </p>
+      </section>
+
+      <section>
         <SectionTitle>Модели</SectionTitle>
         <div className="space-y-3">
-          {MODEL_FIELDS.map((f) => (
+          {MODEL_FIELDS.filter((f) => f.key !== "nvfp4_unet" || draft.pipeline === "generate_nvfp4" || draft.pipeline === "generate_nvfp4_fast").map((f) => (
             <div key={f.key} className="grid grid-cols-[150px_1fr] items-center gap-3">
               <div>
                 <p className={clsx("text-[13px]", bad.has(f.key) && "text-bad")}>{f.label}</p>
                 {f.hint && <p className="text-[11px] text-faint">{f.hint}</p>}
               </div>
-              <PathField value={draft[f.key] as string} onChange={(v) => update({ [f.key]: v })} category={f.category} />
+              <PathField value={(draft[f.key] as string) ?? ""} onChange={(v) => update({ [f.key]: v })} category={f.category} />
             </div>
           ))}
         </div>

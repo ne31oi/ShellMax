@@ -88,8 +88,8 @@ function pid(explicit?: number): number {
 
 export const api = {
   meta: () => get<Meta>("/api/meta"),
-  estimate: (aspect: string, quality: string, duration: number) =>
-    get<Estimate>("/api/estimate" + q({ aspect, quality, duration })),
+  estimate: (aspect: string, quality: string, duration: number, profileId?: number | null) =>
+    get<Estimate>("/api/estimate" + q({ aspect, quality, duration, ...(profileId != null ? { profile_id: profileId } : {}) })),
 
   uiState: () => get<Record<string, unknown>>("/api/state/ui"),
   saveUiState: (value: Record<string, unknown>) => put("/api/state/ui", value),
