@@ -92,3 +92,20 @@ export const sortedGenerations = (gens: Record<number, Generation>) =>
   Object.values(gens).sort((a, b) => b.id - a.id);
 
 export const defaultProfile = (profiles: ProfileRow[]) => profiles.find((p) => p.is_default) ?? profiles[0];
+
+/** Generation whose draft/output is this asset (parent of a face/enhance/interpolate job). */
+export function generationOwningAsset(
+  gens: Record<number, Generation>,
+  assetId: number | null | undefined,
+): Generation | undefined {
+  if (assetId == null) return undefined;
+  return Object.values(gens).find((g) => g.output_asset_id === assetId || g.draft_asset_id === assetId);
+}
+
+/** Jobs that refine this generation's draft or final output. */
+export function childGenerations(root: Generation, gens: Record<number, Generation>): Generation[] {
+  const ids = new Set<number>();
+  if (root.draft_asset_id) ids.add(root.draft_asset_id);
+  if (root.output_asset_id) ids.add(root.output_asset_id);
+  return Object.values(gens).filter((g) => g.source_asset_id != null && ids.has(g.source_asset_id));
+}

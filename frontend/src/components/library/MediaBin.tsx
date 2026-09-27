@@ -12,7 +12,7 @@ import { fmtDuration, fmtEstimate } from "../../lib/format";
 import { promptTitle } from "../../lib/refs";
 import { stageInfo, stepProgress, timeBreakdown } from "../../lib/stages";
 import { useElapsed } from "../../lib/useElapsed";
-import { sortedGenerations, useLibrary } from "../../store/library";
+import { sortedGenerations, generationOwningAsset, useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
 import { ASSET_DRAG_TYPE } from "../generate/RefsZone";
 import { IconButton } from "../ui";
@@ -153,10 +153,12 @@ function ProgressRing({ value }: { value: number }) {
 
 function GenerationCard({ gen }: { gen: Generation }) {
   const assets = useLibrary((s) => s.assets);
+  const generations = useLibrary((s) => s.generations);
   const preview = useLibrary((s) => s.previews[gen.id]);
   const selected = useUI((s) => s.selectedGen === gen.id);
   const elapsed = useElapsed(gen.status === "running" ? gen.started : null);
   const asset = actions.outputAsset(gen, assets);
+  const parent = generationOwningAsset(generations, gen.source_asset_id);
   const title =
     asset?.name ??
     (gen.kind === "face"
@@ -233,6 +235,22 @@ function GenerationCard({ gen }: { gen: Generation }) {
           title={gen.elapsed_s != null ? timeBreakdown(gen) || `затрачено ${fmtDuration(gen.elapsed_s)}` : undefined}
         >
           #{gen.id}
+          {parent ? (
+            <>
+              {" · "}
+              <button
+                type="button"
+                className="text-accent hover:underline"
+                title="Открыть исходный клип"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  useUI.getState().selectGen(parent.id);
+                }}
+              >
+                из #{parent.id}
+              </button>
+            </>
+          ) : null}
           {gen.status === "running" && gen.estimate_s ? ` · ${fmtEstimate(gen.estimate_s)}` : ""}
           {gen.elapsed_s != null && (gen.status === "done" || gen.status === "draft_only" || gen.status === "error")
             ? ` · ${fmtDuration(gen.elapsed_s)}`
@@ -257,6 +275,11 @@ function GenerationCard({ gen }: { gen: Generation }) {
             </>
           )}
           <CtxItem icon={<Pencil size={13} />} onSelect={() => actions.editAndRetry(gen)}>Изменить и повторить</CtxItem>
+          {parent && (
+            <CtxItem icon={<Film size={13} />} onSelect={() => useUI.getState().selectGen(parent.id)}>
+              Открыть исходный #{parent.id}
+            </CtxItem>
+          )}
           {asset && (
             <>
               <ContextMenu.Separator className="my-1 h-px bg-line" />
