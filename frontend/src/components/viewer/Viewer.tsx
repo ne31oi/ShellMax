@@ -10,9 +10,10 @@ import * as actions from "../../lib/actions";
 import { on } from "../../lib/bus";
 import { stageIndex, stageInfo, stagesOf, stepProgress, timeBreakdown, trackSummary } from "../../lib/stages";
 import { fmtDuration, fmtEstimate, fmtTimecode } from "../../lib/format";
+import { useElapsed } from "../../lib/useElapsed";
 import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
-import { Button, IconButton, Kbd, Spinner } from "../ui";
+import { Button, Dialog, IconButton, Kbd, Spinner } from "../ui";
 import { Welcome } from "./Welcome";
 
 const EMPTY_FACE_STRENGTH: FaceStrength[] = [];
@@ -89,14 +90,8 @@ export function Viewer() {
 
 // ---------------------------------------------------------------- live progress
 function LiveView({ gen, preview }: { gen: Generation; preview?: string }) {
-  const started = gen.started ? new Date(gen.started).getTime() : null;
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  const elapsed = started ? (now - started) / 1000 : 0;
-  const left = gen.estimate_s ? Math.max(0, gen.estimate_s - elapsed) : null;
+  const elapsed = useElapsed(gen.status === "running" ? gen.started : null);
+  const left = elapsed != null && gen.estimate_s ? Math.max(0, gen.estimate_s - elapsed) : null;
 
   const stage = stageInfo(gen.stage, gen);
   const step = stepProgress(gen);
@@ -118,7 +113,15 @@ function LiveView({ gen, preview }: { gen: Generation; preview?: string }) {
             </p>
           </div>
           {!queued && (
-            <span className="text-2xl font-semibold tabular-nums">{step ? `${step.pct}%` : <Spinner size={18} />}</span>
+            <div className="shrink-0 text-right">
+              <span className="text-2xl font-semibold tabular-nums">{step ? `${step.pct}%` : <Spinner size={18} />}</span>
+              {elapsed != null && (
+                <p className="mt-0.5 text-xs text-muted tabular-nums" title="Время текущего прогона">
+                  {fmtDuration(elapsed)}
+                  {gen.estimate_s ? ` / ${fmtEstimate(gen.estimate_s)}` : ""}
+                </p>
+              )}
+            </div>
           )}
         </div>
         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line">
@@ -134,7 +137,8 @@ function LiveView({ gen, preview }: { gen: Generation; preview?: string }) {
         <div className="mt-4 flex items-center justify-between text-xs text-faint tabular-nums">
           <span>
             Всего {Math.round(gen.progress * 100)}%
-            {gen.status === "running" && left != null ? ` · осталось ${fmtEstimate(left)}` : ""}
+            {elapsed != null ? ` · идёт ${fmtDuration(elapsed)}` : ""}
+            {left != null ? ` · осталось ${fmtEstimate(left)}` : ""}
           </span>
           <Button variant="ghost" size="sm" onClick={() => actions.cancel(gen)}>
             <Square size={12} /> {queued ? "Убрать из очереди" : "Остановить"}
@@ -183,12 +187,16 @@ function StageTrack({ gen }: { gen: Generation }) {
 
 function DraftBanner({ gen }: { gen: Generation }) {
   const step = stepProgress(gen);
+  const elapsed = useElapsed(gen.started);
   return (
     <div className="absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-3 rounded-xl border border-warn/40 bg-panel/95 px-3 py-2 shadow-xl backdrop-blur">
       <span className="text-xs tabular-nums">
         <b className="text-warn">Черновик готов.</b> {stageInfo(gen.stage, gen).short}
         {step ? ` · шаг ${step.value}/${step.max} · ${step.pct}%` : ""}
-        <span className="text-faint"> · всего {Math.round(gen.progress * 100)}%</span>
+        <span className="text-faint">
+          {" "}· всего {Math.round(gen.progress * 100)}%
+          {elapsed != null ? ` · ${fmtDuration(elapsed)}` : ""}
+        </span>
       </span>
       <Button size="sm" variant="outline" onClick={() => actions.cancel(gen)}>
         Не нравится — остановить
@@ -200,6 +208,7 @@ function DraftBanner({ gen }: { gen: Generation }) {
 /** Face job: the tracking preview is ready - say whether the face was found while refining goes on. */
 function FaceTrackBanner({ gen }: { gen: Generation }) {
   const step = stepProgress(gen);
+  const elapsed = useElapsed(gen.started);
   const t = trackSummary(gen.info?.track_report);
   return (
     <div className="absolute left-1/2 top-3 flex max-w-[90%] -translate-x-1/2 items-center gap-3 rounded-xl border border-line bg-panel/95 px-3 py-2 shadow-xl backdrop-blur">
@@ -209,6 +218,7 @@ function FaceTrackBanner({ gen }: { gen: Generation }) {
         <span className="text-faint">
           {" "}· {stageInfo(gen.stage, gen).short}
           {step ? ` ${step.value}/${step.max}` : ""} · всего {Math.round(gen.progress * 100)}%
+          {elapsed != null ? ` · ${fmtDuration(elapsed)}` : ""}
         </span>
       </span>
       <Button size="sm" variant="outline" onClick={() => actions.cancel(gen)}>
@@ -625,14 +635,31 @@ function GenerationClipInfo({ gen }: { gen: Generation }) {
   const aspect = p.aspect;
   const res = aspect && quality?.resolutions?.[aspect]?.final;
   const styleNames = (p.styles ?? []).map((st) => styles.find((s) => s.id === st.style_id)?.name).filter(Boolean);
+  const [promptOpen, setPromptOpen] = useState(false);
+  // Exact prompt sent to ComfyUI (style triggers / look already applied)
+  const prompt = (typeof gen.full_params?.prompt === "string" ? gen.full_params.prompt : p.prompt)?.trim() ?? "";
 
   return (
     <div className="border-t border-line bg-panel px-4 py-2.5">
       <div className="flex items-start gap-4">
-        <p className="line-clamp-2 min-w-0 flex-1 text-xs leading-relaxed text-muted" title={p.prompt}>
-          {p.prompt}
-        </p>
+        {prompt ? (
+          <button
+            type="button"
+            onClick={() => setPromptOpen(true)}
+            className="line-clamp-2 min-w-0 flex-1 text-left text-xs leading-relaxed text-muted hover:text-fg"
+            title="Промпт, ушедший в генерацию"
+          >
+            {prompt}
+          </button>
+        ) : (
+          <p className="min-w-0 flex-1 text-xs text-faint">Без промпта</p>
+        )}
         <div className="flex shrink-0 gap-1">
+          {prompt && (
+            <Button size="sm" variant="ghost" onClick={() => setPromptOpen(true)} title="Промпт генерации">
+              Промпт
+            </Button>
+          )}
           <Button size="sm" variant="ghost" onClick={() => actions.retry(gen, false)} title="Повторить с новым сидом">
             <Dices size={13} /> Ещё раз
           </Button>
@@ -658,6 +685,45 @@ function GenerationClipInfo({ gen }: { gen: Generation }) {
           <Kbd>→</Kbd> кадр · <Kbd>F</Kbd> экран
         </span>
       </div>
+      <PromptDialog open={promptOpen} onOpenChange={setPromptOpen} prompt={prompt} genId={gen.id} />
     </div>
+  );
+}
+
+function PromptDialog({
+  open,
+  onOpenChange,
+  prompt,
+  genId,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  prompt: string;
+  genId: number;
+}) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      useUI.getState().toast("Не удалось скопировать", "bad");
+    }
+  };
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange} title={`Промпт генерации · #${genId}`} wide>
+      <div className="flex flex-col gap-3 p-5">
+        <div className="flex items-center gap-2">
+          <p className="flex-1 text-[11px] text-muted">Точный текст, ушедший в граф (с триггерами стилей).</p>
+          <Button size="sm" variant="outline" onClick={copy}>
+            <Copy size={13} /> {copied ? "Скопировано" : "Копировать"}
+          </Button>
+        </div>
+        <pre className="max-h-[min(70vh,32rem)] overflow-auto whitespace-pre-wrap rounded-xl border border-line bg-raised p-3 font-mono text-[12px] leading-relaxed text-fg">
+          {prompt}
+        </pre>
+      </div>
+    </Dialog>
   );
 }

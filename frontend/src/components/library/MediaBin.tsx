@@ -11,6 +11,7 @@ import * as actions from "../../lib/actions";
 import { fmtDuration, fmtEstimate } from "../../lib/format";
 import { promptTitle } from "../../lib/refs";
 import { stageInfo, stepProgress, timeBreakdown } from "../../lib/stages";
+import { useElapsed } from "../../lib/useElapsed";
 import { sortedGenerations, useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
 import { ASSET_DRAG_TYPE } from "../generate/RefsZone";
@@ -154,6 +155,7 @@ function GenerationCard({ gen }: { gen: Generation }) {
   const assets = useLibrary((s) => s.assets);
   const preview = useLibrary((s) => s.previews[gen.id]);
   const selected = useUI((s) => s.selectedGen === gen.id);
+  const elapsed = useElapsed(gen.status === "running" ? gen.started : null);
   const asset = actions.outputAsset(gen, assets);
   const title =
     asset?.name ??
@@ -182,6 +184,9 @@ function GenerationCard({ gen }: { gen: Generation }) {
               {stageInfo(gen.stage, gen).short}
               {stepProgress(gen) ? ` · ${stepProgress(gen)!.pct}%` : "…"}
             </span>
+            {elapsed != null && (
+              <span className="text-[10px] text-white/70 tabular-nums">{fmtDuration(elapsed)}</span>
+            )}
           </div>
         )}
         {gen.status === "queued" && (

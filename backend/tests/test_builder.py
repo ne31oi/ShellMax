@@ -211,5 +211,7 @@ def test_disabled_and_zero_loras_are_skipped():
 
 
 def test_style_triggers_are_appended_once():
-    assert with_style_triggers("a cat", ["cinematic"]) == "a cat\n\ncinematic"
+    assert with_style_triggers("a cat", ["cinematic"]) == "a cat\n\ncinematic."
     assert with_style_triggers("a Cinematic cat", ["cinematic"]) == "a Cinematic cat"
+    six = "summary:\nA.\n\ndetailed_description:\nB.\n\noverall_soundscape:\nC."
+    assert "visual_style:\n\ncinematic.\n\noverall_soundscape:" in with_style_triggers(six, ["cinematic"])

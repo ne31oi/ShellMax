@@ -134,6 +134,7 @@ class UIParams(BaseModel):
     duration: float = Field(2.0, ge=0.2, le=150)
     quality: str = "standard"
     look: str = "cinema"  # natural | documentary | cinema | social — visual_style delivery, not resolution
+    light: str = "auto"  # expert lighting geometry (Shot Bible); auto = none at expand
     styles: list[StyleSpec] = Field(default_factory=list)
     seed: int | None = None  # None -> random
     variants: int = Field(1, ge=1, le=8)
@@ -145,6 +146,13 @@ class UIParams(BaseModel):
         from .look import normalize_look
 
         return normalize_look(v)
+
+    @field_validator("light")
+    @classmethod
+    def _known_light(cls, v: str) -> str:
+        from .light import normalize_light
+
+        return normalize_light(v)
 
     @field_validator("aspect")
     @classmethod

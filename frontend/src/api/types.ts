@@ -175,6 +175,7 @@ export interface UIParams {
   duration: number;
   quality: string;
   look?: string;
+  light?: string;
   styles: { style_id: number; strength: number | null }[];
   seed: number | null;
   variants: number;
@@ -255,6 +256,19 @@ export interface LookPreset {
   hint: string;
 }
 
+export interface CameraPreset {
+  id: string;
+  label: string;
+  hint: string;
+  emotion?: string;
+}
+
+export interface LightPreset {
+  id: string;
+  label: string;
+  hint: string;
+}
+
 export interface QualityPresetValues {
   label: string;
   megapixels: number;
@@ -272,9 +286,11 @@ export interface Meta {
   aspects: { id: string; ratio: [number, number]; short: string }[];
   quality: QualityPreset[];
   look: LookPreset[];
+  camera?: CameraPreset[];
+  light?: LightPreset[];
   duration: { min: number; max: number; optimal: [number, number] };
   max_refs: Record<RefKind, number>;
-  defaults: { aspect: string; duration: number; quality: string; look?: string; prompt_template: string };
+  defaults: { aspect: string; duration: number; quality: string; look?: string; camera?: string; light?: string; prompt_template: string };
   face_strength: FaceStrength[];
   enhance_scale?: EnhanceScalePreset[];
   enhance_color?: EnhanceColorPreset[];

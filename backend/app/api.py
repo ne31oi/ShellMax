@@ -19,6 +19,8 @@ from .jobs.estimator import estimate as estimate_time
 from .jobs.queue import push_generation, register_asset
 from .media import library
 from .workflow import enhance, face, presets, quality as quality_cfg
+from .workflow.camera import camera_presets
+from .workflow.light import light_presets
 from .workflow.look import look_presets
 from .workflow.params import ASPECT_RATIOS, FPS, MAX_REFS, EnhanceUIParams, EngineProfile, FaceUIParams, UIParams, frame_count
 
@@ -50,8 +52,10 @@ def meta():
         ],
         "duration": {"min": 1.0, "max": 20.0, "optimal": [5.0, 15.0]},
         "look": look_presets(),
+        "camera": camera_presets(),
+        "light": light_presets(),
         "max_refs": MAX_REFS,
-        "defaults": {**d["ui"], "look": "cinema"},
+        "defaults": {**d["ui"], "look": "cinema", "camera": "auto", "light": "auto"},
         "face_strength": face.strength_presets(),
         "enhance_scale": enhance.scale_presets(),
         "enhance_color": enhance.color_presets(),

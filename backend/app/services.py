@@ -27,6 +27,30 @@ def bootstrap() -> None:
             prof = presets.default_profile()
             s.add(EngineProfileRow(name=prof.name, data=prof.model_dump(), is_default=True))
         s.commit()
+    _migrate_realism_to_styles()
+
+
+def _migrate_realism_to_styles() -> None:
+    """h3-realism-people left the engine recipe: strip it from profiles and offer it as a style chip."""
+    path = presets.realism_lora_path()
+    with session() as s:
+        for row in s.exec(select(EngineProfileRow)).all():
+            data = dict(row.data or {})
+            before = list(data.get("loras_final") or [])
+            after = [dict(l) for l in before if not presets.is_realism_lora(l.get("path", ""))]
+            if after != before:
+                data["loras_final"] = after
+                row.data = data
+                s.add(row)
+        have = any(presets.is_realism_lora(st.path) for st in s.exec(select(StyleLora)).all())
+        if not have and Path(path).is_file():
+            s.add(StyleLora(
+                name=presets.REALISM_STYLE_NAME,
+                path=path,
+                default_strength=1.0,
+                triggers=[presets.REALISM_TRIGGER],
+            ))
+        s.commit()
 
 
 # ---------------------------------------------------------------- profiles

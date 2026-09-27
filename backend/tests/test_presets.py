@@ -2,7 +2,13 @@
 
 from app.jobs.queue import asset_title, humanize_error
 from app.workflow.params import EngineProfile, LoraSpec, ResolvedRef, UIParams, clean_path
-from app.workflow.presets import default_profile, expand, resolution_for
+from app.workflow.presets import (
+    REALISM_STEM,
+    default_profile,
+    expand,
+    resolution_for,
+    with_lora_triggers,
+)
 
 
 def profile(**over) -> EngineProfile:
@@ -23,10 +29,36 @@ def test_quality_preset_maps_to_megapixels_and_scale():
 
 def test_styles_append_to_main_chain_after_technical_loras():
     style = (LoraSpec(path="F:/cinema.safetensors", strength=0.8), ["cinematic look"])
-    full = expand(UIParams(prompt="a cat", look="natural"), profile(), [], [style], seed=1, filename_prefix="x")
+    six = "summary:\nA.\n\ndetailed_description:\nB.\n\noverall_soundscape:\nC.\n\nnon_diegetic_music:\nN/A"
+    full = expand(UIParams(prompt=six, look="social"), profile(), [], [style], seed=1, filename_prefix="x")
     assert [l.path for l in full.loras_main] == ["F:/turbo.safetensors", "F:/cinema.safetensors"]
-    assert full.prompt.endswith("cinematic look")
+    # Style trigger + look cues both go into visual_style (trigger first).
+    assert "visual_style:\n\ncinematic look." in full.prompt
+    assert "Punchy contemporary" in full.prompt
+    assert full.prompt.index("cinematic look.") < full.prompt.index("Punchy contemporary")
+    assert full.prompt.index("Punchy contemporary") < full.prompt.index("overall_soundscape:")
+    assert not full.prompt.rstrip().endswith("cinematic look")
     assert [l.path for l in full.loras_final] == ["F:/lms.safetensors"]
+
+
+def test_realism_style_goes_on_final_chain_with_trigger():
+    style = (LoraSpec(path=f"F:/{REALISM_STEM}.safetensors", strength=1.0), ["r34l1sm"])
+    six = "summary:\nA.\n\ndetailed_description:\nB.\n\noverall_soundscape:\nC."
+    full = expand(UIParams(prompt=six, look="social"), profile(), [], [style], seed=1, filename_prefix="x")
+    assert [l.path for l in full.loras_main] == ["F:/turbo.safetensors"]
+    assert [l.path for l in full.loras_final] == ["F:/lms.safetensors", f"F:/{REALISM_STEM}.safetensors"]
+    assert "r34l1sm." in full.prompt
+    assert full.prompt.index("r34l1sm.") < full.prompt.index("overall_soundscape:")
+    # Realism + look can coexist (both are photographic).
+    assert "Punchy contemporary" in full.prompt
+
+
+def test_default_profile_has_no_realism_lora():
+    prof = default_profile()
+    stems = {l.path.replace("\\", "/").rsplit("/", 1)[-1].rsplit(".", 1)[0]
+             for l in [*prof.loras_main, *prof.loras_final]}
+    assert REALISM_STEM not in stems
+    assert any("lms" in s for s in stems)
 
 
 def test_refs_pass_through_in_order():
@@ -89,15 +121,7 @@ def test_asset_title_skips_header_and_tags():
     assert asset_title(structured, 4) == "Woman dances in the rain"
 
 
-def test_realism_lora_trigger_goes_into_visual_style():
-    from app.workflow.presets import lora_triggers, with_lora_triggers
-
-    prof = default_profile()
-    assert lora_triggers(prof) == ["r34l1sm"]  # realism-people is on in the workflow's recipe
-    off = prof.model_copy(update={"loras_final": [l.model_copy(update={"enabled": "realism" not in l.path})
-                                                  for l in prof.loras_final]})
-    assert lora_triggers(off) == []
-
+def test_style_triggers_go_into_visual_style():
     six = "summary:\nA.\n\ndetailed_description:\nB.\n\noverall_soundscape:\nC.\n\nnon_diegetic_music:\nN/A"
     out = with_lora_triggers(six, ["r34l1sm"])
     assert "detailed_description:\nB.\n\nvisual_style:\n\nr34l1sm.\n\noverall_soundscape:" in out

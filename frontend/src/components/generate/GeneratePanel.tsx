@@ -135,7 +135,7 @@ function GenerateBar({ estimates }: { estimates: Record<string, Estimate | undef
               <MenuItem
                 onSelect={() => {
                   const d = useLibrary.getState().meta?.defaults;
-                  if (d) set({ aspect: d.aspect, duration: d.duration, quality: d.quality, look: d.look ?? "cinema", styles: [], variants: 1, seedLocked: false });
+                  if (d) set({ aspect: d.aspect, duration: d.duration, quality: d.quality, look: d.look ?? "cinema", camera: d.camera ?? "auto", light: d.light ?? "auto", styles: [], variants: 1, seedLocked: false });
                 }}
               >
                 <RotateCcw size={13} /> Сбросить к значениям воркфлоу

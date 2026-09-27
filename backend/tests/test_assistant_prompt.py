@@ -73,9 +73,45 @@ def test_chat_system_fresh_hides_panel_state():
     refs = [RefInfo(kind="image", name="girl.png")]
     fresh = prompt.chat_system(refs, 5.0, "old draft about a donut", fresh=True)
     assert "girl.png" not in fresh and "donut" not in fresh and prompt.SPEC in fresh
+    assert "=== КАМЕРА ===" not in fresh  # expert camera is panel state — hidden on fresh chat
     later = prompt.chat_system(refs, 5.0, "old draft about a donut", fresh=False)
     assert "<Picture 1> = girl.png" in later and "donut" in later
     assert "3–5 пронумерованных вариантов" in later and "существуют ТОЛЬКО в чате" in later
+    assert "=== КАМЕРА ===" in later
+
+
+def test_compose_camera_block_priority_and_expert_override():
+    auto = compose_system([], 2.0, camera="auto")
+    assert "=== КАМЕРА ===" in auto
+    assert "экспертный выбор ниже" in auto
+    assert "Сейчас эксперт: auto" in auto
+    assert "low_angle" in auto and "dolly_zoom" in auto and "snorricam" in auto
+    assert "один" in auto.lower() or "one" in auto.lower() or "ОДИН" in auto
+
+    forced = compose_system([], 2.0, camera="dutch_angle")
+    assert "Сейчас эксперт: dutch_angle" in forced
+    assert "ПРИНУДИТЕЛЬНО" in forced
+    assert "12–20°" in forced or "12-20" in forced
+    assert "Dutch-angle" in forced or "Dutch angle" in forced.lower() or "dutch" in forced.lower()
+    assert "NEGATIVE" in forced or "негатив" in forced.lower() or "no dutch" in forced.lower()
+
+
+def test_compose_light_block():
+    auto = compose_system([], 2.0, light="auto")
+    assert "=== СВЕТ (эксперт) ===" in auto
+    assert "ПРИНУДИТЕЛЬНО" not in auto.split("=== СВЕТ")[1]
+
+    forced = compose_system([], 2.0, light="overhead_soft")
+    assert "overhead_soft" in forced and "ПРИНУДИТЕЛЬНО" in forced.split("=== СВЕТ")[1]
+
+
+def test_edit_system_includes_camera_unless_face():
+    s = prompt.edit_system([], 5.0, camera="tracking", light="hard_side")
+    assert "=== КАМЕРА ===" in s and "tracking" in s and "ПРИНУДИТЕЛЬНО" in s
+    assert "=== СВЕТ (эксперт) ===" in s and "hard_side" in s
+    face = prompt.edit_system([], 2.0, face=True, camera="snorricam", light="hard_side")
+    assert "=== КАМЕРА ===" not in face
+    assert "=== СВЕТ (эксперт) ===" not in face
 
 
 def test_alternate_merges_failed_turns():

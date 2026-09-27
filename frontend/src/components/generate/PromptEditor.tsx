@@ -4,8 +4,8 @@ import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type 
 import StarterKit from "@tiptap/starter-kit";
 import type { JSONContent } from "@tiptap/core";
 import clsx from "clsx";
-import { AlertTriangle, AudioLines, FileText, History, Sparkles, Square } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { AlertTriangle, AudioLines, FileText, History, Square } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { urls } from "../../api/client";
 import type { RefItem } from "../../api/types";
@@ -13,11 +13,11 @@ import { emit, on } from "../../lib/bus";
 import { KIND_COLOR, REF_TOKEN, danglingTags, fromModelPrompt, tagOf, toModelPrompt } from "../../lib/refs";
 import { frameCount } from "../../lib/format";
 import { useAssistant } from "../../store/assistant";
-import { EditPromptButton } from "../assistant/EditPromptButton";
+import { ComposeAssistButton, EditAssistButton, PromptAssistDialog } from "../assistant/PromptAssistDialog";
 import { useForm } from "../../store/form";
 import { useUI } from "../../store/ui";
 import { useLibrary } from "../../store/library";
-import { Button, Menu, MenuItem, MenuLabel, Spinner, Tip } from "../ui";
+import { Button, Menu, MenuItem, MenuLabel, Spinner } from "../ui";
 
 /** Live assistant text without the ```text fence lines. */
 export function stripFence(text: string): string {
@@ -258,6 +258,8 @@ export function PromptEditor() {
   }, [job?.text]);
 
   // plain words + reference tags -> a prompt written by the local assistant to the user's specification
+  const [assistMode, setAssistMode] = useState<"compose" | "edit" | null>(null);
+
   const convert = async () => {
     const f = useForm.getState();
     const text = toModelPrompt(f.prompt, f.refs).trim();
@@ -272,6 +274,8 @@ export function PromptEditor() {
       refs: f.refs.map((r) => ({ upload_id: r.upload.id, with_audio: r.withAudio })),
       duration: frameCount(f.duration) / 24,
       look: f.look,
+      camera: f.camera,
+      light: f.light,
     });
     if (!result) return;
     useForm.getState().setPrompt(fromModelPrompt(result, useForm.getState().refs), true);
@@ -288,10 +292,22 @@ export function PromptEditor() {
       refs: f.refs.map((r) => ({ upload_id: r.upload.id, with_audio: r.withAudio })),
       duration: frameCount(f.duration) / 24,
       look: f.look,
+      camera: f.camera,
+      light: f.light,
     });
     if (!result) return;
     useForm.getState().setPrompt(fromModelPrompt(result, useForm.getState().refs), true);
     useUI.getState().toast("Промпт исправлен", "ok", { label: "Вернуть как было", run: () => useForm.getState().setPrompt(before, true) });
+  };
+
+  const openCompose = () => {
+    const text = toModelPrompt(useForm.getState().prompt, useForm.getState().refs).trim();
+    if (!text) {
+      useUI.getState().toast("Опишите обычными словами, что должно происходить в видео", "info");
+      emit("focusPrompt");
+      return;
+    }
+    setAssistMode("compose");
   };
 
   const applyTemplate = () => {
@@ -344,22 +360,27 @@ export function PromptEditor() {
               <Square size={11} /> Стоп
             </Button>
           ) : structured ? (
-            <EditPromptButton
-              onSubmit={editWithAssistant}
+            <EditAssistButton
+              onOpen={() => setAssistMode("edit")}
               disabled={videoBusy || !!job}
               hint={videoBusy ? "Ассистент будет доступен, когда закончится генерация видео" : "Ассистент занят"}
             />
           ) : (
-            <Tip text={videoBusy ? "Ассистент будет доступен, когда закончится генерация видео" : "Ассистент перепишет ваше описание в промпт по спецификации. Теги референсов сохранятся"}>
-              <span>
-                <Button variant="ghost" size="sm" onClick={convert} disabled={videoBusy || !!job} className="text-accent hover:text-accent-strong">
-                  <Sparkles size={13} /> В промпт
-                </Button>
-              </span>
-            </Tip>
+            <ComposeAssistButton
+              onOpen={openCompose}
+              disabled={videoBusy || !!job}
+              hint={videoBusy ? "Ассистент будет доступен, когда закончится генерация видео" : "Ассистент занят"}
+            />
           )}
         </div>
       </div>
+      <PromptAssistDialog
+        mode={assistMode}
+        open={assistMode !== null}
+        onOpenChange={(o) => !o && setAssistMode(null)}
+        onCompose={convert}
+        onEdit={editWithAssistant}
+      />
       {dangling.length > 0 && (
         <p className="mt-1.5 flex items-center gap-1.5 text-xs text-warn">
           <AlertTriangle size={12} /> Нет референса для {dangling.join(", ")}

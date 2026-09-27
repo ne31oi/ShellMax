@@ -2,7 +2,7 @@ import { PencilLine } from "lucide-react";
 import { useState } from "react";
 import { Button, Popover, Tip } from "../ui";
 
-/** "Поправить": describe a change to a finished prompt in plain words; the assistant applies only that change. */
+/** Face refine: describe a change in plain words (popover). Generate panel uses PromptAssistDialog instead. */
 export function EditPromptButton({
   onSubmit,
   disabled,
@@ -10,7 +10,7 @@ export function EditPromptButton({
 }: {
   onSubmit: (instruction: string) => void;
   disabled?: boolean;
-  hint?: string; // why it is disabled
+  hint?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");

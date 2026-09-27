@@ -15,6 +15,8 @@ from .llm.downloader import downloads
 from .llm.registry import CHOICES, FILES
 from .llm.service import AssistantBusy, AssistantService
 from .media import library
+from .workflow.camera import user_camera_directive
+from .workflow.light import user_light_directive
 
 router = APIRouter(prefix="/api/assistant")
 TMP = settings.DATA_DIR / "assistant_tmp"
@@ -100,6 +102,8 @@ class ComposeIn(BaseModel):
     refs: list[ComposeRef] = []
     duration: float = 2.0
     look: str = "cinema"
+    camera: str = "auto"
+    light: str = "auto"
 
 
 @router.post("/compose")
@@ -118,9 +122,11 @@ def compose(body: ComposeIn, request: Request):
             infos.append(prompt.RefInfo(kind=up.kind, name=up.orig_name, with_audio=ref.with_audio))
             if up.kind == "image":
                 images.append(Path(up.path))
-    system = prompt.compose_system(infos, body.duration, body.look)
+    system = prompt.compose_system(infos, body.duration, body.look, body.camera, body.light)
     # the huge spec comes first; restate at the end that the action is the user's, not the photo's
     user = (f"Описание пользователя (ГЛАВНОЕ — действие видео берётся только отсюда):\n{body.text.strip()}\n\n"
+            f"{user_camera_directive(body.camera)}\n\n"
+            f"{user_light_directive(body.light)}\n\n"
             "Преобразуй его в промпт. summary и detailed_description описывают именно это действие; "
             "позу, жесты и предметы с картинок не переносить.")
     return _sse(svc.stream(system, user, images))
@@ -135,17 +141,22 @@ class FaceIn(BaseModel):
 
 class EditIn(BaseModel):
     prompt: str  # current prompt (model text with <Picture N> tags)
-    instruction: str  # what to change, in plain words
+    instruction: str = ""  # what to change, in plain words (optional if expert camera/light set)
     refs: list[ComposeRef] = []
     duration: float = 2.0
     look: str = "cinema"
+    camera: str = "auto"
+    light: str = "auto"
     face: FaceIn | None = None  # set when editing a face refine prompt
 
 
 @router.post("/edit")
 def edit(body: EditIn, request: Request):
     svc = _svc(request)
-    if not body.prompt.strip() or not body.instruction.strip():
+    if not body.prompt.strip():
+        raise HTTPException(422, "Нет промпта для правки")
+    expert_ok = body.face is None and (body.camera != "auto" or body.light != "auto")
+    if not body.instruction.strip() and not expert_ok:
         raise HTTPException(422, "Напишите, что изменить")
     if (busy := _precheck(svc)) is not None:
         return busy
@@ -165,9 +176,26 @@ def edit(body: EditIn, request: Request):
                 infos.append(prompt.RefInfo(kind=up.kind, name=up.orig_name, with_audio=ref.with_audio))
                 if up.kind == "image":
                     images.append(Path(up.path))
-    system = prompt.edit_system(infos, body.duration, face=body.face is not None, look=body.look)
+    system = prompt.edit_system(infos, body.duration, face=body.face is not None, look=body.look,
+                                camera=body.camera, light=body.light)
+    extras = ""
+    if body.face is None:
+        extras = f"\n\n{user_camera_directive(body.camera)}\n\n{user_light_directive(body.light)}"
+    instruction = body.instruction.strip()
+    if not instruction and body.face is None:
+        bits = []
+        if body.camera != "auto":
+            bits.append("камеру в detailed_description")
+        if body.light != "auto":
+            bits.append("свет в visual_style")
+        joined = " и ".join(bits) if bits else "экспертные настройки"
+        instruction = (
+            f"Перепиши только {joined} строго по экспертному выбору; "
+            "остальной текст, структуру полей и теги референсов не меняй."
+        )
     user = (f"Текущий промпт:\n```text\n{body.prompt.strip()}\n```\n\n"
-            f"Что изменить (слова пользователя):\n{body.instruction.strip()}\n\nВерни полный исправленный промпт.")
+            f"Что изменить (слова пользователя):\n{instruction}{extras}\n\n"
+            "Верни полный исправленный промпт.")
     return _sse(svc.stream(system, user, images))
 
 
@@ -308,6 +336,8 @@ class ChatIn(BaseModel):
     draft: str = ""  # the generation panel's current prompt
     duration: float = 2.0
     look: str = "cinema"
+    camera: str = "auto"
+    light: str = "auto"
 
 
 @router.post("/chats/{cid}/send")
@@ -343,7 +373,7 @@ def send(cid: str, body: ChatIn, request: Request):
         images.append(ATTACH_DIR / msg["attachment"]["id"])
         history[-1]["content"] += (f"\n\n[Вложение чата: {msg['attachment']['name']} — прикреплено для описания/анализа, "
                                    "НЕ референс генерации, не называй его <Picture N>]")
-    system = prompt.chat_system(infos, body.duration, body.draft, fresh, body.look)
+    system = prompt.chat_system(infos, body.duration, body.draft, fresh, body.look, body.camera, body.light)
 
     async def run():
         svc.chat_id = cid

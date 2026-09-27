@@ -133,7 +133,10 @@ CINEMA_CRAFT = """=== РЕАЛИЗМ И КИНОШНОСТЬ ===
 5) Короткие клипы (≲ 4 с): обычно ОДИН [Shot 1], одна камера, один эмоциональный бит — не трейлер из трёх склеек."""
 
 
-def compose_system(refs: list[RefInfo], duration: float, look: str | None = None) -> str:
+def compose_system(refs: list[RefInfo], duration: float, look: str | None = None,
+                   camera: str | None = "auto", light: str | None = "auto") -> str:
+    from ..workflow.camera import assistant_camera_block
+    from ..workflow.light import assistant_light_block
     from ..workflow.look import assistant_look_hint
 
     seconds = max(2.5, round(duration, 1))
@@ -142,6 +145,8 @@ def compose_system(refs: list[RefInfo], duration: float, look: str | None = None
                   else "Для такой длины обычно достаточно одного-двух кадров (shots).")
     look_line = assistant_look_hint(look)
     look_block = f"\n=== ПОДАЧА ===\n{look_line}\n" if look_line else ""
+    camera_block = assistant_camera_block(camera)
+    light_block = assistant_light_block(light)
     return f"""Ты превращаешь описание пользователя в промпт для видео-модели MiniMax H3 (видео + синхронный звук).
 Пользователь пишет обычными словами, на любом языке, и может ставить метки референсов (<Picture N>, <Video N>, <Audio N>).
 Сохрани его замысел полностью: кто, что делает, где, какие реплики. То, что он не уточнил (камера, свет, физика,
@@ -153,6 +158,9 @@ def compose_system(refs: list[RefInfo], duration: float, look: str | None = None
 
 {CINEMA_CRAFT}
 {look_block}
+{camera_block}
+{light_block}
+
 === КЛИП ===
 Длительность: ~{seconds} с. Таймкоды кадров ([Shot 2] At 00:03.000) должны укладываться в неё, последняя склейка ≤ длительность − 2 с.
 {shots_hint}
@@ -217,7 +225,10 @@ EDIT_RULES = """Ты ПРАВИШЬ готовый промпт MiniMax H3 по 
 - Верни ПОЛНЫЙ исправленный промпт, а не только изменённые куски."""
 
 
-def edit_system(refs: list[RefInfo], duration: float, face: bool = False, look: str | None = None) -> str:
+def edit_system(refs: list[RefInfo], duration: float, face: bool = False, look: str | None = None,
+                camera: str | None = "auto", light: str | None = "auto") -> str:
+    from ..workflow.camera import assistant_camera_block
+    from ..workflow.light import assistant_light_block
     from ..workflow.look import assistant_look_hint
 
     if face:
@@ -225,16 +236,21 @@ def edit_system(refs: list[RefInfo], duration: float, face: bool = False, look: 
                    "персонажа (прикреплено первым), <Picture 2> — крупный план лица из него (прикреплено вторым), "
                    "<Audio 1> — звук клипа (ты его не слышишь). Промпт должен остаться про крупный план лица, "
                    "кадрирование и движения — как в исходном видео.")
+        camera_block = ""
+        light_block = ""
     else:
         seconds = max(2.5, round(duration, 1))
         look_line = assistant_look_hint(look)
         look_bit = f"\nПодача: {look_line}" if look_line else ""
         context = (f"Длительность клипа ~{seconds} с (таймкоды кадров должны укладываться в неё).{look_bit}\n\n"
                    f"=== РЕФЕРЕНСЫ ===\n{_refs_block(refs)}")
+        camera_block = f"\n{assistant_camera_block(camera)}\n"
+        light_block = f"\n{assistant_light_block(light)}\n"
     return f"""{EDIT_RULES}
 
 {context}
-
+{camera_block}
+{light_block}
 {CINEMA_CRAFT if not face else ""}
 
 {SPEC_BLOCK}
@@ -244,12 +260,15 @@ def edit_system(refs: list[RefInfo], duration: float, face: bool = False, look: 
 {OUTPUT_CONTRACT}"""
 
 
-def chat_system(refs: list[RefInfo], duration: float, draft: str, fresh: bool, look: str | None = None) -> str:
+def chat_system(refs: list[RefInfo], duration: float, draft: str, fresh: bool, look: str | None = None,
+                camera: str | None = "auto", light: str | None = "auto") -> str:
     """Ideas chat (studio assistant-stream.ts buildSystemMessage, adapted to this spec and output contract).
 
     fresh: a new chat (studio правка 166) - the generation panel's refs and draft are NOT shown, so a new
     conversation does not pick up another session's topic.
     """
+    from ..workflow.camera import assistant_camera_block
+    from ..workflow.light import assistant_light_block
     from ..workflow.look import assistant_look_hint
 
     seconds = max(2.5, round(duration, 1))
@@ -260,6 +279,8 @@ def chat_system(refs: list[RefInfo], duration: float, draft: str, fresh: bool, l
                        f"ТОЛЬКО если пользователь прямо на него ссылается):\n{draft.strip() or '(пусто)'}")
     look_line = assistant_look_hint(look)
     look_block = f"\nПодача панели генерации: {look_line}\n" if look_line and not fresh else ""
+    camera_block = f"\n{assistant_camera_block(camera)}\n" if not fresh else ""
+    light_block = f"\n{assistant_light_block(light)}\n" if not fresh else ""
     return f"""Ты — ассистент видео-студии на модели MiniMax H3 (видео + синхронный звук). Помогаешь придумывать идеи
 сцен и превращать их в промпты. Общайся по-русски.
 
@@ -267,6 +288,8 @@ def chat_system(refs: list[RefInfo], duration: float, draft: str, fresh: bool, l
 
 {CINEMA_CRAFT}
 {look_block}
+{camera_block}
+{light_block}
 === КОНТЕКСТ СЕССИИ ===
 Длительность клипа: ~{seconds} с (таймкоды кадров должны укладываться в неё, последняя склейка ≤ длительность − 2 с).
 {"На короткой длительности предлагай один shot." if seconds <= 4 else ""}

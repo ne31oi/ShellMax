@@ -19,11 +19,6 @@
         "path": "loras/minimax_h3/minimax_h3_lms_v1.0_r64.safetensors",
         "strength": 0.5,
         "enabled": true
-      },
-      {
-        "path": "loras/minimax_h3/h3-realism-people-t2v-i2v-r2v.safetensors",
-        "strength": 1.0,
-        "enabled": true
       }
     ],
     "low_vram": false

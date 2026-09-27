@@ -17,8 +17,15 @@ from .params import (
 )
 from .quality import quality_presets  # noqa: F401 — re-exported for callers / tests
 from .look import apply_look
+from .light import apply_light
 
 MAX_SEED = 2**50  # RandomNoise accepts up to 2**64-1; keep seeds short enough to read
+
+# Former engine-recipe LoRA; now a chip «Стиль». Stays on the final chain (workflow node 199).
+REALISM_STEM = "h3-realism-people-t2v-i2v-r2v"
+REALISM_REL = "loras/minimax_h3/h3-realism-people-t2v-i2v-r2v.safetensors"
+REALISM_TRIGGER = "r34l1sm"
+REALISM_STYLE_NAME = "Realism people"
 
 
 def default_profile() -> EngineProfile:
@@ -36,6 +43,10 @@ def default_profile() -> EngineProfile:
     return EngineProfile(**eng)
 
 
+def realism_lora_path() -> str:
+    return str((settings.legacy_models_dir() / REALISM_REL).resolve())
+
+
 def new_seed() -> int:
     return random.randint(1, MAX_SEED)
 
@@ -47,30 +58,17 @@ def resolution_for(aspect: str, quality: str) -> dict:
     return {"base": [w, h], "final": [fw, fh]}
 
 
-def with_style_triggers(prompt: str, triggers: list[str]) -> str:
-    missing = [t for t in triggers if t and t.lower() not in prompt.lower()]
-    if not missing:
-        return prompt
-    return prompt.rstrip() + "\n\n" + ", ".join(missing)
+def _lora_stem(path: str) -> str:
+    return path.replace("\\", "/").rsplit("/", 1)[-1].rsplit(".", 1)[0]
 
 
-# Trigger words of the engine's technical LoRAs, by file name. The workflow's prompt (node 84) carries
-# "visual_style: r34l1sm." because node 199 loads h3-realism-people; a prompt written here must too.
-LORA_TRIGGERS = {"h3-realism-people-t2v-i2v-r2v": "r34l1sm"}
-
-
-def lora_triggers(profile: EngineProfile) -> list[str]:
-    out = []
-    for lora in [*profile.loras_main, *profile.loras_final]:
-        stem = lora.path.replace("\\", "/").rsplit("/", 1)[-1].rsplit(".", 1)[0]
-        if lora.enabled and lora.strength and (t := LORA_TRIGGERS.get(stem)) and t not in out:
-            out.append(t)
-    return out
+def is_realism_lora(path: str) -> bool:
+    return _lora_stem(path) == REALISM_STEM
 
 
 def with_lora_triggers(prompt: str, triggers: list[str]) -> str:
     """Put each missing trigger first in visual_style (created before overall_soundscape if absent)."""
-    missing = [t for t in triggers if t.lower() not in prompt.lower()]
+    missing = [t for t in triggers if t and t.lower() not in prompt.lower()]
     if not missing:
         return prompt
     words = " ".join(f"{t}." for t in missing)
@@ -84,6 +82,10 @@ def with_lora_triggers(prompt: str, triggers: list[str]) -> str:
     else:
         return prompt.rstrip() + "\n\n" + words
     return "\n".join(lines)
+
+
+# Back-compat alias: style triggers used to be dumped at the end of the prompt (ignored by H3).
+with_style_triggers = with_lora_triggers
 
 
 def expand(
@@ -102,9 +104,16 @@ def expand(
         raise ValueError(f"unknown quality preset {ui.quality!r}")
     q = presets[ui.quality]
 
-    triggers = [t for _, trig in styles for t in trig]
-    prompt_text = with_lora_triggers(with_style_triggers(ui.prompt, triggers), lora_triggers(profile))
+    style_triggers = [t for _, trig in styles for t in trig]
+    prompt_text = with_lora_triggers(ui.prompt, style_triggers)
+    # Expert light geometry (P8) then look delivery (P9) into visual_style.
+    prompt_text = apply_light(prompt_text, getattr(ui, "light", None))
     prompt_text = apply_look(prompt_text, getattr(ui, "look", None))
+
+    # Realism stays on the final AV chain (as in the workflow). Other styles → main stack.
+    style_main = [lora for lora, _ in styles if not is_realism_lora(lora.path)]
+    style_final = [lora for lora, _ in styles if is_realism_lora(lora.path)]
+
     return FullParams(
         prompt=prompt_text,
         refs=refs,
@@ -118,8 +127,8 @@ def expand(
         vae_video=profile.vae_video,
         vae_audio=profile.vae_audio,
         upscaler=profile.upscaler,
-        loras_main=[*profile.loras_main, *(lora for lora, _ in styles)],
-        loras_final=list(profile.loras_final),
+        loras_main=[*profile.loras_main, *style_main],
+        loras_final=[*profile.loras_final, *style_final],
         low_vram=profile.low_vram,
         expert=profile.expert,
         filename_prefix=filename_prefix,

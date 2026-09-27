@@ -46,8 +46,10 @@ ShellMax — локальное веб-приложение (FastAPI + React), �
 5. **Таймлайн меняется только командами** (`frontend/src/store/timeline.ts`, `commands.*`) — это даёт undo/redo. Модель данных уже рассчитана на NLE: `Project.timeline` → tracks → clips.
 6. **Правила промптов ассистента = спецификация пользователя.** `backend/app/llm/prompt_spec.md` — дословная копия `MiniMax_H3_Singularity_Prompt_Writing_Specification_Enhanced_EN.md` (снято только markdown-экранирование). Не переписывать и не «улучшать»; обвязка (формат ответа в ```text, честность референсов, правила лица) — в `llm/prompt.py`. Движок, модели, флаги и сэмплинг ассистента повторяют Minimax Studio V6 (`llm/registry.py`, `llm/runner.py`) — менять только по просьбе пользователя.
 7. **Правка референса = производный файл.** Обрезка/фрагмент (`services.edit_upload`, `POST /api/uploads/{id}/edit`) создаёт новый `Upload` (`source_id`, `edit` — всегда относительно оригинала, id детерминированный) и подменяет файл в той же карточке. Граф при этом не меняется — узлы загрузки получают уже обрезанный файл.
-8. **Триггеры технических LoRA** (`presets.LORA_TRIGGERS`, сейчас `r34l1sm` у realism-people) вставляются в `visual_style` в `presets.expand`, если LoRA включена.
-9. **Промпт хранится с токенами** `{{ref:<uid>}}` (`lib/refs.ts`). В `<Picture N>` / `<Video N>` / `<Audio N>` он превращается только при отправке (`toModelPrompt`). Нумерация идёт по типу, в порядке карточек, как в ноде 56.
+8. **Стили (чип «Стиль»).** Любая style-LoRA из библиотеки, включая бывшую рецепт-LoRA `h3-realism-people` (`r34l1sm`). Триггеры выбранных стилей идут в `visual_style` (`presets.expand`), затем look-подсказки (Кино / Клип / …). Realism при выборе вешается на финальную цепочку (как нода 199 воркфлоу); остальные стили — на main.
+9. **Камера (эксперт при генерации промпта).** Каталог приёмов HSE → H3 + геометрия/NEGATIVE из Shot Bible в `workflow/camera.py`. Приоритет для ассистента: экспертный выбор (`camera != auto`) > явный текст пользователя > вывод по смыслу. Один клип — одно camera motion. UI — Select в модалке «В промпт» / «Поправить» (`PromptAssistDialog`), не чип. В `presets.expand` камера не инжектится.
+10. **Свет (эксперт).** Геометрия ключа (Shot Bible P8) в `workflow/light.py`. Тот же приоритет и та же модалка. При `light != auto` строка уходит в `visual_style` и через ассистента, и через `presets.expand` (перед look / P9). `look` — подача/киношность, не замена геометрии света.
+11. **Промпт хранится с токенами** `{{ref:<uid>}}` (`lib/refs.ts`). В `<Picture N>` / `<Video N>` / `<Audio N>` он превращается только при отправке (`toModelPrompt`). Нумерация идёт по типу, в порядке карточек, как в ноде 56.
 
 ## Карта кода
 
@@ -65,6 +67,9 @@ ShellMax — локальное веб-приложение (FastAPI + React), �
 | `backend/app/workflow/builder_face.py` | `FaceFullParams` → граф улучшения лица; превью трекинга (26), отчёт трекера (28), финал (23) |
 | `backend/app/workflow/builder_enhance.py` | `EnhanceFullParams` → граф SeedVR2; финал (13) |
 | `backend/app/workflow/face.py` | Улучшение лица: рецепт по умолчанию, шаблон промпта крупного плана, сетка кадров 17k+5, автодетекция лица для рамки `<Picture 2>` (YuNet → haar) |
+| `backend/app/workflow/look.py` | Подача (cinema/social/…): подсказки в `visual_style` и ассистенту |
+| `backend/app/workflow/camera.py` | Приёмы камеры HSE→H3 + Shot Bible: геометрия, NEGATIVE, one-motion; приоритет эксперт > текст > вывод |
+| `backend/app/workflow/light.py` | Экспертный свет (геометрия ключа): каталог, директивы ассистенту, `apply_light` → `visual_style` |
 | `backend/app/workflow/enhance.py` | SeedVR2: рецепт, пресеты масштаба/цвета, work units |
 | `backend/app/jobs/pipelines.py` | Для каждого типа задачи: этапы с весами, нода → этап, выходные ноды, нода отчёта |
 | `backend/app/jobs/queue.py` | Очередь (одна задача за раз), WS-события ComfyUI → этапы, шаги, прогресс; сохранение черновика и финала; `humanize_error` |
