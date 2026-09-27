@@ -10,6 +10,8 @@ export interface Clip {
   assetId: number;
   in: number; // seconds into the source
   out: number;
+  /** Per-clip mute (audio lane). */
+  muted?: boolean;
 }
 
 export interface Track {
@@ -20,6 +22,9 @@ export interface Track {
 
 export interface TimelineDoc {
   tracks: Track[];
+  masterMute?: boolean;
+  /** 0…1 sequence volume (preview + export). */
+  masterVolume?: number;
 }
 
 export interface Command {
@@ -50,9 +55,15 @@ interface TimelineState {
   setPlayhead: (t: number) => void;
   setPlaying: (p: boolean) => void;
   seekToClip: (clipId: string) => void;
+  /** Soft update (no undo) — for continuous controls like volume. */
+  patchDoc: (partial: Partial<TimelineDoc>) => void;
 }
 
-export const emptyDoc = (): TimelineDoc => ({ tracks: [{ id: "v1", kind: "video", clips: [] }] });
+export const emptyDoc = (): TimelineDoc => ({
+  tracks: [{ id: "v1", kind: "video", clips: [] }],
+  masterMute: false,
+  masterVolume: 1,
+});
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 function persist(doc: TimelineDoc) {
@@ -100,11 +111,18 @@ export const useTimeline = create<TimelineState>((set, get) => ({
     const hit = findClip(get().doc, clipId);
     if (hit) set({ playhead: hit.trackStart, playing: false });
   },
+  patchDoc: (partial) => {
+    const doc = { ...get().doc, ...partial };
+    set({ doc });
+    persist(doc);
+  },
 }));
 
 function normalizeLoaded(doc: TimelineDoc | null | undefined): TimelineDoc {
   if (!doc?.tracks?.length) return emptyDoc();
   return {
+    masterMute: !!doc.masterMute,
+    masterVolume: typeof doc.masterVolume === "number" ? Math.max(0, Math.min(1, doc.masterVolume)) : 1,
     tracks: doc.tracks.map((t) => ({
       ...t,
       clips: (t.clips ?? []).map((c) => ({
@@ -112,6 +130,7 @@ function normalizeLoaded(doc: TimelineDoc | null | undefined): TimelineDoc {
         assetId: (c as Clip & { asset_id?: number }).assetId ?? (c as Clip & { asset_id?: number }).asset_id ?? 0,
         in: c.in ?? 0,
         out: c.out ?? 0,
+        muted: !!c.muted,
       })),
     })),
   };
@@ -156,8 +175,19 @@ export function clipAtTime(doc: TimelineDoc, time: number): ClipHit | null {
   return null;
 }
 
+export function clipSilent(doc: TimelineDoc, clip: Clip): boolean {
+  return !!doc.masterMute || !!clip.muted;
+}
+
+export function effectiveVolume(doc: TimelineDoc, clip: Clip): number {
+  if (clipSilent(doc, clip)) return 0;
+  const v = doc.masterVolume ?? 1;
+  return Math.max(0, Math.min(1, v));
+}
+
 // ---------------------------------------------------------------- commands
 const mapTrack = (doc: TimelineDoc, trackId: string, fn: (clips: Clip[]) => Clip[]): TimelineDoc => ({
+  ...doc,
   tracks: doc.tracks.map((t) => (t.id === trackId ? { ...t, clips: fn(t.clips) } : t)),
 });
 
@@ -226,6 +256,7 @@ export const commands = {
       assetId: hit.clip.assetId,
       in: cutSource,
       out: hit.clip.out,
+      muted: hit.clip.muted,
     };
     return {
       label: "Разрезать клип",
@@ -245,6 +276,34 @@ export const commands = {
           next.splice(i, 2, hit.clip);
           return next;
         }),
+    };
+  },
+  setClipMuted(doc: TimelineDoc, clipId: string, muted: boolean, trackId = "v1"): Command {
+    const prev = doc.tracks.find((t) => t.id === trackId)?.clips.find((c) => c.id === clipId);
+    const was = !!prev?.muted;
+    return {
+      label: muted ? "Выключить звук клипа" : "Включить звук клипа",
+      apply: (d) =>
+        mapTrack(d, trackId, (clips) => clips.map((c) => (c.id === clipId ? { ...c, muted } : c))),
+      revert: (d) =>
+        mapTrack(d, trackId, (clips) => clips.map((c) => (c.id === clipId ? { ...c, muted: was } : c))),
+    };
+  },
+  setMasterMute(doc: TimelineDoc, muted: boolean): Command {
+    const was = !!doc.masterMute;
+    return {
+      label: muted ? "Выключить звук последовательности" : "Включить звук последовательности",
+      apply: (d) => ({ ...d, masterMute: muted }),
+      revert: (d) => ({ ...d, masterMute: was }),
+    };
+  },
+  setMasterVolume(doc: TimelineDoc, volume: number): Command {
+    const was = doc.masterVolume ?? 1;
+    const next = Math.max(0, Math.min(1, volume));
+    return {
+      label: "Громкость последовательности",
+      apply: (d) => ({ ...d, masterVolume: next }),
+      revert: (d) => ({ ...d, masterVolume: was }),
     };
   },
 };

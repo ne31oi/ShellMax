@@ -12,6 +12,7 @@ class TimelineClip(BaseModel):
     asset_id: int = Field(validation_alias=AliasChoices("assetId", "asset_id"))
     in_: float = Field(validation_alias=AliasChoices("in", "in_"), ge=0)
     out: float = Field(ge=0)
+    muted: bool = False
 
     model_config = {"populate_by_name": True}
 
@@ -30,6 +31,8 @@ class TimelineTrack(BaseModel):
 
 class TimelineDoc(BaseModel):
     tracks: list[TimelineTrack] = Field(default_factory=list)
+    master_mute: bool = Field(default=False, validation_alias=AliasChoices("masterMute", "master_mute"))
+    master_volume: float = Field(default=1.0, ge=0, le=1, validation_alias=AliasChoices("masterVolume", "master_volume"))
 
     @field_validator("tracks", mode="before")
     @classmethod
@@ -38,7 +41,7 @@ class TimelineDoc(BaseModel):
 
 
 def empty_timeline() -> dict[str, Any]:
-    return {"tracks": [{"id": "v1", "kind": "video", "clips": []}]}
+    return {"tracks": [{"id": "v1", "kind": "video", "clips": []}], "masterMute": False, "masterVolume": 1}
 
 
 def normalize_timeline(raw: dict[str, Any] | None) -> dict[str, Any]:
@@ -54,11 +57,21 @@ def normalize_timeline(raw: dict[str, Any] | None) -> dict[str, Any]:
             "id": t.id,
             "kind": t.kind,
             "clips": [
-                {"id": c.id, "assetId": c.asset_id, "in": c.in_, "out": c.out}
+                {
+                    "id": c.id,
+                    "assetId": c.asset_id,
+                    "in": c.in_,
+                    "out": c.out,
+                    "muted": c.muted,
+                }
                 for c in t.clips
             ],
         })
-    return {"tracks": out_tracks}
+    return {
+        "tracks": out_tracks,
+        "masterMute": doc.master_mute,
+        "masterVolume": doc.master_volume,
+    }
 
 
 def parse_timeline(raw: dict[str, Any] | None) -> TimelineDoc:

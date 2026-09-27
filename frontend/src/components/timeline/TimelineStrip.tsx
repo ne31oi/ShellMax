@@ -2,7 +2,7 @@ import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type D
 import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
-import { Download, Film, Redo2, Scissors, Undo2 } from "lucide-react";
+import { Download, Film, Redo2, Scissors, Undo2, Volume2, VolumeX } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api, urls } from "../../api/client";
 import type { MediaAsset } from "../../api/types";
@@ -144,6 +144,30 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
         <span className="text-[11px] text-faint tabular-nums">{track.clips.length ? `${track.clips.length} клип. · ${fmtDuration(total)}` : ""}</span>
         <span className="ml-auto" />
         <IconButton
+          label={doc.masterMute ? "Включить звук последовательности" : "Выключить звук последовательности"}
+          size="sm"
+          active={!!doc.masterMute}
+          disabled={!track.clips.length}
+          onClick={() => run(commands.setMasterMute(useTimeline.getState().doc, !useTimeline.getState().doc.masterMute))}
+        >
+          {doc.masterMute ? <VolumeX size={13} /> : <Volume2 size={13} />}
+        </IconButton>
+        {track.clips.length > 0 && (
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={Math.round((doc.masterVolume ?? 1) * 100)}
+            disabled={!!doc.masterMute}
+            title="Громкость последовательности"
+            className="h-1 w-16 cursor-pointer accent-[var(--color-accent)] disabled:opacity-40"
+            onChange={(e) => {
+              const v = Number(e.target.value) / 100;
+              useTimeline.getState().patchDoc({ masterVolume: v });
+            }}
+          />
+        )}
+        <IconButton
           label="Разрезать по курсору (S)"
           size="sm"
           disabled={!track.clips.length}
@@ -211,33 +235,79 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
             <span className="flex items-center gap-2">
               <Film size={14} /> Перетащите клип из медиатеки или дважды щёлкните по нему
             </span>
-            <span className="text-[11px] text-faint/70">Обрезка за края · S — разрез · +/− или Ctrl+колёсико — масштаб · экспорт в mp4</span>
+            <span className="text-[11px] text-faint/70">Обрезка · S — разрез · дорожка звука · экспорт mp4</span>
           </div>
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
             <SortableContext items={track.clips.map((c) => c.id)} strategy={horizontalListSortingStrategy}>
-              <div className="relative flex h-full items-stretch gap-0.5 p-1.5" data-rail="1" onClick={(e) => {
+              <div className="relative flex h-full flex-col gap-1 p-1.5" data-rail="1" onClick={(e) => {
                 if ((e.target as HTMLElement).dataset.rail === "1") {
                   seekFromClientX(e.clientX);
                   useUI.getState().setViewingSequence(true);
                 }
               }}>
-                {track.clips.map((c) => (
-                  <ClipBlock
-                    key={c.id}
-                    clip={c}
-                    asset={assets[c.assetId]}
-                    tall={tall}
-                    scale={scale}
-                    selected={selected === c.id}
-                    onSelect={() => {
-                      setSelected(c.id);
-                      useTimeline.getState().seekToClip(c.id);
-                      useUI.getState().setViewingSequence(true);
-                    }}
-                    onTrim={(inn, out) => run(commands.trimClip(useTimeline.getState().doc, c.id, inn, out))}
-                  />
-                ))}
+                <div className="flex min-h-0 flex-1 items-stretch gap-0.5">
+                  {track.clips.map((c) => (
+                    <ClipBlock
+                      key={c.id}
+                      clip={c}
+                      asset={assets[c.assetId]}
+                      tall={tall}
+                      scale={scale}
+                      selected={selected === c.id}
+                      onSelect={() => {
+                        setSelected(c.id);
+                        useTimeline.getState().seekToClip(c.id);
+                        useUI.getState().setViewingSequence(true);
+                      }}
+                      onTrim={(inn, out) => run(commands.trimClip(useTimeline.getState().doc, c.id, inn, out))}
+                    />
+                  ))}
+                </div>
+                {/* Linked audio lane — mute per clip; layout matches video widths */}
+                <div className="flex h-7 shrink-0 items-stretch gap-0.5" data-rail="1">
+                  <span className="pointer-events-none absolute left-2 text-[9px] uppercase tracking-wider text-faint/60">A</span>
+                  {track.clips.map((c) => {
+                    const w = Math.max(56, (c.out - c.in) * scale);
+                    const silent = !!doc.masterMute || !!c.muted;
+                    const hasAudio = assets[c.assetId]?.has_audio;
+                    return (
+                      <button
+                        key={`a-${c.id}`}
+                        type="button"
+                        style={{ width: w }}
+                        title={
+                          !hasAudio
+                            ? "Нет звуковой дорожки"
+                            : silent
+                              ? "Включить звук клипа"
+                              : "Выключить звук клипа"
+                        }
+                        disabled={!hasAudio || !!doc.masterMute}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!hasAudio) return;
+                          run(commands.setClipMuted(useTimeline.getState().doc, c.id, !c.muted));
+                        }}
+                        className={clsx(
+                          "flex shrink-0 items-center justify-center rounded-md ring-1 transition-colors",
+                          silent || !hasAudio
+                            ? "bg-raised/40 text-faint ring-line"
+                            : "bg-audio/15 text-audio ring-audio/40 hover:bg-audio/25",
+                          selected === c.id && "ring-accent",
+                        )}
+                      >
+                        {!hasAudio ? (
+                          <span className="text-[9px] text-faint">—</span>
+                        ) : silent ? (
+                          <VolumeX size={12} />
+                        ) : (
+                          <Volume2 size={12} />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
                 {total > 0 && (
                   <div
                     className="pointer-events-none absolute bottom-1.5 top-1.5 z-20 w-0.5 bg-accent shadow-[0_0_0_1px_rgba(0,0,0,.4)]"

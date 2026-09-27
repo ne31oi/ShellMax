@@ -5,7 +5,7 @@ import { urls } from "../../api/client";
 import { on } from "../../lib/bus";
 import { fmtTimecode } from "../../lib/format";
 import { useLibrary } from "../../store/library";
-import { clipAtTime, clipDuration, totalDuration, useTimeline, videoTrack } from "../../store/timeline";
+import { clipAtTime, clipDuration, effectiveVolume, totalDuration, useTimeline, videoTrack, commands } from "../../store/timeline";
 import { IconButton } from "../ui";
 
 /** Plays the magnetic video track as one sequence (honours clip in/out). */
@@ -18,11 +18,6 @@ export function SequencePlayer() {
   const assets = useLibrary((s) => s.assets);
   const video = useRef<HTMLVideoElement>(null);
   const box = useRef<HTMLDivElement>(null);
-  const [muted, setMutedState] = useState(() => localStorage.getItem("sm.muted") !== "0");
-  const setMuted = (m: boolean) => {
-    localStorage.setItem("sm.muted", m ? "1" : "0");
-    setMutedState(m);
-  };
   const [fullscreen, setFullscreen] = useState(false);
   const hit = clipAtTime(doc, playhead);
   const asset = hit ? assets[hit.clip.assetId] : undefined;
@@ -30,6 +25,8 @@ export function SequencePlayer() {
   const fps = asset?.fps || 24;
   const clipIdRef = useRef<string | null>(null);
   const seekingRef = useRef(false);
+  const vol = hit ? effectiveVolume(doc, hit.clip) : 0;
+  const muted = vol <= 0.001;
 
   useEffect(() => {
     const sync = () => setFullscreen(document.fullscreenElement === box.current);
@@ -75,6 +72,13 @@ export function SequencePlayer() {
       seekingRef.current = false;
     }
   }, [playhead, hit, playing]);
+
+  useEffect(() => {
+    const v = video.current;
+    if (!v) return;
+    v.volume = Math.max(0, Math.min(1, vol));
+    v.muted = muted;
+  }, [vol, muted, hit?.clip.id]);
 
   useEffect(() => {
     const v = video.current;
@@ -135,7 +139,7 @@ export function SequencePlayer() {
   return (
     <div ref={box} className="flex h-full flex-col bg-bg">
       <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black/40 p-3">
-        <video
+          <video
           ref={video}
           className="max-h-full max-w-full rounded-md shadow-2xl"
           muted={muted}
@@ -197,7 +201,11 @@ export function SequencePlayer() {
             {fmtTimecode(playhead, fps)} <span className="text-faint">/ {fmtTimecode(duration, fps)}</span>
           </span>
           <span className="ml-auto" />
-          <IconButton label={muted ? "Включить звук" : "Выключить звук"} size="sm" onClick={() => setMuted(!muted)}>
+          <IconButton
+            label={doc.masterMute ? "Включить звук последовательности" : "Выключить звук последовательности"}
+            size="sm"
+            onClick={() => useTimeline.getState().run(commands.setMasterMute(useTimeline.getState().doc, !doc.masterMute))}
+          >
             {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
           </IconButton>
           <IconButton
@@ -221,7 +229,7 @@ export function SequenceEmptyHint() {
     <div className={clsx("flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-sm text-muted")}>
       <Film size={28} className="opacity-40" />
       <p>Соберите очередь клипов на таймлайне ниже.</p>
-      <p className="text-xs text-faint">Обрезка за края клипа · S — разрезать по курсору · Экспорт в медиатеку</p>
+      <p className="text-xs text-faint">Обрезка · S — разрез · дорожка звука · экспорт в медиатеку</p>
     </div>
   );
 }

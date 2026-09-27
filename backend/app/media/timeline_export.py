@@ -42,6 +42,8 @@ async def export_timeline(doc: TimelineDoc, assets_by_id: dict[int, MediaAsset],
             if dur < MIN_CLIP_S:
                 raise HTTPException(400, f"Клип «{asset.name}» слишком короткий")
             seg = tmp_path / f"seg_{i:04d}.mp4"
+            silent = doc.master_mute or clip.muted
+            vol = 0.0 if silent else float(doc.master_volume)
             # Re-encode so concat is reliable across different sources.
             args = [
                 ffmpeg, "-y", "-v", "error",
@@ -49,7 +51,14 @@ async def export_timeline(doc: TimelineDoc, assets_by_id: dict[int, MediaAsset],
                 "-i", asset.path,
                 "-t", f"{dur:.4f}",
                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
-                "-c:a", "aac", "-b:a", "192k",
+            ]
+            if silent or vol <= 0.001:
+                args += ["-an"]
+            elif abs(vol - 1.0) > 0.01:
+                args += ["-af", f"volume={vol:.4f}", "-c:a", "aac", "-b:a", "192k"]
+            else:
+                args += ["-c:a", "aac", "-b:a", "192k"]
+            args += [
                 "-movflags", "+faststart",
                 "-avoid_negative_ts", "make_zero",
                 str(seg),

@@ -4,7 +4,10 @@ from app.timeline_schema import empty_timeline, normalize_timeline, parse_timeli
 
 
 def test_empty_and_normalize():
-    assert normalize_timeline(None) == empty_timeline()
+    empty = empty_timeline()
+    assert empty["tracks"][0]["id"] == "v1"
+    assert empty["masterMute"] is False
+    assert normalize_timeline(None) == empty
     assert normalize_timeline({})["tracks"][0]["id"] == "v1"
 
 
@@ -13,11 +16,15 @@ def test_camel_case_roundtrip():
         "tracks": [{
             "id": "v1",
             "kind": "video",
-            "clips": [{"id": "a", "assetId": 7, "in": 1.0, "out": 3.5}],
+            "clips": [{"id": "a", "assetId": 7, "in": 1.0, "out": 3.5, "muted": True}],
         }],
+        "masterMute": True,
+        "masterVolume": 0.5,
     }
     out = normalize_timeline(raw)
-    assert out["tracks"][0]["clips"][0] == {"id": "a", "assetId": 7, "in": 1.0, "out": 3.5}
+    assert out["tracks"][0]["clips"][0] == {"id": "a", "assetId": 7, "in": 1.0, "out": 3.5, "muted": True}
+    assert out["masterMute"] is True
+    assert out["masterVolume"] == 0.5
 
 
 def test_snake_case_input():
@@ -30,6 +37,9 @@ def test_snake_case_input():
     }
     out = normalize_timeline(raw)
     assert out["tracks"][0]["clips"][0]["assetId"] == 3
+    assert out["tracks"][0]["clips"][0]["muted"] is False
+    assert out["masterMute"] is False
+    assert out["masterVolume"] == 1.0
 
 
 def test_rejects_inverted_range():
