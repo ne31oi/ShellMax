@@ -1,14 +1,23 @@
 """Editable quality presets (megapixels + scale) with reset to workflow defaults."""
 
-from app.db.models import kv_set
+from app.db.models import kv_get, kv_set
 from app.workflow import quality as quality_cfg
 from app.workflow.params import UIParams
 from app.workflow.presets import expand, resolution_for
 from tests.test_presets import profile
 
+# Snapshot live KV so pytest never wipes the user's quality settings.
+_prev: object | None = None
+
 
 def setup_function():
+    global _prev
+    _prev = kv_get(quality_cfg.KV_KEY)
     kv_set(quality_cfg.KV_KEY, {})
+
+
+def teardown_function():
+    kv_set(quality_cfg.KV_KEY, _prev if isinstance(_prev, dict) else {})
 
 
 def test_defaults_match_workflow_json():

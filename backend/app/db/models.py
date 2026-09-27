@@ -163,10 +163,14 @@ def kv_get(key: str, default: Any = None) -> Any:
 
 
 def kv_set(key: str, value: Any) -> None:
+    from sqlalchemy.orm.attributes import flag_modified
+
     with session() as s:
         row = s.get(KV, key)
         if row:
             row.value = value
+            # JSON columns: reassignment alone is not always detected as dirty.
+            flag_modified(row, "value")
         else:
             row = KV(key=key, value=value)
         s.add(row)

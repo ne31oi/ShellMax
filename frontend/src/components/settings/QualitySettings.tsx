@@ -1,7 +1,7 @@
 import { RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../api/client";
-import type { QualitySettings } from "../../api/types";
+import type { QualityPresetValues, QualitySettings } from "../../api/types";
 import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
 import { Button, SectionTitle } from "../ui";
@@ -15,12 +15,16 @@ export function QualitySettingsPanel() {
   const [saved, setSaved] = useState<"idle" | "saving" | "saved">("idle");
   const toast = useUI((s) => s.toast);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const pending = useRef<Record<string, QualityPresetValues> | null>(null);
+  const dataRef = useRef<QualitySettings | null>(null);
+  dataRef.current = data;
 
   const reload = () =>
     api
       .quality()
       .then((d) => {
         setData(d);
+        pending.current = null;
         setError("");
       })
       .catch((e) => {
@@ -34,8 +38,37 @@ export function QualitySettingsPanel() {
         );
       });
 
+  const flush = async () => {
+    const presets = pending.current;
+    if (!presets) return;
+    pending.current = null;
+    try {
+      const next = await api.saveQuality(presets);
+      // Ignore stale response if the user edited again while we were saving.
+      if (pending.current) return;
+      setData(next);
+      setSaved("saved");
+      const meta = await api.meta();
+      useLibrary.setState({ meta });
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Не удалось сохранить", "bad");
+      setSaved("idle");
+      reload();
+    }
+  };
+
   useEffect(() => {
     reload();
+    const onHide = () => {
+      if (pending.current) void flush();
+    };
+    window.addEventListener("pagehide", onHide);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      clearTimeout(timer.current);
+      if (pending.current) void flush();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (error && !data) {
@@ -54,32 +87,30 @@ export function QualitySettingsPanel() {
   }
 
   const persist = (presets: QualitySettings["presets"]) => {
-    setData({ ...data, presets });
+    const cur = dataRef.current;
+    if (!cur) return;
+    const next = { ...cur, presets };
+    dataRef.current = next;
+    pending.current = presets;
+    setData(next);
     setSaved("saving");
     clearTimeout(timer.current);
-    timer.current = setTimeout(async () => {
-      try {
-        const next = await api.saveQuality(presets);
-        setData(next);
-        setSaved("saved");
-        const meta = await api.meta();
-        useLibrary.setState({ meta });
-      } catch (e) {
-        toast(e instanceof Error ? e.message : "Не удалось сохранить", "bad");
-        setSaved("idle");
-        reload();
-      }
-    }, 500);
+    timer.current = setTimeout(() => void flush(), 500);
   };
 
   const update = (id: string, patch: Partial<QualitySettings["presets"][string]>) => {
-    persist({ ...data.presets, [id]: { ...data.presets[id], ...patch } });
+    const cur = dataRef.current;
+    if (!cur) return;
+    persist({ ...cur.presets, [id]: { ...cur.presets[id], ...patch } });
   };
 
   const reset = async () => {
+    clearTimeout(timer.current);
+    pending.current = null;
     try {
       const next = await api.resetQuality();
       setData(next);
+      dataRef.current = next;
       setSaved("saved");
       const meta = await api.meta();
       useLibrary.setState({ meta });
