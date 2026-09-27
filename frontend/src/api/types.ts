@@ -243,7 +243,13 @@ export interface Generation {
   kind: JobKind;
   source_asset_id: number | null; // face: the refined clip
   // stage_seconds: exact seconds per stage; cold: models were loaded from disk (left out of averages)
-  info: { track_report?: string; stage_seconds?: Record<string, number>; cold?: boolean } | null;
+  info: {
+    track_report?: string;
+    stage_seconds?: Record<string, number>;
+    cold?: boolean;
+    plan_id?: string;
+    draft_only?: boolean;
+  } | null;
   status: GenStatus;
   stage: Stage | null;
   progress: number;

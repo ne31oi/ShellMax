@@ -66,6 +66,22 @@ def is_realism_lora(path: str) -> bool:
     return _lora_stem(path) == REALISM_STEM
 
 
+def _all_style_triggers() -> list[str]:
+    """Every trigger word registered in the style library (for scrubbing inactive slogans)."""
+    try:
+        from ..db.models import StyleLora, select, session
+        with session() as s:
+            rows = s.exec(select(StyleLora)).all()
+        out: list[str] = []
+        for row in rows:
+            for t in row.triggers or []:
+                if isinstance(t, str) and t.strip():
+                    out.append(t.strip())
+        return out
+    except Exception:  # noqa: BLE001 — expand must not fail if DB is mid-migration
+        return [REALISM_TRIGGER]
+
+
 def with_lora_triggers(prompt: str, triggers: list[str]) -> str:
     """Put each missing trigger first in visual_style (created before overall_soundscape if absent)."""
     missing = [t for t in triggers if t and t.lower() not in prompt.lower()]
@@ -82,6 +98,32 @@ def with_lora_triggers(prompt: str, triggers: list[str]) -> str:
     else:
         return prompt.rstrip() + "\n\n" + words
     return "\n".join(lines)
+
+
+def scrub_style_triggers(prompt: str, keep: list[str], catalog: list[str]) -> str:
+    """Remove LoRA trigger slogans from prose unless they are in `keep` (active style chip).
+
+    The assistant often copies library triggers (e.g. «80s Fantasy Movie Still») into
+    detailed_description; H3 then follows that look even when the LoRA chip is off.
+    """
+    import re
+
+    keep_l = {t.strip().lower() for t in keep if t and t.strip()}
+    victims = sorted(
+        {t.strip() for t in catalog if t and t.strip() and t.strip().lower() not in keep_l},
+        key=len,
+        reverse=True,
+    )
+    out = prompt
+    for t in victims:
+        out = re.sub(re.escape(t), "", out, flags=re.IGNORECASE)
+    # Collapse leftover “in a  style” / double spaces from removals.
+    out = re.sub(r"\bin an?\s+style\b", "", out, flags=re.IGNORECASE)
+    out = re.sub(r"\bin a\s+style\b", "", out, flags=re.IGNORECASE)
+    out = re.sub(r"[ \t]{2,}", " ", out)
+    out = re.sub(r" +([.,;:])", r"\1", out)
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    return out
 
 
 # Back-compat alias: style triggers used to be dumped at the end of the prompt (ignored by H3).
@@ -105,7 +147,9 @@ def expand(
     q = presets[ui.quality]
 
     style_triggers = [t for _, trig in styles for t in trig]
-    prompt_text = with_lora_triggers(ui.prompt, style_triggers)
+    # Drop slogans of styles that are not selected (assistant often weaves them into prose).
+    prompt_text = scrub_style_triggers(ui.prompt, style_triggers, _all_style_triggers())
+    prompt_text = with_lora_triggers(prompt_text, style_triggers)
     # Expert light geometry (P8) then look delivery (P9) into visual_style.
     prompt_text = apply_light(prompt_text, getattr(ui, "light", None))
     prompt_text = apply_look(prompt_text, getattr(ui, "look", None))

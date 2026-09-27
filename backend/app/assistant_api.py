@@ -26,9 +26,16 @@ def _svc(request: Request) -> AssistantService:
     return request.app.state.assistant
 
 
-def _sse(gen):
+def _sse(gen, *, scrub_style_slogans: bool = False):
     async def body():
         async for event in gen:
+            if scrub_style_slogans and event.get("done") and event.get("prompt"):
+                from .workflow import presets
+                catalog = presets._all_style_triggers()
+                cleaned = presets.scrub_style_triggers(event["prompt"], keep=[], catalog=catalog)
+                event = {**event, "prompt": cleaned}
+                if isinstance(event.get("text"), str):
+                    event["text"] = presets.scrub_style_triggers(event["text"], keep=[], catalog=catalog)
             yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
     return StreamingResponse(body(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
 
@@ -129,7 +136,7 @@ def compose(body: ComposeIn, request: Request):
             f"{user_light_directive(body.light)}\n\n"
             "Преобразуй его в промпт. summary и detailed_description описывают именно это действие; "
             "позу, жесты и предметы с картинок не переносить.")
-    return _sse(svc.stream(system, user, images))
+    return _sse(svc.stream(system, user, images), scrub_style_slogans=True)
 
 
 # ---------------------------------------------------------------- edit a finished prompt in plain words
@@ -196,7 +203,7 @@ def edit(body: EditIn, request: Request):
     user = (f"Текущий промпт:\n```text\n{body.prompt.strip()}\n```\n\n"
             f"Что изменить (слова пользователя):\n{instruction}{extras}\n\n"
             "Верни полный исправленный промпт.")
-    return _sse(svc.stream(system, user, images))
+    return _sse(svc.stream(system, user, images), scrub_style_slogans=True)
 
 
 # ---------------------------------------------------------------- face refine prompt

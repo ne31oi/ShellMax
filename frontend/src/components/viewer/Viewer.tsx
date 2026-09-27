@@ -14,7 +14,7 @@ import { useElapsed } from "../../lib/useElapsed";
 import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
 import { Button, Dialog, IconButton, Kbd, Spinner } from "../ui";
-import { videoTrack, useTimeline } from "../../store/timeline";
+import { useTimeline, hasSequenceContent } from "../../store/timeline";
 import { SequenceEmptyHint, SequencePlayer } from "../timeline/SequencePlayer";
 import { Welcome } from "./Welcome";
 
@@ -30,15 +30,16 @@ export function Viewer() {
   const other = useLibrary((s) => (compareWith ? s.generations[compareWith] : undefined));
   const assets = useLibrary((s) => s.assets);
   const preview = useLibrary((s) => (selectedGen ? s.previews[selectedGen] : undefined));
-  const hasClips = useTimeline((s) => videoTrack(s.doc).clips.length > 0);
+  const canPlaySequence = useTimeline((s) => hasSequenceContent(s.doc));
   const [resultOnly, setResultOnly] = useState(false);
   useEffect(() => setResultOnly(false), [selectedGen]);
 
-  const showSequence = viewingSequence || (workspace === "edit" && !selectedGen && !selectedAsset && hasClips);
+  const showSequence =
+    viewingSequence || (workspace === "edit" && !selectedGen && !selectedAsset && canPlaySequence);
   if (showSequence) {
     return (
       <div className="flex h-full flex-col">
-        {hasClips ? <SequencePlayer /> : <SequenceEmptyHint />}
+        {canPlaySequence ? <SequencePlayer /> : <SequenceEmptyHint />}
       </div>
     );
   }

@@ -124,6 +124,18 @@ export const api = {
   saveTimeline: (projectId: number, timeline: unknown) =>
     put(`/api/projects/${projectId}/timeline`, timeline),
   exportTimeline: (projectId?: number) => post<MediaAsset>(`/api/projects/${pid(projectId)}/export`),
+  enqueuePlans: (projectId: number, planIds: string[], mode: "draft" | "final") =>
+    post<{ generations: Generation[]; timeline: unknown }>(`/api/projects/${projectId}/plans/enqueue`, {
+      plan_ids: planIds,
+      mode,
+    }),
+  analyzeBeats: (assetId: number, range?: { start?: number; end?: number }) =>
+    post<{ beats: number[]; downbeats: number[]; bpm: number | null; offset: number; windowStart?: number }>(
+      `/api/assets/${assetId}/analyze-beats`,
+      range ?? {},
+    ),
+  /** Alias used by plan inspector (same as frameToRef). */
+  assetFrameUpload: (assetId: number, t: number) => post<Upload>(`/api/assets/${assetId}/frame`, { t }),
 
   fsList: (path: string) => get<FsListing>("/api/fs/list" + q({ path })),
   fsCheck: (path: string) => get<{ path: string; exists: boolean; size: number | null; name: string }>("/api/fs/check" + q({ path })),
@@ -147,6 +159,7 @@ export const api = {
   editUpload: (id: string, body: { crop: CropBox | null; start: number | null; end: number | null }) =>
     post<Upload>(`/api/uploads/${id}/edit`, body),
   uploadPeaks: (id: string) => get<{ peaks: number[]; duration: number | null }>(`/api/uploads/${id}/peaks`),
+  assetPeaks: (id: number) => get<{ peaks: number[]; duration: number | null }>(`/api/assets/${id}/peaks`),
 
   generations: (projectId?: number) => get<Generation[]>("/api/generations" + q({ project_id: pid(projectId) })),
   generate: (params: UIParams, projectId?: number) =>

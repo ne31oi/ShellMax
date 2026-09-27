@@ -3,7 +3,7 @@ import { api, ApiError } from "../api/client";
 import type { Generation, MediaAsset, UIParams, Upload } from "../api/types";
 import { useForm } from "../store/form";
 import { defaultProfile, useLibrary } from "../store/library";
-import { commands, useTimeline } from "../store/timeline";
+import { commands, audioTracks, snapTime, useTimeline } from "../store/timeline";
 import { useUI } from "../store/ui";
 import { emit } from "./bus";
 import { toModelPrompt } from "./refs";
@@ -183,6 +183,40 @@ export function addToTimeline(asset: MediaAsset) {
   if (ui.workspace !== "edit") ui.setWorkspace("edit");
   ui.setViewingSequence(true);
   toast(`«${asset.name}» добавлен в таймлайн`, "ok");
+}
+
+/** Place audio (or video with a soundtrack) on an A-track at the playhead. */
+export function addToAudioTrack(asset: MediaAsset, opts?: { trackId?: string; start?: number }) {
+  if (asset.kind !== "audio" && !asset.has_audio) {
+    toast("На A-трек — аудиофайл или клип со звуком", "info");
+    return;
+  }
+  const tl = useTimeline.getState();
+  const tracks = audioTracks(tl.doc);
+  const trackId = opts?.trackId ?? tracks[0]?.id;
+  if (!trackId) {
+    toast("Нет аудиодорожки — нажмите A+", "info");
+    return;
+  }
+  let start = opts?.start ?? tl.playhead;
+  if (tl.doc.snapToBeats !== false) start = snapTime(tl.doc, start);
+  const dur = Math.max(0.15, asset.duration ?? 2);
+  tl.run(
+    commands.addAudioClip(
+      {
+        id: Math.random().toString(36).slice(2, 10),
+        assetId: asset.id,
+        in: 0,
+        out: dur,
+        start,
+        muted: false,
+      },
+      trackId,
+    ),
+  );
+  const ui = useUI.getState();
+  if (ui.workspace !== "edit") ui.setWorkspace("edit");
+  toast(`«${asset.name}» на аудиодорожку`, "ok");
 }
 
 export async function reveal(asset: MediaAsset) {

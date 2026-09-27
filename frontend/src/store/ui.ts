@@ -55,6 +55,7 @@ interface UIState {
   openSettings: (tab: SettingsTab | null) => void;
   toggleBin: () => void;
   togglePanel: () => void;
+  setPanelOpen: (open: boolean) => void;
   setBinFilter: (f: UIState["binFilter"]) => void;
   toast: (text: string, tone?: Toast["tone"], action?: Toast["action"]) => void;
   openFaceDialog: (state: FaceDialogState | null) => void;
@@ -134,6 +135,10 @@ export const useUI = create<UIState>((set) => ({
       localStorage.setItem("sm.panelOpen", panelOpen ? "1" : "0");
       return { panelOpen };
     }),
+  setPanelOpen: (panelOpen) => {
+    localStorage.setItem("sm.panelOpen", panelOpen ? "1" : "0");
+    set({ panelOpen });
+  },
   setBinFilter: (binFilter) => set({ binFilter }),
   toast: (text, tone = "info", action) => {
     const id = ++toastId;

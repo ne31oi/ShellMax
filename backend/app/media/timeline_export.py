@@ -43,7 +43,8 @@ async def export_timeline(doc: TimelineDoc, assets_by_id: dict[int, MediaAsset],
                 raise HTTPException(400, f"Клип «{asset.name}» слишком короткий")
             seg = tmp_path / f"seg_{i:04d}.mp4"
             silent = doc.master_mute or clip.muted
-            vol = 0.0 if silent else float(doc.master_volume)
+            # Monitor/master volume is for the in-app player only — export stays full level.
+            vol = 0.0 if silent else 1.0
             # Re-encode so concat is reliable across different sources.
             args = [
                 ffmpeg, "-y", "-v", "error",

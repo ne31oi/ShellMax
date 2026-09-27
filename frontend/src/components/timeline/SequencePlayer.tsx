@@ -1,14 +1,24 @@
 import clsx from "clsx";
-import { Film, Maximize2, Minimize2, Pause, Play, SkipBack, SkipForward, Volume2, VolumeX } from "lucide-react";
+import { Film, Maximize2, Minimize2, Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { urls } from "../../api/client";
 import { on } from "../../lib/bus";
 import { fmtTimecode } from "../../lib/format";
 import { useLibrary } from "../../store/library";
-import { clipAtTime, clipDuration, effectiveVolume, totalDuration, useTimeline, videoTrack, commands } from "../../store/timeline";
+import {
+  audioClipsAtTime,
+  effectiveVolume,
+  hasSequenceContent,
+  sequenceVisualAtTime,
+  totalDuration,
+  useTimeline,
+} from "../../store/timeline";
 import { IconButton } from "../ui";
+import { MonitorVolume } from "./MonitorVolume";
 
-/** Plays the magnetic video track as one sequence (honours clip in/out). */
+/**
+ * Montage preview: master-clock playhead drives picture (plans or V) and A-track audio.
+ */
 export function SequencePlayer() {
   const doc = useTimeline((s) => s.doc);
   const playhead = useTimeline((s) => s.playhead);
@@ -18,15 +28,19 @@ export function SequencePlayer() {
   const assets = useLibrary((s) => s.assets);
   const video = useRef<HTMLVideoElement>(null);
   const box = useRef<HTMLDivElement>(null);
-  const [fullscreen, setFullscreen] = useState(false);
-  const hit = clipAtTime(doc, playhead);
-  const asset = hit ? assets[hit.clip.assetId] : undefined;
-  const duration = totalDuration(doc);
-  const fps = asset?.fps || 24;
-  const clipIdRef = useRef<string | null>(null);
+  const audioPool = useRef(new Map<string, HTMLAudioElement>());
+  const visualKeyRef = useRef<string | null>(null);
   const seekingRef = useRef(false);
-  const vol = hit ? effectiveVolume(doc, hit.clip) : 0;
-  const muted = vol <= 0.001;
+  const [fullscreen, setFullscreen] = useState(false);
+
+  const duration = totalDuration(doc);
+  const visual = sequenceVisualAtTime(doc, playhead);
+  const asset = visual ? assets[visual.assetId] : undefined;
+  const fps = asset?.fps || 24;
+  const masterMute = !!doc.masterMute;
+  const masterVol = doc.masterVolume ?? 1;
+  const videoMuted = masterMute || (visual?.clipMuted ?? true) || !visual;
+  const videoVol = videoMuted ? 0 : Math.max(0, Math.min(1, masterVol));
 
   useEffect(() => {
     const sync = () => setFullscreen(document.fullscreenElement === box.current);
@@ -34,69 +48,152 @@ export function SequencePlayer() {
     return () => document.removeEventListener("fullscreenchange", sync);
   }, []);
 
+  // Master clock while playing
+  useEffect(() => {
+    if (!playing) return;
+    let raf = 0;
+    let last = performance.now();
+    const tick = (now: number) => {
+      const dt = Math.min(0.1, (now - last) / 1000);
+      last = now;
+      const tl = useTimeline.getState();
+      const dur = Math.max(totalDuration(tl.doc), 0.01);
+      const next = tl.playhead + dt;
+      if (next >= dur - 0.001) {
+        tl.setPlayhead(dur);
+        tl.setPlaying(false);
+      } else {
+        tl.setPlayhead(next);
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [playing]);
+
+  // Picture: switch / seek video element to match playhead
   useEffect(() => {
     const v = video.current;
-    if (!v || !hit || !asset) return;
-    const want = hit.clip.in + hit.local;
-    const switched = clipIdRef.current !== hit.clip.id;
+    if (!v) return;
+    if (!visual || !asset) {
+      visualKeyRef.current = null;
+      v.removeAttribute("src");
+      v.load();
+      return;
+    }
+    const want = visual.sourceTime;
+    const switched = visualKeyRef.current !== visual.key;
     if (switched) {
-      clipIdRef.current = hit.clip.id;
+      visualKeyRef.current = visual.key;
       seekingRef.current = true;
       v.src = urls.assetFile(asset.id);
       const onMeta = () => {
-        v.currentTime = want;
+        try {
+          v.currentTime = want;
+        } catch {
+          /* ignore */
+        }
         seekingRef.current = false;
         if (useTimeline.getState().playing) void v.play().catch(() => undefined);
+        else v.pause();
         v.removeEventListener("loadedmetadata", onMeta);
       };
       v.addEventListener("loadedmetadata", onMeta);
       v.load();
       return;
     }
-    if (!seekingRef.current && Math.abs(v.currentTime - want) > 0.25) {
+    if (!seekingRef.current && Math.abs(v.currentTime - want) > 0.12) {
       seekingRef.current = true;
-      v.currentTime = want;
+      try {
+        v.currentTime = want;
+      } catch {
+        /* ignore */
+      }
       seekingRef.current = false;
     }
-  }, [hit?.clip.id, asset?.id]); // eslint-ish: seek on clip change only; playhead scrub handled below
-
-  // External playhead scrub (timeline click) while same clip — not during playback
-  useEffect(() => {
-    if (playing) return;
-    const v = video.current;
-    if (!v || !hit || clipIdRef.current !== hit.clip.id) return;
-    const want = hit.clip.in + hit.local;
-    if (Math.abs(v.currentTime - want) > 0.2) {
-      seekingRef.current = true;
-      v.currentTime = want;
-      seekingRef.current = false;
-    }
-  }, [playhead, hit, playing]);
+  }, [visual?.key, visual?.sourceTime, asset?.id, playhead]);
 
   useEffect(() => {
     const v = video.current;
     if (!v) return;
-    v.volume = Math.max(0, Math.min(1, vol));
-    v.muted = muted;
-  }, [vol, muted, hit?.clip.id]);
+    v.volume = videoVol;
+    v.muted = videoMuted;
+  }, [videoVol, videoMuted, visual?.key]);
 
   useEffect(() => {
     const v = video.current;
-    if (!v) return;
+    if (!v || !visual) return;
     if (playing) void v.play().catch(() => undefined);
     else v.pause();
-  }, [playing]);
+  }, [playing, visual?.key]);
+
+  // A-track audio pool synced to playhead
+  useEffect(() => {
+    const active = audioClipsAtTime(doc, playhead);
+    const wantIds = new Set(active.map((a) => a.clip.id));
+    const pool = audioPool.current;
+
+    for (const [id, el] of [...pool.entries()]) {
+      if (!wantIds.has(id)) {
+        el.pause();
+        el.removeAttribute("src");
+        pool.delete(id);
+      }
+    }
+
+    for (const { clip, local } of active) {
+      let el = pool.get(clip.id);
+      if (!el) {
+        el = new Audio();
+        el.preload = "auto";
+        el.src = urls.assetFile(clip.assetId);
+        pool.set(clip.id, el);
+      }
+      const want = clip.in + local;
+      const vol = effectiveVolume(doc, clip);
+      el.volume = vol;
+      el.muted = vol <= 0.001;
+      if (Math.abs(el.currentTime - want) > 0.15) {
+        try {
+          el.currentTime = want;
+        } catch {
+          /* ignore */
+        }
+      }
+      if (playing && vol > 0.001) void el.play().catch(() => undefined);
+      else el.pause();
+    }
+  }, [doc, playhead, playing]);
+
+  useEffect(() => {
+    return () => {
+      for (const el of audioPool.current.values()) {
+        el.pause();
+        el.removeAttribute("src");
+      }
+      audioPool.current.clear();
+    };
+  }, []);
 
   useEffect(() => {
     const offs = [
-      on("viewerToggle", () => setPlaying(!useTimeline.getState().playing)),
+      on("viewerToggle", () => {
+        const tl = useTimeline.getState();
+        if (!hasSequenceContent(tl.doc)) return;
+        if (tl.playhead >= totalDuration(tl.doc) - 0.02) tl.setPlayhead(0);
+        tl.setPlaying(!tl.playing);
+      }),
       on("viewerStep", (n) => {
         setPlaying(false);
         setPlayhead(useTimeline.getState().playhead + n / fps);
       }),
       on("viewerRate", (r) => {
         if (r === 0) setPlaying(false);
-        else setPlaying(true);
+        else {
+          const tl = useTimeline.getState();
+          if (tl.playhead >= totalDuration(tl.doc) - 0.02) tl.setPlayhead(0);
+          setPlaying(true);
+        }
       }),
       on("viewerFullscreen", () => {
         if (document.fullscreenElement) document.exitFullscreen?.();
@@ -106,59 +203,45 @@ export function SequencePlayer() {
     return () => offs.forEach((f) => f());
   }, [fps, setPlayhead, setPlaying]);
 
-  const onTimeUpdate = () => {
-    const v = video.current;
-    if (!v || !hit || seekingRef.current) return;
-    if (v.currentTime >= hit.clip.out - 0.04) {
-      const nextT = hit.trackStart + clipDuration(hit.clip);
-      if (nextT >= duration - 0.02) {
-        setPlaying(false);
-        setPlayhead(duration);
-        return;
-      }
-      setPlayhead(nextT + 0.001);
-      return;
-    }
-    setPlayhead(hit.trackStart + Math.max(0, v.currentTime - hit.clip.in));
-  };
-
   const seekBar = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!duration) return;
     const r = e.currentTarget.getBoundingClientRect();
+    setPlaying(false);
     setPlayhead(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * duration);
   };
 
-  if (!videoTrack(doc).clips.length) {
-    return (
-      <div className="flex h-full items-center justify-center text-sm text-muted">
-        Добавьте клипы на таймлайн
-      </div>
-    );
+  const togglePlay = () => {
+    if (playing) {
+      setPlaying(false);
+      return;
+    }
+    if (playhead >= duration - 0.02) setPlayhead(0);
+    setPlaying(true);
+  };
+
+  if (!hasSequenceContent(doc)) {
+    return <SequenceEmptyHint />;
   }
 
   return (
     <div ref={box} className="flex h-full flex-col bg-bg">
       <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black/40 p-3">
+        {visual && asset ? (
           <video
-          ref={video}
-          className="max-h-full max-w-full rounded-md shadow-2xl"
-          muted={muted}
-          playsInline
-          onClick={() => setPlaying(!playing)}
-          onPlay={() => setPlaying(true)}
-          onPause={() => setPlaying(false)}
-          onTimeUpdate={onTimeUpdate}
-          onEnded={() => {
-            if (!hit) return;
-            const nextT = hit.trackStart + clipDuration(hit.clip);
-            if (nextT >= duration - 0.02) {
-              setPlaying(false);
-              setPlayhead(0);
-            } else setPlayhead(nextT + 0.001);
-          }}
-        />
+            ref={video}
+            className="max-h-full max-w-full rounded-md shadow-2xl"
+            muted={videoMuted}
+            playsInline
+            onClick={togglePlay}
+          />
+        ) : (
+          <div className="flex flex-col items-center gap-2 text-sm text-muted">
+            <Film size={28} className="opacity-40" />
+            <p>{audioClipsAtTime(doc, playhead).length ? "Только звук в этой точке" : "Нет картинки под курсором"}</p>
+          </div>
+        )}
         <span className="absolute left-5 top-5 rounded-md bg-accent px-1.5 py-0.5 text-[11px] font-semibold text-accent-fg">
-          Последовательность
+          Монтаж
         </span>
         {asset && (
           <span className="absolute right-5 top-5 max-w-[40%] truncate rounded-md bg-black/70 px-1.5 py-0.5 text-[11px] text-white">
@@ -184,7 +267,7 @@ export function SequencePlayer() {
           >
             <SkipBack size={14} />
           </IconButton>
-          <IconButton label="Пуск / пауза (Пробел)" onClick={() => setPlaying(!playing)}>
+          <IconButton label="Пуск / пауза (Пробел)" onClick={togglePlay}>
             {playing ? <Pause size={16} /> : <Play size={16} />}
           </IconButton>
           <IconButton
@@ -201,13 +284,7 @@ export function SequencePlayer() {
             {fmtTimecode(playhead, fps)} <span className="text-faint">/ {fmtTimecode(duration, fps)}</span>
           </span>
           <span className="ml-auto" />
-          <IconButton
-            label={doc.masterMute ? "Включить звук последовательности" : "Выключить звук последовательности"}
-            size="sm"
-            onClick={() => useTimeline.getState().run(commands.setMasterMute(useTimeline.getState().doc, !doc.masterMute))}
-          >
-            {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-          </IconButton>
+          <MonitorVolume size="md" />
           <IconButton
             label={fullscreen ? "Свернуть" : "Во весь экран"}
             size="sm"
@@ -228,8 +305,8 @@ export function SequenceEmptyHint() {
   return (
     <div className={clsx("flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-sm text-muted")}>
       <Film size={28} className="opacity-40" />
-      <p>Соберите очередь клипов на таймлайне ниже.</p>
-      <p className="text-xs text-faint">Обрезка · S — разрез · ПКМ: лицо / деталь / повтор · экспорт</p>
+      <p>Соберите монтаж на таймлайне ниже.</p>
+      <p className="text-xs text-faint">Планы · аудио · клипы на V · Пробел — пуск</p>
     </div>
   );
 }

@@ -16,6 +16,7 @@ import { Toasts } from "./components/layout/Toasts";
 import { MediaBin } from "./components/library/MediaBin";
 import { SettingsDialog } from "./components/settings/SettingsDialog";
 import { TimelineStrip } from "./components/timeline/TimelineStrip";
+import { PlanInspector } from "./components/timeline/PlanInspector";
 import { IconButton, Kbd, Spinner, TipProvider } from "./components/ui";
 import { Viewer } from "./components/viewer/Viewer";
 import { api } from "./api/client";
@@ -25,6 +26,7 @@ import { useAssistant } from "./store/assistant";
 import { useForm } from "./store/form";
 import { useLibrary } from "./store/library";
 import { type TimelineDoc, useTimeline } from "./store/timeline";
+import { unbindPlanForm } from "./lib/planForm";
 import { useUI } from "./store/ui";
 
 export default function App() {
@@ -36,10 +38,12 @@ export default function App() {
   const toggleBin = useUI((s) => s.toggleBin);
   const togglePanel = useUI((s) => s.togglePanel);
   const openSettings = useUI((s) => s.openSettings);
+  const selectedPlanId = useTimeline((s) => s.selectedPlanId);
+  const showPlanPanel = workspace === "edit" && !!selectedPlanId;
 
   const [binW, , adjustBinW] = usePanelSize("bin", 300, 220, 520);
   const [panelW, , adjustPanelW] = usePanelSize("gen", 400, 340, 620);
-  const [timelineH, , adjustTimelineH] = usePanelSize("timeline.edit", 300, 90, 520);
+  const [timelineH, , adjustTimelineH] = usePanelSize("timeline.edit", 380, 140, 640);
 
   useHotkeys();
 
@@ -167,7 +171,7 @@ export default function App() {
                   onClick={togglePanel}
                   className="sidebar-chip absolute right-3 top-3 flex items-center gap-1.5 rounded-lg border border-line bg-panel/90 px-2.5 py-1.5 text-xs text-muted shadow-lg backdrop-blur hover:text-fg"
                 >
-                  <Wand2 size={13} /> Сгенерировать <Kbd>G</Kbd>
+                  <Wand2 size={13} /> {workspace === "edit" ? "План" : "Сгенерировать"} <Kbd>G</Kbd>
                 </button>
               )}
             </div>
@@ -192,11 +196,21 @@ export default function App() {
           >
             <div className="sidebar-rail-inner relative" style={{ width: panelW }}>
               <div className="absolute right-2 top-2 z-10">
-                <IconButton label="Скрыть панель (G)" size="sm" onClick={togglePanel}>
+                <IconButton
+                  label="Скрыть панель (G)"
+                  size="sm"
+                  onClick={() => {
+                    if (showPlanPanel) {
+                      unbindPlanForm();
+                      useTimeline.getState().selectPlan(null);
+                    }
+                    togglePanel();
+                  }}
+                >
                   <X size={14} />
                 </IconButton>
               </div>
-              <GeneratePanel />
+              {showPlanPanel ? <PlanInspector /> : <GeneratePanel />}
             </div>
           </aside>
         </div>

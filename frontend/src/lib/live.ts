@@ -1,4 +1,5 @@
 import type { EngineState, Generation, MediaAsset } from "../api/types";
+import { api } from "../api/client";
 import { useAssistant } from "../store/assistant";
 import { useLibrary } from "../store/library";
 import { commands, findClip, useTimeline } from "../store/timeline";
@@ -52,6 +53,10 @@ function handle(ev: LiveEvent) {
       lib.upsertGeneration(ev.generation);
       if (prev && prev.status !== ev.generation.status) notifyDone(ev.generation);
       maybeReplaceTimelineClip(prev, ev.generation);
+      // Only sync plan row when status changes — not on every progress tick.
+      if (!prev || prev.status !== ev.generation.status) {
+        maybeRefreshPlanTimeline(ev.generation);
+      }
       break;
     }
     case "generation_deleted":
@@ -63,9 +68,11 @@ function handle(ev: LiveEvent) {
     case "asset_deleted":
       lib.removeAsset(ev.id);
       break;
-    case "preview":
+    case "preview": {
+      if (localStorage.getItem("sm.nightMode") === "1") break;
       lib.setPreview(ev.generation_id, ev.data);
       break;
+    }
     case "engine":
       lib.setEngine(ev.engine);
       break;
@@ -91,4 +98,17 @@ function maybeReplaceTimelineClip(prev: Generation | undefined, gen: Generation)
   useUI.getState().setTimelineReplace(null);
   useUI.getState().toast("Клип на таймлайне обновлён", "ok");
   useUI.getState().setViewingSequence(true);
+}
+
+/** Storyboard plan jobs write status into Project.timeline on the server — pull it. */
+function maybeRefreshPlanTimeline(gen: Generation) {
+  const planId = (gen.info as { plan_id?: string } | null)?.plan_id;
+  if (!planId) return;
+  if (!["done", "draft_only", "error", "running", "queued"].includes(gen.status)) return;
+  const projectId = useUI.getState().projectId;
+  void api.project(projectId).then((p) => {
+    const selected = useTimeline.getState().selectedPlanId;
+    useTimeline.getState().load(p.timeline as never);
+    if (selected) useTimeline.getState().selectPlan(selected);
+  }).catch(() => undefined);
 }

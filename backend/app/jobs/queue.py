@@ -219,6 +219,9 @@ class JobManager:
 
     async def _run(self, g: Generation) -> None:
         r = self.running = Running(gen_id=g.id, pipe=PIPELINES.get(g.kind, PIPELINES["generate"]), kind=g.kind)
+        # Plan enqueue with mode=draft: stop after draft node without waiting for cancel.
+        if g.kind == "generate" and (g.info or {}).get("draft_only"):
+            r.stop_after_draft = True
         r.stage_marks.append(("prepare", r.started_at))
         with session() as s:
             row = s.get(Generation, g.id)
@@ -483,6 +486,11 @@ class JobManager:
                                         name=title)
         if is_draft:
             r.draft_asset_id = asset_id
+            if r.stop_after_draft and r.prompt_id:
+                try:
+                    await self.client.interrupt(r.prompt_id)
+                except Exception:  # noqa: BLE001
+                    log.exception("interrupt after draft failed for gen %s", r.gen_id)
         else:
             r.final_asset_id = asset_id
         with session() as s:
@@ -576,3 +584,10 @@ async def register_asset(path: Path, generation_id: int | None, source: str, pro
 async def push_generation(g: Generation, step: dict | None = None) -> None:
     """`step` is live-only (not stored): progress of the node running right now."""
     await hub.broadcast({"type": "generation", "generation": {**g.model_dump(), "step": step}})
+    # Keep storyboard plan status in sync when this gen belongs to a plan.
+    if (g.info or {}).get("plan_id"):
+        try:
+            from ..plans import sync_plan_from_generation
+            sync_plan_from_generation(g)
+        except Exception:  # noqa: BLE001
+            log.exception("plan sync failed for gen %s", g.id)

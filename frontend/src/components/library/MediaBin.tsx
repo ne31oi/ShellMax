@@ -2,7 +2,7 @@ import * as ContextMenu from "@radix-ui/react-context-menu";
 import clsx from "clsx";
 import {
   AlertCircle, Clapperboard, Copy, Dices, Film, FolderOpen, Gauge, ImagePlus, Pencil, ScanFace, Shuffle,
-  Sparkles, SplitSquareHorizontal, Square, Trash2, Upload as UploadIcon,
+  Sparkles, SplitSquareHorizontal, Square, Trash2, Upload as UploadIcon, Volume2,
 } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { api, urls } from "../../api/client";
@@ -286,7 +286,14 @@ function GenerationCard({ gen }: { gen: Generation }) {
               <CtxItem icon={<ScanFace size={13} />} onSelect={() => useUI.getState().openFaceDialog({ assetId: asset.id })} disabled={gen.status !== "done"}>Улучшить лицо…</CtxItem>
               <CtxItem icon={<Sparkles size={13} />} onSelect={() => useUI.getState().openEnhanceDialog({ assetId: asset.id })} disabled={gen.status !== "done"}>Детализация (SeedVR2)…</CtxItem>
               <CtxItem icon={<Gauge size={13} />} onSelect={() => useUI.getState().openInterpolateDialog({ assetId: asset.id })} disabled={gen.status !== "done"}>Интерполяция (RIFE)…</CtxItem>
-              <CtxItem icon={<Film size={13} />} onSelect={() => actions.addToTimeline(asset)} disabled={gen.status !== "done"}>В таймлайн</CtxItem>
+              <CtxItem icon={<Film size={13} />} onSelect={() => actions.addToTimeline(asset)} disabled={gen.status !== "done"}>В таймлайн (V)</CtxItem>
+              <CtxItem
+                icon={<Volume2 size={13} />}
+                onSelect={() => actions.addToAudioTrack(asset)}
+                disabled={gen.status !== "done" || (!asset.has_audio && asset.kind !== "audio")}
+              >
+                На аудиодорожку (A)
+              </CtxItem>
               <CtxItem icon={<ImagePlus size={13} />} onSelect={() => actions.assetAsRef(asset)}>Использовать как видео-референс</CtxItem>
               <CtxItem icon={<SplitSquareHorizontal size={13} />} onSelect={() => {
                 const ui = useUI.getState();
@@ -306,6 +313,8 @@ function GenerationCard({ gen }: { gen: Generation }) {
 
 function AssetCard({ asset }: { asset: MediaAsset }) {
   const selected = useUI((s) => s.selectedAsset === asset.id);
+  const canVideo = asset.kind === "video";
+  const canAudio = asset.kind === "audio" || asset.has_audio;
   const card = (
     <div
       role="button"
@@ -313,12 +322,15 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
       draggable
       onDragStart={(e) => e.dataTransfer.setData(ASSET_DRAG_TYPE, JSON.stringify(asset))}
       onClick={() => useUI.getState().selectAsset(asset.id)}
-      onDoubleClick={() => actions.addToTimeline(asset)}
+      onDoubleClick={() => {
+        if (canVideo) actions.addToTimeline(asset);
+        else if (canAudio) actions.addToAudioTrack(asset);
+      }}
       className={clsx("cursor-pointer rounded-xl p-1 transition-colors", selected ? "bg-accent/15 ring-1 ring-accent/60" : "hover:bg-hover")}
     >
       <Thumb asset={asset}>
         <span className="absolute left-1 top-1 rounded bg-black/70 px-1 text-[10px] text-white/80">
-          {asset.source === "exported" ? "монтаж" : "импорт"}
+          {asset.kind === "audio" ? "аудио" : asset.source === "exported" ? "монтаж" : "импорт"}
         </span>
       </Thumb>
       <p className="truncate px-1 pt-1 text-xs">{asset.name}</p>
@@ -329,11 +341,16 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
       <ContextMenu.Trigger asChild>{card}</ContextMenu.Trigger>
       <ContextMenu.Portal>
         <ContextMenu.Content className="z-40 min-w-56 rounded-xl border border-line bg-panel p-1 shadow-2xl">
-          <CtxItem icon={<Film size={13} />} onSelect={() => actions.addToTimeline(asset)} disabled={asset.kind !== "video"}>В таймлайн</CtxItem>
+          <CtxItem icon={<Film size={13} />} onSelect={() => actions.addToTimeline(asset)} disabled={!canVideo}>
+            В таймлайн (V)
+          </CtxItem>
+          <CtxItem icon={<Volume2 size={13} />} onSelect={() => actions.addToAudioTrack(asset)} disabled={!canAudio}>
+            На аудиодорожку (A)
+          </CtxItem>
           <CtxItem icon={<ImagePlus size={13} />} onSelect={() => actions.assetAsRef(asset)}>Использовать как референс</CtxItem>
-          <CtxItem icon={<ScanFace size={13} />} onSelect={() => useUI.getState().openFaceDialog({ assetId: asset.id })} disabled={asset.kind !== "video"}>Улучшить лицо…</CtxItem>
-          <CtxItem icon={<Sparkles size={13} />} onSelect={() => useUI.getState().openEnhanceDialog({ assetId: asset.id })} disabled={asset.kind !== "video"}>Детализация (SeedVR2)…</CtxItem>
-          <CtxItem icon={<Gauge size={13} />} onSelect={() => useUI.getState().openInterpolateDialog({ assetId: asset.id })} disabled={asset.kind !== "video"}>Интерполяция (RIFE)…</CtxItem>
+          <CtxItem icon={<ScanFace size={13} />} onSelect={() => useUI.getState().openFaceDialog({ assetId: asset.id })} disabled={!canVideo}>Улучшить лицо…</CtxItem>
+          <CtxItem icon={<Sparkles size={13} />} onSelect={() => useUI.getState().openEnhanceDialog({ assetId: asset.id })} disabled={!canVideo}>Детализация (SeedVR2)…</CtxItem>
+          <CtxItem icon={<Gauge size={13} />} onSelect={() => useUI.getState().openInterpolateDialog({ assetId: asset.id })} disabled={!canVideo}>Интерполяция (RIFE)…</CtxItem>
           <CtxItem icon={<FolderOpen size={13} />} onSelect={() => actions.reveal(asset)}>Показать в папке</CtxItem>
           <ContextMenu.Separator className="my-1 h-px bg-line" />
           <CtxItem icon={<Trash2 size={13} />} danger onSelect={() => actions.removeAsset(asset)}>Удалить</CtxItem>

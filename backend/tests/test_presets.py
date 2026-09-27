@@ -131,3 +131,22 @@ def test_style_triggers_go_into_visual_style():
     assert "visual_style:\n\nr34l1sm.\n\nReal footage." in with_lora_triggers(styled, ["r34l1sm"])
     assert with_lora_triggers(out, ["r34l1sm"]) == out  # already there: unchanged
     assert with_lora_triggers("девушка танцует", ["r34l1sm"]) == "девушка танцует\n\nr34l1sm."
+
+
+def test_scrub_inactive_style_triggers():
+    from app.workflow.presets import scrub_style_triggers
+
+    prose = (
+        "The environment is rendered in a realistic 80s Fantasy Movie Still style with hard-edged shadows. "
+        "ArsMovieStill vibe. Keep the rest."
+    )
+    cleaned = scrub_style_triggers(
+        prose,
+        keep=["r34l1sm"],
+        catalog=["80s Fantasy Movie Still", "ArsMovieStill", "r34l1sm", "Cel Shading Style"],
+    )
+    assert "80s Fantasy Movie Still" not in cleaned
+    assert "ArsMovieStill" not in cleaned
+    assert "Keep the rest" in cleaned
+    # Active trigger is kept
+    assert "r34l1sm" in scrub_style_triggers("look r34l1sm here", keep=["r34l1sm"], catalog=["r34l1sm"])

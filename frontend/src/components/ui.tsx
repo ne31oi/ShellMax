@@ -123,6 +123,8 @@ export function Slider({
   max,
   step = 0.01,
   className,
+  size = "md",
+  orientation = "horizontal",
 }: {
   value: number;
   onChange: (v: number) => void;
@@ -130,20 +132,40 @@ export function Slider({
   max: number;
   step?: number;
   className?: string;
+  size?: "md" | "lg";
+  orientation?: "horizontal" | "vertical";
 }) {
+  const lg = size === "lg";
+  const vertical = orientation === "vertical";
   return (
     <SliderPrimitive.Root
       value={[value]}
       min={min}
       max={max}
       step={step}
+      orientation={orientation}
       onValueChange={([v]) => onChange(v)}
-      className={clsx("relative flex h-5 w-full touch-none select-none items-center", className)}
+      className={clsx(
+        "relative flex touch-none select-none",
+        vertical ? "h-28 w-7 flex-col items-center justify-center" : "w-full items-center",
+        !vertical && (lg ? "h-7" : "h-5"),
+        className,
+      )}
     >
-      <SliderPrimitive.Track className="relative h-1 grow rounded-full bg-line">
-        <SliderPrimitive.Range className="absolute h-full rounded-full bg-accent" />
+      <SliderPrimitive.Track
+        className={clsx(
+          "relative grow rounded-full bg-line",
+          vertical ? (lg ? "w-1.5" : "w-1") : lg ? "h-1.5" : "h-1",
+        )}
+      >
+        <SliderPrimitive.Range className={clsx("absolute rounded-full bg-accent", vertical ? "w-full" : "h-full")} />
       </SliderPrimitive.Track>
-      <SliderPrimitive.Thumb className="block h-3.5 w-3.5 rounded-full bg-fg shadow ring-2 ring-accent/40 outline-none focus-visible:ring-accent" />
+      <SliderPrimitive.Thumb
+        className={clsx(
+          "block rounded-full bg-fg shadow ring-2 ring-accent/40 outline-none focus-visible:ring-accent",
+          lg ? "h-4 w-4" : "h-3.5 w-3.5",
+        )}
+      />
     </SliderPrimitive.Root>
   );
 }

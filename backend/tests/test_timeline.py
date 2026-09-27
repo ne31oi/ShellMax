@@ -1,14 +1,15 @@
-"""Timeline schema normalize / validate."""
+"""Timeline schema normalize / validate — includes plans and markers."""
 
-from app.timeline_schema import empty_timeline, normalize_timeline, parse_timeline, video_clips
+from app.timeline_schema import empty_timeline, find_plan, normalize_timeline, parse_timeline, video_clips
 
 
 def test_empty_and_normalize():
     empty = empty_timeline()
     assert empty["tracks"][0]["id"] == "v1"
+    assert any(t["kind"] == "plan" for t in empty["tracks"])
     assert empty["masterMute"] is False
-    assert normalize_timeline(None) == empty
-    assert normalize_timeline({})["tracks"][0]["id"] == "v1"
+    assert "markers" in empty
+    assert normalize_timeline(None)["tracks"][0]["id"] == "v1"
 
 
 def test_camel_case_roundtrip():
@@ -60,3 +61,41 @@ def test_video_clips():
     })
     assert len(video_clips(doc)) == 1
     assert video_clips(doc)[0].asset_id == 1
+
+
+def test_plan_block_roundtrip():
+    raw = {
+        "tracks": [
+            {"id": "v1", "kind": "video", "clips": [], "plans": []},
+            {
+                "id": "p1",
+                "kind": "plan",
+                "name": "Планы 1",
+                "plans": [{
+                    "id": "pl1",
+                    "start": 0,
+                    "duration": 2,
+                    "prompt": "hello",
+                    "lipsync": True,
+                    "audio": {"a1": True},
+                    "status": "empty",
+                    "mode": "draft",
+                }],
+            },
+            {"id": "a1", "kind": "audio", "clips": [
+                {"id": "ac1", "assetId": 9, "in": 0, "out": 4, "start": 0},
+            ]},
+        ],
+        "markers": {"beats": [0, 0.5, 1.0], "bpm": 120},
+        "snapToBeats": True,
+    }
+    out = normalize_timeline(raw)
+    plan = out["tracks"][1]["plans"][0]
+    assert plan["prompt"] == "hello"
+    assert plan["lipsync"] is True
+    assert plan["audio"]["a1"] is True
+    assert out["markers"]["bpm"] == 120
+    doc = parse_timeline(out)
+    hit = find_plan(doc, "pl1")
+    assert hit is not None
+    assert hit[1].duration == 2
