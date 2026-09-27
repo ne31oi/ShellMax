@@ -19,7 +19,7 @@ class Project(SQLModel, table=True):
     fps: int = 24
     width: int = 1440
     height: int = 832
-    # {"tracks": [{"id", "kind": "video"|"audio", "clips": [{"id", "asset_id", "start", "in", "out", "speed", "volume"}]}]}
+    # {"tracks": [{"id", "kind": "video"|"audio", "clips": [{"id", "assetId", "in", "out"}]}]}
     timeline: dict[str, Any] = Field(default_factory=lambda: {"tracks": []}, sa_column=Column(JSON))
     created: datetime = Field(default_factory=utcnow)
 
@@ -80,8 +80,8 @@ class MediaAsset(SQLModel, table=True):
 class Generation(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     project_id: int = Field(index=True)
-    kind: str = "generate"  # generate | face | enhance (SeedVR2 on an existing clip)
-    source_asset_id: int | None = None  # face: the clip being refined
+    kind: str = "generate"  # generate | face | enhance | interpolate
+    source_asset_id: int | None = None  # face/enhance/interpolate: the clip being processed
     # queued | running | done | draft_only | error | cancelled
     status: str = "queued"
     stage: str | None = None

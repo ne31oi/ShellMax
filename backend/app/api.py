@@ -18,11 +18,11 @@ from .hub import hub
 from .jobs.estimator import estimate as estimate_time
 from .jobs.queue import push_generation, register_asset
 from .media import library
-from .workflow import enhance, face, presets, quality as quality_cfg
+from .workflow import enhance, face, interpolate, presets, quality as quality_cfg
 from .workflow.camera import camera_presets
 from .workflow.light import light_presets
 from .workflow.look import look_presets
-from .workflow.params import ASPECT_RATIOS, FPS, MAX_REFS, EnhanceUIParams, EngineProfile, FaceUIParams, UIParams, frame_count
+from .workflow.params import ASPECT_RATIOS, FPS, MAX_REFS, EnhanceUIParams, EngineProfile, FaceUIParams, InterpolateUIParams, UIParams, frame_count
 
 router = APIRouter(prefix="/api")
 
@@ -58,7 +58,10 @@ def meta():
         "defaults": {**d["ui"], "look": "cinema", "camera": "auto", "light": "auto"},
         "face_strength": face.strength_presets(),
         "enhance_scale": enhance.scale_presets(),
+        "enhance_strength": enhance.strength_presets(),
         "enhance_color": enhance.color_presets(),
+        "interpolate_model": interpolate.model_presets(),
+        "interpolate_multiplier": interpolate.multiplier_presets(),
     }
 
 
@@ -443,6 +446,12 @@ async def retry_generation(gid: int, body: RetryIn, request: Request):
             created.append(await create_enhance_job(
                 EnhanceUIParams(**{**g.ui_params, "seed": seed}), request, g.project_id))
         return created
+    if g.kind == "interpolate":
+        created = []
+        for _ in range(body.variants):
+            created.append(await create_interpolate_job(
+                InterpolateUIParams(**g.ui_params), request, g.project_id))
+        return created
     ui = UIParams(**{**g.ui_params, "seed": g.seed if body.same_seed else None, "variants": body.variants})
     return await create_generation(ui, request, g.project_id)
 
@@ -490,7 +499,7 @@ def enhance_defaults(asset_id: int):
 
 
 @router.get("/enhance/estimate")
-def enhance_estimate(asset_id: int, scale: float = 2.0):
+def enhance_estimate(asset_id: int, scale: float = 1.0):
     with session() as s:
         asset = s.get(MediaAsset, asset_id) or _404()
     frames = max(1, round((asset.duration or 1) * (asset.fps or 24)))
@@ -502,6 +511,32 @@ def enhance_estimate(asset_id: int, scale: float = 2.0):
 @router.post("/enhance")
 async def create_enhance_job(ui: EnhanceUIParams, request: Request, project_id: int = 1):
     g = services.create_enhance(ui, project_id)
+    await push_generation(g)
+    _state(request).jobs.enqueue(g.id)
+    return g
+
+
+# ---------------------------------------------------------------- interpolate (native RIFE / FILM)
+@router.get("/interpolate/defaults")
+def interpolate_defaults(asset_id: int):
+    return services.interpolate_defaults(asset_id)
+
+
+@router.get("/interpolate/estimate")
+def interpolate_estimate(asset_id: int, multiplier: int = 2, model: str = "rife"):
+    with session() as s:
+        asset = s.get(MediaAsset, asset_id) or _404()
+    frames = max(1, round((asset.duration or 1) * (asset.fps or 24)))
+    recipe = interpolate.default_recipe(model if model in ("rife", "film") else "rife")
+    recipe = recipe.model_copy(update={"multiplier": max(2, min(16, multiplier))})
+    units = interpolate.interpolate_work_units(
+        recipe, frames, int(asset.width or 1280), int(asset.height or 720))
+    return estimate_time(units, "interpolate")
+
+
+@router.post("/interpolate")
+async def create_interpolate_job(ui: InterpolateUIParams, request: Request, project_id: int = 1):
+    g = services.create_interpolate(ui, project_id)
     await push_generation(g)
     _state(request).jobs.enqueue(g.id)
     return g
@@ -565,8 +600,8 @@ async def delete_asset(aid: int):
     """Remove an imported library file. Generated/draft assets are deleted with their generation."""
     with session() as s:
         a = s.get(MediaAsset, aid) or _404()
-        if a.source != "imported":
-            raise HTTPException(400, "Удалять можно только импортированные файлы — сгенерированные удаляются вместе с задачей")
+        if a.source != "imported" and a.source != "exported":
+            raise HTTPException(400, "Удалять можно только импортированные и экспортированные файлы — сгенерированные удаляются вместе с задачей")
         dependents = [g for g in s.exec(select(Generation)).all() if g.source_asset_id == aid]
         if dependents:
             raise HTTPException(
@@ -676,18 +711,39 @@ def list_projects():
 
 @router.get("/projects/{pid}")
 def get_project(pid: int):
+    from .timeline_schema import normalize_timeline
     with session() as s:
-        return s.get(Project, pid) or _404()
+        p = s.get(Project, pid) or _404()
+        data = p.model_dump()
+        data["timeline"] = normalize_timeline(p.timeline)
+        return data
 
 
 @router.put("/projects/{pid}/timeline")
 def put_timeline(pid: int, timeline: dict):
+    from .timeline_schema import normalize_timeline
+    from pydantic import ValidationError
+    try:
+        normalized = normalize_timeline(timeline)
+    except ValidationError as e:
+        raise HTTPException(400, f"Некорректный таймлайн: {e.errors()[0].get('msg', 'ошибка')}") from e
     with session() as s:
         p = s.get(Project, pid) or _404()
-        p.timeline = timeline
+        p.timeline = normalized
         s.add(p)
         s.commit()
-    return {"ok": True}
+    return normalized
+
+
+@router.post("/projects/{pid}/export")
+async def export_project(pid: int):
+    """Trim + concat the project's video track into a new library asset."""
+    from .media.timeline_export import export_project_timeline
+    with session() as s:
+        p = s.get(Project, pid) or _404()
+        raw = p.timeline
+    asset = await export_project_timeline(pid, raw or {})
+    return asset
 
 
 # ---------------------------------------------------------------- live events

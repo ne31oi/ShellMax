@@ -35,6 +35,11 @@ export const STAGES_BY_KIND: Record<JobKind, StageDef[]> = {
     { id: "decode", label: "Сборка кадров", short: "Декод" },
     { id: "save", label: "Сохранение видео", short: "Сохранение" },
   ],
+  interpolate: [
+    { id: "load", label: "Загрузка модели", short: "Загрузка" },
+    { id: "interpolate", label: "Интерполяция кадров", short: "Кадры" },
+    { id: "save", label: "Сохранение видео", short: "Сохранение" },
+  ],
 };
 
 /** Backwards-compatible default list (generation). */

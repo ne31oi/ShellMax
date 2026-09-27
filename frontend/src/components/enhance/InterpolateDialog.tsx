@@ -1,23 +1,22 @@
-import { Sparkles } from "lucide-react";
+import { Gauge } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, ApiError, urls } from "../../api/client";
-import type { EnhanceDefaults, Estimate } from "../../api/types";
+import type { InterpolateDefaults, Estimate } from "../../api/types";
 import { estimateBasis, fileName, fmtEstimate, fmtSeconds } from "../../lib/format";
 import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
 import { Button, Dialog, SectionTitle, Select, Spinner } from "../ui";
 
 /**
- * SeedVR2 post-enhance on a finished clip: restore detail (and optional upscale).
- * Default Refine ×1 + soft blend — pure SeedVR overcooks already-sharp MiniMax clips.
+ * Native ComfyUI frame interpolation (RIFE / FILM): raise FPS without changing resolution.
  */
-export function EnhanceDialog() {
-  const state = useUI((s) => s.enhanceDialog);
-  const close = () => useUI.getState().openEnhanceDialog(null);
+export function InterpolateDialog() {
+  const state = useUI((s) => s.interpolateDialog);
+  const close = () => useUI.getState().openInterpolateDialog(null);
   return (
-    <Dialog open={state !== null} onOpenChange={(o) => !o && close()} title="Детализация">
+    <Dialog open={state !== null} onOpenChange={(o) => !o && close()} title="Интерполяция">
       {state && (
-        <EnhanceForm
+        <InterpolateForm
           key={`${state.assetId}-${state.fromGenerationId ?? ""}`}
           assetId={state.assetId}
           fromGenerationId={state.fromGenerationId}
@@ -28,7 +27,7 @@ export function EnhanceDialog() {
   );
 }
 
-function EnhanceForm({
+function InterpolateForm({
   assetId,
   fromGenerationId,
   onDone,
@@ -38,42 +37,38 @@ function EnhanceForm({
   onDone: () => void;
 }) {
   const fromGen = useLibrary((s) => (fromGenerationId ? s.generations[fromGenerationId] : undefined));
-  const [defaults, setDefaults] = useState<EnhanceDefaults | null>(null);
-  const [scale, setScale] = useState(1);
-  const [strength, setStrength] = useState(0.55);
-  const [color, setColor] = useState("lab");
+  const [defaults, setDefaults] = useState<InterpolateDefaults | null>(null);
+  const [model, setModel] = useState<"rife" | "film">("rife");
+  const [multiplier, setMultiplier] = useState(2);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [estimate, setEstimate] = useState<Estimate | null>(null);
 
   useEffect(() => {
     api
-      .enhanceDefaults(assetId)
+      .interpolateDefaults(assetId)
       .then((d) => {
         setDefaults(d);
         const p = fromGen?.ui_params;
-        setScale(typeof p?.scale === "number" ? p.scale : d.scale);
-        setStrength(typeof p?.strength === "number" ? p.strength : d.strength);
-        setColor(typeof p?.color_correction === "string" ? p.color_correction : d.color_correction);
+        setModel(p?.model === "film" ? "film" : d.model === "film" ? "film" : "rife");
+        setMultiplier(typeof p?.multiplier === "number" ? p.multiplier : d.multiplier);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Не удалось открыть клип"));
   }, [assetId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!defaults) return;
-    api.enhanceEstimate(assetId, scale).then(setEstimate).catch(() => setEstimate(null));
-  }, [assetId, scale, defaults]);
+    api.interpolateEstimate(assetId, multiplier, model).then(setEstimate).catch(() => setEstimate(null));
+  }, [assetId, multiplier, model, defaults]);
 
   const submit = async () => {
     setBusy(true);
     setError("");
     try {
-      const g = await api.enhance({
+      const g = await api.interpolate({
         source_asset_id: assetId,
-        scale,
-        strength,
-        color_correction: color as "lab" | "wavelet" | "adain" | "none",
-        seed: fromGen?.seed ?? null,
+        model,
+        multiplier,
       });
       useLibrary.getState().upsertGeneration(g);
       useUI.getState().selectGen(g.id);
@@ -96,27 +91,24 @@ function EnhanceForm({
     );
   }
 
-  const scaleOptions = (defaults.scale_presets ?? []).map((p) => ({
-    value: String(p.scale),
-    label: `${p.label} — ${p.hint}`,
-  }));
-  const strengthOptions = (defaults.strength_presets ?? []).map((p) => ({
-    value: String(p.strength),
-    label: `${p.label} — ${p.hint}`,
-  }));
-  const colorOptions = (defaults.color_presets ?? []).map((p) => ({
+  const modelOptions = (defaults.model_presets ?? []).map((p) => ({
     value: p.id,
     label: `${p.label} — ${p.hint}`,
   }));
-  const modelLabel = defaults.unet ? fileName(defaults.unet) : "модель не найдена";
-  const fps = defaults.asset.fps || 24;
+  const multOptions = (defaults.multiplier_presets ?? []).map((p) => ({
+    value: String(p.multiplier),
+    label: `${p.label} — ${p.hint}`,
+  }));
+  const modelLabel = defaults.model_path ? fileName(defaults.model_path) : "модель не найдена";
+  const fps = defaults.source_fps || defaults.asset.fps || 24;
   const duration = defaults.asset.duration ?? defaults.frames / fps;
+  const outFps = Math.round(fps * multiplier);
 
   return (
     <div className="space-y-5 p-5">
       <p className="-mt-1 text-xs leading-relaxed text-muted">
-        SeedVR2 подчищает и добавляет реализм. По умолчанию — Refine ×1 и сила «Естественно»
-        (подмешивание исходника), чтобы не пережечь уже резкий клип MiniMax. Звук сохраняется.
+        Вставляет промежуточные кадры и поднимает FPS (разрешение не меняется). RIFE быстрее; FILM — аккуратнее на
+        сложном движении. Звук сохраняется.
       </p>
 
       <div className="flex items-center gap-3 rounded-xl border border-line bg-raised/40 p-2.5">
@@ -130,39 +122,30 @@ function EnhanceForm({
             {defaults.asset.width && defaults.asset.height
               ? ` · ${defaults.asset.width}×${defaults.asset.height}`
               : ""}
+            {` · ${Math.round(fps)} → ${outFps} к/с`}
           </p>
         </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <SectionTitle>Масштаб</SectionTitle>
+          <SectionTitle>Модель</SectionTitle>
           <Select
-            value={String(scale)}
-            onChange={(v) => setScale(Number(v))}
-            options={scaleOptions.length ? scaleOptions : [{ value: "1", label: "Refine ×1" }]}
-            defaultValue="1"
+            value={model}
+            onChange={(v) => setModel(v as "rife" | "film")}
+            options={modelOptions.length ? modelOptions : [{ value: "rife", label: "Быстро (RIFE)" }]}
+            defaultValue="rife"
           />
         </div>
         <div>
-          <SectionTitle>Сила</SectionTitle>
+          <SectionTitle>Множитель</SectionTitle>
           <Select
-            value={String(strength)}
-            onChange={(v) => setStrength(Number(v))}
-            options={strengthOptions.length ? strengthOptions : [{ value: "0.55", label: "Естественно" }]}
-            defaultValue="0.55"
+            value={String(multiplier)}
+            onChange={(v) => setMultiplier(Number(v))}
+            options={multOptions.length ? multOptions : [{ value: "2", label: "×2" }]}
+            defaultValue="2"
           />
         </div>
-      </div>
-
-      <div>
-        <SectionTitle>Цвет</SectionTitle>
-        <Select
-          value={color}
-          onChange={setColor}
-          options={colorOptions.length ? colorOptions : [{ value: "lab", label: "Цвет LAB" }]}
-          defaultValue="lab"
-        />
       </div>
 
       <p className="text-[11px] text-faint">
@@ -182,7 +165,7 @@ function EnhanceForm({
           Отмена
         </Button>
         <Button variant="primary" size="lg" onClick={submit} disabled={busy} title={estimateBasis(estimate)}>
-          {busy ? <Spinner /> : <Sparkles size={15} />} Детализировать
+          {busy ? <Spinner /> : <Gauge size={15} />} Интерполировать
         </Button>
       </div>
     </div>

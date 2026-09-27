@@ -13,8 +13,8 @@ from . import settings
 from .db.models import EngineProfileRow, Generation, MediaAsset, Project, StyleLora, Upload, select, session
 from .jobs.estimator import estimate_seconds
 from .media import library
-from .workflow import enhance, face, presets
-from .workflow.params import EnhanceUIParams, EngineProfile, FaceUIParams, LoraSpec, ResolvedRef, UIParams
+from .workflow import enhance, face, interpolate, presets
+from .workflow.params import EnhanceUIParams, EngineProfile, FaceUIParams, InterpolateUIParams, LoraSpec, ResolvedRef, UIParams
 
 
 # ---------------------------------------------------------------- bootstrap
@@ -299,9 +299,11 @@ def enhance_defaults(asset_id: int) -> dict:
     return {
         "asset": asset,
         "scale": recipe.scale,
+        "strength": recipe.strength,
         "color_correction": recipe.color_correction,
         "frames": frames,
         "scale_presets": enhance.scale_presets(),
+        "strength_presets": enhance.strength_presets(),
         "color_presets": enhance.color_presets(),
         "unet": recipe.unet,
         "vae": recipe.vae,
@@ -343,6 +345,60 @@ def create_enhance(ui: EnhanceUIParams, project_id: int) -> Generation:
         s.commit()
         s.refresh(g)
         g.full_params = {**g.full_params, "filename_prefix": f"ShellMax/enhance{g.id:05d}"}
+        s.add(g)
+        s.commit()
+    return g
+
+
+def interpolate_defaults(asset_id: int) -> dict:
+    with session() as s:
+        asset = s.get(MediaAsset, asset_id)
+    if asset is None or asset.kind != "video":
+        raise HTTPException(404, "клип не найден")
+    frames = max(1, round((asset.duration or 0) * (asset.fps or 24)))
+    recipe = interpolate.default_recipe()
+    return {
+        "asset": asset,
+        "model": recipe.model_preset,
+        "multiplier": recipe.multiplier,
+        "frames": frames,
+        "source_fps": float(asset.fps or 24),
+        "model_presets": interpolate.model_presets(),
+        "multiplier_presets": interpolate.multiplier_presets(),
+        "model_path": recipe.model,
+    }
+
+
+def create_interpolate(ui: InterpolateUIParams, project_id: int) -> Generation:
+    with session() as s:
+        asset = s.get(MediaAsset, ui.source_asset_id)
+    if asset is None or asset.kind != "video":
+        raise HTTPException(404, "клип не найден")
+    preset = ui.model if ui.model in ("rife", "film") else "rife"
+    recipe = interpolate.default_recipe(preset)
+    from .fs.browse import check
+    if not check(recipe.model)["exists"]:
+        raise HTTPException(422, {
+            "kind": "missing_file",
+            "problems": [{"field": "interpolate", "path": recipe.model}],
+            "message": "Не найдена модель интерполяции — скачайте rife_v4.26 или film_net_fp16 "
+                       "в frame_interpolation/ (или положите rife49.pth в rife/), затем перезапустите установщик",
+        })
+    frame_rate = float(asset.fps or 24)
+    frames = max(1, round((asset.duration or 1) * frame_rate))
+    full = interpolate.expand_interpolate(ui, asset.path, frame_rate, "ShellMax/interpolate")
+    units = interpolate.interpolate_work_units(
+        full.recipe, frames, int(asset.width or 1280), int(asset.height or 720))
+    label = "FILM" if full.recipe.model_preset == "film" else "RIFE"
+    g = Generation(project_id=project_id, kind="interpolate", source_asset_id=asset.id,
+                   ui_params=ui.model_dump(), full_params=full.model_dump(), seed=0,
+                   profile_name=label, work_units=units,
+                   estimate_s=estimate_seconds(units, "interpolate"))
+    with session() as s:
+        s.add(g)
+        s.commit()
+        s.refresh(g)
+        g.full_params = {**g.full_params, "filename_prefix": f"ShellMax/interp{g.id:05d}"}
         s.add(g)
         s.commit()
     return g

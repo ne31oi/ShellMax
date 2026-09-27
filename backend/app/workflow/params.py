@@ -237,13 +237,16 @@ class EnhanceRecipe(BaseModel):
 
     unet: str = ""
     vae: str = ""
-    scale: float = 2.0
+    scale: float = 1.0
     steps: int = 1
     cfg: float = 1.0
     sampler: str = "euler"
     scheduler: str = "simple"
     denoise: float = 1.0
     color_correction: Literal["lab", "wavelet", "adain", "none"] = "lab"
+    # Blend SeedVR output back with the resized source (ImageBlend normal).
+    # Full 1.0 overcooks already-sharp MiniMax clips; ~0.55 keeps realism.
+    strength: float = 0.55
     tile_size: int = 512
     overlap: int = 128
     temporal_size: int = 64
@@ -253,10 +256,11 @@ class EnhanceRecipe(BaseModel):
 
 
 class EnhanceUIParams(BaseModel):
-    """Post-enhance decisions: which clip, scale, optional color match."""
+    """Post-enhance decisions: which clip, scale, strength, optional color match."""
 
     source_asset_id: int
-    scale: float | None = None  # None -> recipe (2.0)
+    scale: float | None = None  # None -> recipe (1.0)
+    strength: float | None = None  # None -> recipe (0.55); 1.0 = pure SeedVR2
     color_correction: Literal["lab", "wavelet", "adain", "none"] | None = None
     seed: int | None = None
 
@@ -270,6 +274,32 @@ class EnhanceFullParams(BaseModel):
     seed: int
     recipe: EnhanceRecipe
     filename_prefix: str = "ShellMax/enhance"
+
+
+class InterpolateRecipe(BaseModel):
+    """Native ComfyUI FrameInterpolate (RIFE or FILM)."""
+
+    model: str = ""
+    model_preset: Literal["rife", "film"] = "rife"
+    multiplier: int = 2
+    crf: int = 17
+
+
+class InterpolateUIParams(BaseModel):
+    """Frame interpolation: which clip, model, FPS multiplier."""
+
+    source_asset_id: int
+    model: Literal["rife", "film"] | None = None  # None -> rife
+    multiplier: int | None = None  # None -> recipe (2)
+
+
+class InterpolateFullParams(BaseModel):
+    schema_version: int = SCHEMA_VERSION
+    source_path: str
+    frame_load_cap: int = 0
+    frame_rate: float = FPS * 2  # source_fps * multiplier
+    recipe: InterpolateRecipe
+    filename_prefix: str = "ShellMax/interpolate"
 
 
 # ------------------------------------------------------------------ derived values

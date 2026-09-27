@@ -2,6 +2,7 @@
 
 Recipe defaults match ComfyUI's built-in blueprint
 «Upscale Video (SeedVR2 3B Int8)»; ShellMax flattens the subgraph and saves via VHS.
+Default scale is Refine ×1 with a soft blend — pure SeedVR overcooks sharp MiniMax clips.
 """
 
 from pathlib import Path
@@ -18,6 +19,10 @@ def scale_presets() -> list[dict]:
 
 def color_presets() -> list[dict]:
     return settings.defaults()["enhance_color_presets"]
+
+
+def strength_presets() -> list[dict]:
+    return settings.defaults()["enhance_strength_presets"]
 
 
 def _resolve(rel: str) -> str:
@@ -46,13 +51,14 @@ def default_recipe() -> EnhanceRecipe:
     return EnhanceRecipe(
         unet=unet,
         vae=vae,
-        scale=float(d.get("scale", 2.0)),
+        scale=float(d.get("scale", 1.0)),
         steps=int(d.get("steps", 1)),
         cfg=float(d.get("cfg", 1.0)),
         sampler=str(d.get("sampler", "euler")),
         scheduler=str(d.get("scheduler", "simple")),
         denoise=float(d.get("denoise", 1.0)),
         color_correction=str(d.get("color_correction", "lab")),
+        strength=float(d.get("strength", 0.55)),
         tile_size=int(d.get("tile_size", 512)),
         overlap=int(d.get("overlap", 128)),
         temporal_size=int(d.get("temporal_size", 64)),
@@ -65,10 +71,15 @@ def default_recipe() -> EnhanceRecipe:
 def expand_enhance(ui: EnhanceUIParams, source_path: str, force_rate: float, frame_rate: float,
                    seed: int, filename_prefix: str) -> EnhanceFullParams:
     r = default_recipe()
+    updates: dict = {}
     if ui.scale is not None:
-        r = r.model_copy(update={"scale": ui.scale})
+        updates["scale"] = ui.scale
+    if ui.strength is not None:
+        updates["strength"] = max(0.0, min(1.0, float(ui.strength)))
     if ui.color_correction is not None:
-        r = r.model_copy(update={"color_correction": ui.color_correction})
+        updates["color_correction"] = ui.color_correction
+    if updates:
+        r = r.model_copy(update=updates)
     return EnhanceFullParams(
         source_path=source_path,
         force_rate=force_rate,

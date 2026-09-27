@@ -2,8 +2,7 @@ import { create } from "zustand";
 
 /**
  * Timeline document + command history. Every mutation is a Command so undo/redo
- * works from day one; the NLE phases add commands (trim, split, tracks) without
- * touching the history mechanics.
+ * works from day one; trim/split/export build on the same mechanics.
  */
 
 export interface Clip {
@@ -29,17 +28,31 @@ export interface Command {
   revert: (doc: TimelineDoc) => TimelineDoc;
 }
 
+export interface ClipHit {
+  clip: Clip;
+  index: number;
+  trackStart: number; // sequence time where this clip begins
+  local: number; // seconds into the clip's trimmed range (0 … duration)
+}
+
+const MIN_CLIP = 0.15;
+
 interface TimelineState {
   doc: TimelineDoc;
   past: Command[];
   future: Command[];
+  playhead: number;
+  playing: boolean;
   run: (cmd: Command) => void;
   undo: () => Command | undefined;
   redo: () => Command | undefined;
   load: (doc: TimelineDoc | null | undefined) => void;
+  setPlayhead: (t: number) => void;
+  setPlaying: (p: boolean) => void;
+  seekToClip: (clipId: string) => void;
 }
 
-const emptyDoc = (): TimelineDoc => ({ tracks: [{ id: "v1", kind: "video", clips: [] }] });
+export const emptyDoc = (): TimelineDoc => ({ tracks: [{ id: "v1", kind: "video", clips: [] }] });
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 function persist(doc: TimelineDoc) {
@@ -57,6 +70,8 @@ export const useTimeline = create<TimelineState>((set, get) => ({
   doc: emptyDoc(),
   past: [],
   future: [],
+  playhead: 0,
+  playing: false,
   run: (cmd) => {
     const doc = cmd.apply(get().doc);
     set((s) => ({ doc, past: [...s.past, cmd].slice(-200), future: [] }));
@@ -78,8 +93,68 @@ export const useTimeline = create<TimelineState>((set, get) => ({
     persist(doc);
     return cmd;
   },
-  load: (doc) => set({ doc: doc?.tracks?.length ? doc : emptyDoc(), past: [], future: [] }),
+  load: (doc) => set({ doc: normalizeLoaded(doc), past: [], future: [], playhead: 0, playing: false }),
+  setPlayhead: (playhead) => set({ playhead: Math.max(0, playhead) }),
+  setPlaying: (playing) => set({ playing }),
+  seekToClip: (clipId) => {
+    const hit = findClip(get().doc, clipId);
+    if (hit) set({ playhead: hit.trackStart, playing: false });
+  },
 }));
+
+function normalizeLoaded(doc: TimelineDoc | null | undefined): TimelineDoc {
+  if (!doc?.tracks?.length) return emptyDoc();
+  return {
+    tracks: doc.tracks.map((t) => ({
+      ...t,
+      clips: (t.clips ?? []).map((c) => ({
+        id: c.id,
+        assetId: (c as Clip & { asset_id?: number }).assetId ?? (c as Clip & { asset_id?: number }).asset_id ?? 0,
+        in: c.in ?? 0,
+        out: c.out ?? 0,
+      })),
+    })),
+  };
+}
+
+// ---------------------------------------------------------------- queries
+export const clipDuration = (c: Clip) => Math.max(0, c.out - c.in);
+
+export function videoTrack(doc: TimelineDoc): Track {
+  return doc.tracks.find((t) => t.kind === "video") ?? doc.tracks[0] ?? emptyDoc().tracks[0];
+}
+
+export function totalDuration(doc: TimelineDoc): number {
+  return videoTrack(doc).clips.reduce((s, c) => s + clipDuration(c), 0);
+}
+
+export function findClip(doc: TimelineDoc, clipId: string): ClipHit | null {
+  let t = 0;
+  for (let i = 0; i < videoTrack(doc).clips.length; i++) {
+    const clip = videoTrack(doc).clips[i];
+    const d = clipDuration(clip);
+    if (clip.id === clipId) return { clip, index: i, trackStart: t, local: 0 };
+    t += d;
+  }
+  return null;
+}
+
+export function clipAtTime(doc: TimelineDoc, time: number): ClipHit | null {
+  const clips = videoTrack(doc).clips;
+  if (!clips.length) return null;
+  let t = 0;
+  const total = totalDuration(doc);
+  const clamped = Math.max(0, Math.min(time, Math.max(0, total - 0.001)));
+  for (let i = 0; i < clips.length; i++) {
+    const clip = clips[i];
+    const d = clipDuration(clip);
+    if (clamped < t + d || i === clips.length - 1) {
+      return { clip, index: i, trackStart: t, local: Math.min(d, Math.max(0, clamped - t)) };
+    }
+    t += d;
+  }
+  return null;
+}
 
 // ---------------------------------------------------------------- commands
 const mapTrack = (doc: TimelineDoc, trackId: string, fn: (clips: Clip[]) => Clip[]): TimelineDoc => ({
@@ -127,6 +202,49 @@ export const commands = {
       revert: (d) => mapTrack(d, trackId, (c) => move(c, to, from)),
     };
   },
+  trimClip(doc: TimelineDoc, clipId: string, nextIn: number, nextOut: number, trackId = "v1"): Command {
+    const track = doc.tracks.find((t) => t.id === trackId)!;
+    const prev = track.clips.find((c) => c.id === clipId)!;
+    const inn = Math.max(0, Math.min(nextIn, nextOut - MIN_CLIP));
+    const out = Math.max(inn + MIN_CLIP, nextOut);
+    const next: Clip = { ...prev, in: inn, out };
+    return {
+      label: "Обрезать клип",
+      apply: (d) => mapTrack(d, trackId, (clips) => clips.map((c) => (c.id === clipId ? next : c))),
+      revert: (d) => mapTrack(d, trackId, (clips) => clips.map((c) => (c.id === clipId ? prev : c))),
+    };
+  },
+  splitClip(doc: TimelineDoc, clipId: string, atSequenceTime: number, trackId = "v1"): Command | null {
+    const hit = findClip(doc, clipId);
+    if (!hit) return null;
+    const local = atSequenceTime - hit.trackStart;
+    if (local < MIN_CLIP || local > clipDuration(hit.clip) - MIN_CLIP) return null;
+    const cutSource = hit.clip.in + local;
+    const left: Clip = { ...hit.clip, out: cutSource };
+    const right: Clip = {
+      id: Math.random().toString(36).slice(2, 10),
+      assetId: hit.clip.assetId,
+      in: cutSource,
+      out: hit.clip.out,
+    };
+    return {
+      label: "Разрезать клип",
+      apply: (d) =>
+        mapTrack(d, trackId, (clips) => {
+          const next = [...clips];
+          const i = next.findIndex((c) => c.id === clipId);
+          if (i < 0) return clips;
+          next.splice(i, 1, left, right);
+          return next;
+        }),
+      revert: (d) =>
+        mapTrack(d, trackId, (clips) => {
+          const i = clips.findIndex((c) => c.id === left.id);
+          if (i < 0) return clips;
+          const next = [...clips];
+          next.splice(i, 2, hit.clip);
+          return next;
+        }),
+    };
+  },
 };
-
-export const clipDuration = (c: Clip) => Math.max(0, c.out - c.in);

@@ -17,6 +17,8 @@ DEFAULT_SEC_PER_UNIT = {
     "face": 150 / (768 * 768 * 56),
     # SeedVR2 1-step restore ≈ 2–4 min for a short 720p×2 clip on 16 GB
     "enhance": 180 / (1280 * 720 * 48 * 4),
+    # RIFE ×2 on ~48 frames 720p ≈ 20–40 s; work_units already normalized to 720p pairs
+    "interpolate": 30 / 47,
 }
 FIXED_OVERHEAD_S = 20.0  # prompt encoding, decode, muxing - roughly size independent
 EXACT_SAMPLES = 10

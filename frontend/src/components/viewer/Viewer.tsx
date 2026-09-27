@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import {
-  AlertCircle, Camera, Copy, Dices, Maximize2, Minimize2, Pause, Pencil, Play, Repeat, ScanFace, SkipBack, SkipForward,
+  AlertCircle, Camera, Copy, Dices, Gauge, Maximize2, Minimize2, Pause, Pencil, Play, Repeat, ScanFace, SkipBack, SkipForward,
   Sparkles, SplitSquareHorizontal, Square, Volume2, VolumeX, X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -14,6 +14,8 @@ import { useElapsed } from "../../lib/useElapsed";
 import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
 import { Button, Dialog, IconButton, Kbd, Spinner } from "../ui";
+import { videoTrack, useTimeline } from "../../store/timeline";
+import { SequenceEmptyHint, SequencePlayer } from "../timeline/SequencePlayer";
 import { Welcome } from "./Welcome";
 
 const EMPTY_FACE_STRENGTH: FaceStrength[] = [];
@@ -22,14 +24,26 @@ export function Viewer() {
   const selectedGen = useUI((s) => s.selectedGen);
   const selectedAsset = useUI((s) => s.selectedAsset);
   const compareWith = useUI((s) => s.compareWith);
+  const viewingSequence = useUI((s) => s.viewingSequence);
+  const workspace = useUI((s) => s.workspace);
   const gen = useLibrary((s) => (selectedGen ? s.generations[selectedGen] : undefined));
   const other = useLibrary((s) => (compareWith ? s.generations[compareWith] : undefined));
   const assets = useLibrary((s) => s.assets);
   const preview = useLibrary((s) => (selectedGen ? s.previews[selectedGen] : undefined));
+  const hasClips = useTimeline((s) => videoTrack(s.doc).clips.length > 0);
   const [resultOnly, setResultOnly] = useState(false);
   useEffect(() => setResultOnly(false), [selectedGen]);
 
-  if (!gen && !selectedAsset) return <Welcome />;
+  const showSequence = viewingSequence || (workspace === "edit" && !selectedGen && !selectedAsset && hasClips);
+  if (showSequence) {
+    return (
+      <div className="flex h-full flex-col">
+        {hasClips ? <SequencePlayer /> : <SequenceEmptyHint />}
+      </div>
+    );
+  }
+
+  if (!gen && !selectedAsset) return workspace === "edit" ? <SequenceEmptyHint /> : <Welcome />;
 
   if (selectedAsset && assets[selectedAsset]) {
     return (
@@ -44,7 +58,7 @@ export function Viewer() {
   const final = gen.output_asset_id ? assets[gen.output_asset_id] : undefined;
   const otherAsset = actions.outputAsset(other, assets);
   const sourceAsset =
-    (gen.kind === "face" || gen.kind === "enhance") && gen.source_asset_id
+    (gen.kind === "face" || gen.kind === "enhance" || gen.kind === "interpolate") && gen.source_asset_id
       ? assets[gen.source_asset_id]
       : undefined;
   const showBeforeAfter = !!final && !!sourceAsset && !resultOnly && !otherAsset;
@@ -383,6 +397,9 @@ export function Player({ asset, badge, overlay }: { asset: MediaAsset; badge?: s
               <IconButton label="Детализация (SeedVR2)" onClick={() => useUI.getState().openEnhanceDialog({ assetId: asset.id })}>
                 <Sparkles size={15} />
               </IconButton>
+              <IconButton label="Интерполяция (RIFE)" onClick={() => useUI.getState().openInterpolateDialog({ assetId: asset.id })}>
+                <Gauge size={15} />
+              </IconButton>
             </>
           )}
           <IconButton
@@ -501,6 +518,16 @@ function ClipInfo({
       />
     );
   }
+  if (gen.kind === "interpolate") {
+    return (
+      <InterpolateClipInfo
+        gen={gen}
+        comparing={comparing}
+        canToggleCompare={canToggleCompare}
+        onToggleCompare={onToggleCompare}
+      />
+    );
+  }
   return <GenerationClipInfo gen={gen} />;
 }
 
@@ -539,8 +566,12 @@ function EnhanceClipInfo({
   onToggleCompare?: () => void;
 }) {
   const source = useLibrary((s) => (gen.source_asset_id ? s.assets[gen.source_asset_id] : undefined));
-  const scale = gen.ui_params.scale ?? 2;
-  const color = gen.ui_params.color_correction ?? "none";
+  const scale = gen.ui_params.scale ?? 1;
+  const strength = gen.ui_params.strength ?? 0.55;
+  const color = gen.ui_params.color_correction ?? "lab";
+  const strengthLabel =
+    useLibrary((s) => s.meta?.enhance_strength?.find((p) => p.strength === strength)?.label)
+    ?? `${Math.round(strength * 100)}%`;
   const colorLabel =
     useLibrary((s) => s.meta?.enhance_color?.find((c) => c.id === color)?.label) ?? color;
   return (
@@ -570,8 +601,60 @@ function EnhanceClipInfo({
       <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-faint tabular-nums">
         <span>#{gen.id}</span>
         <span>×{scale}</span>
+        <span>{strengthLabel}</span>
         <span>{colorLabel}</span>
         <span>сид {gen.seed}</span>
+        {gen.elapsed_s && <span title={timeBreakdown(gen)}>готово за {fmtDuration(gen.elapsed_s)}</span>}
+      </div>
+    </div>
+  );
+}
+
+function InterpolateClipInfo({
+  gen,
+  comparing,
+  canToggleCompare,
+  onToggleCompare,
+}: {
+  gen: Generation;
+  comparing?: boolean;
+  canToggleCompare?: boolean;
+  onToggleCompare?: () => void;
+}) {
+  const source = useLibrary((s) => (gen.source_asset_id ? s.assets[gen.source_asset_id] : undefined));
+  const model = gen.ui_params.model === "film" ? "film" : "rife";
+  const multiplier = gen.ui_params.multiplier ?? 2;
+  const modelLabel =
+    useLibrary((s) => s.meta?.interpolate_model?.find((c) => c.id === model)?.label) ??
+    (model === "film" ? "FILM" : "RIFE");
+  return (
+    <div className="border-t border-line bg-panel px-4 py-2.5">
+      <div className="flex items-start gap-4">
+        <div className="min-w-0 flex-1 text-xs leading-relaxed text-muted">
+          <p className="text-fg">
+            <Gauge size={13} className="mr-1 inline text-accent" />
+            Интерполяция{source ? ` · «${source.name}»` : ""}
+          </p>
+        </div>
+        <div className="flex shrink-0 gap-1">
+          <CompareToggle comparing={comparing} canToggle={canToggleCompare} onToggle={onToggleCompare} />
+          {gen.status === "done" && source && (
+            <Button size="sm" variant="ghost" onClick={() => useUI.getState().selectAsset(source.id)} title="Открыть исходный клип">
+              Исходник
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" onClick={() => actions.retry(gen, false)} title="Повторить">
+            <Dices size={13} /> Ещё раз
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => actions.editAndRetry(gen)}>
+            <Pencil size={13} /> Изменить
+          </Button>
+        </div>
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-faint tabular-nums">
+        <span>#{gen.id}</span>
+        <span>{modelLabel}</span>
+        <span>×{multiplier}</span>
         {gen.elapsed_s && <span title={timeBreakdown(gen)}>готово за {fmtDuration(gen.elapsed_s)}</span>}
       </div>
     </div>

@@ -69,9 +69,13 @@ export async function editAndRetry(g: Generation) {
     if (g.source_asset_id) useUI.getState().openEnhanceDialog({ assetId: g.source_asset_id, fromGenerationId: g.id });
     return;
   }
+  if (g.kind === "interpolate") {
+    if (g.source_asset_id) useUI.getState().openInterpolateDialog({ assetId: g.source_asset_id, fromGenerationId: g.id });
+    return;
+  }
   await useForm.getState().loadFromGeneration(g);
   const ui = useUI.getState();
-  if (ui.workspace === "edit" && !ui.genDrawer) ui.toggleGenDrawer();
+  if (ui.workspace !== "assistant" && !ui.panelOpen) ui.togglePanel();
   emit("focusPrompt");
   toast("Параметры загружены в панель — измените и нажмите «Создать»", "info");
 }
@@ -86,7 +90,7 @@ export async function remove(g: Generation) {
   if (kids.length) {
     const n = kids.length;
     const ok = window.confirm(
-      `Также удалятся ${n} ${n === 1 ? "связанное улучшение" : "связанных улучшений"} (лицо / детализация). Продолжить?`,
+      `Также удалятся ${n} ${n === 1 ? "связанное улучшение" : "связанных улучшений"} (лицо / детализация / интерполяция). Продолжить?`,
     );
     if (!ok) return;
   }
@@ -125,7 +129,7 @@ function descendantGens(root: Generation, gens: Record<number, Generation>): Gen
 }
 
 export async function removeAsset(asset: MediaAsset) {
-  if (asset.source !== "imported") {
+  if (asset.source !== "imported" && asset.source !== "exported") {
     toast("Сгенерированные клипы удаляются вместе с задачей", "info");
     return;
   }
@@ -175,6 +179,9 @@ export function addToTimeline(asset: MediaAsset) {
   useTimeline.getState().run(
     commands.addClip({ id: Math.random().toString(36).slice(2, 10), assetId: asset.id, in: 0, out: asset.duration ?? 0 }),
   );
+  const ui = useUI.getState();
+  if (ui.workspace !== "edit") ui.setWorkspace("edit");
+  ui.setViewingSequence(true);
   toast(`«${asset.name}» добавлен в таймлайн`, "ok");
 }
 

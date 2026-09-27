@@ -78,6 +78,8 @@ def test_resolution_table_standard_16_9():
 
 def test_error_humanization():
     assert humanize_error("torch.OutOfMemoryError", "CUDA out of memory")[0] == "oom"
+    assert humanize_error("RuntimeError",
+                          "Expected mha_graph.execute(handle, variant_pack, workspace_ptr.get()).is_good()")[0] == "oom"
     assert humanize_error("FileNotFoundError", "ShellMax: файл не найден: F:/x")[1] == "файл не найден: F:/x"
     assert humanize_error("ValueError", "boom", "KSampler")[0] == "generic"
 

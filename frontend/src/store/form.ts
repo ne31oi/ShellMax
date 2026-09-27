@@ -116,7 +116,7 @@ export const useForm = create<FormState>((set, get) => ({
   loadFromGeneration: async (g) => {
     const p = g.ui_params;
     // face / enhance have no generate fields — don't wipe the panel
-    if (g.kind === "face" || g.kind === "enhance" || !p.refs) return;
+    if (g.kind === "face" || g.kind === "enhance" || g.kind === "interpolate" || !p.refs) return;
     const uploads = await Promise.all(p.refs.map((r) => api.uploadInfo(r.upload_id).catch(() => null)));
     const refs: RefItem[] = [];
     p.refs.forEach((r, i) => {

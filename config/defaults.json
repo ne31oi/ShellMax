@@ -82,13 +82,14 @@
     "vae_fallbacks": [
       "vae/ema_vae_fp16.safetensors"
     ],
-    "scale": 2.0,
+    "scale": 1.0,
     "steps": 1,
     "cfg": 1.0,
     "sampler": "euler",
     "scheduler": "simple",
     "denoise": 1.0,
     "color_correction": "lab",
+    "strength": 0.55,
     "tile_size": 512,
     "overlap": 128,
     "temporal_size": 64,
@@ -97,6 +98,12 @@
     "crf": 17
   },
   "enhance_scale_presets": [
+    {
+      "id": "refine",
+      "label": "Refine ×1",
+      "scale": 1.0,
+      "hint": "Улучшение качества без увеличения размера — основной режим"
+    },
     {
       "id": "soft",
       "label": "×1.5",
@@ -107,13 +114,39 @@
       "id": "standard",
       "label": "×2",
       "scale": 2.0,
-      "hint": "Как в воркфлоу SeedVR2"
+      "hint": "Апскейл как в воркфлоу SeedVR2"
     },
     {
       "id": "strong",
       "label": "×3",
       "scale": 3.0,
       "hint": "Дольше и тяжелее; на уже резком клипе может добавить артефакты"
+    }
+  ],
+  "enhance_strength_presets": [
+    {
+      "id": "soft",
+      "label": "Мягко",
+      "strength": 0.4,
+      "hint": "Лёгкая чистка, почти как исходник"
+    },
+    {
+      "id": "natural",
+      "label": "Естественно",
+      "strength": 0.55,
+      "hint": "Реализм без пережога — по умолчанию"
+    },
+    {
+      "id": "strong",
+      "label": "Сильнее",
+      "strength": 0.75,
+      "hint": "Заметнее детализация"
+    },
+    {
+      "id": "full",
+      "label": "Полностью",
+      "strength": 1.0,
+      "hint": "Чистый SeedVR2 — на MiniMax часто пережжённый"
     }
   ],
   "enhance_color_presets": [
@@ -136,6 +169,50 @@
       "id": "none",
       "label": "Без коррекции",
       "hint": "Цвет может уйти от оригинала"
+    }
+  ],
+  "interpolate": {
+    "_comment": "Native ComfyUI FrameInterpolate (RIFE / FILM). Paths relative to legacy_models_dir.",
+    "model": "frame_interpolation/rife_v4.26.safetensors",
+    "model_fallbacks": [
+      "rife/rife49.pth",
+      "frame_interpolation/rife_v4.25.safetensors"
+    ],
+    "film": "frame_interpolation/film_net_fp16.safetensors",
+    "film_fallbacks": [],
+    "multiplier": 2,
+    "crf": 17
+  },
+  "interpolate_model_presets": [
+    {
+      "id": "rife",
+      "label": "Быстро (RIFE)",
+      "hint": "Хватает для большинства AI-клипов"
+    },
+    {
+      "id": "film",
+      "label": "Качество (FILM)",
+      "hint": "Лучше на сложном движении; дольше"
+    }
+  ],
+  "interpolate_multiplier_presets": [
+    {
+      "id": "x2",
+      "label": "×2",
+      "multiplier": 2,
+      "hint": "24 → 48 к/с"
+    },
+    {
+      "id": "x3",
+      "label": "×3",
+      "multiplier": 3,
+      "hint": "24 → 72 к/с"
+    },
+    {
+      "id": "x4",
+      "label": "×4",
+      "multiplier": 4,
+      "hint": "24 → 96 к/с"
     }
   ]
 }

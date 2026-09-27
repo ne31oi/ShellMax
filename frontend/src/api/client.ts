@@ -13,6 +13,8 @@ import type {
   EnhanceUIParams,
   FaceDefaults,
   FaceUIParams,
+  InterpolateDefaults,
+  InterpolateUIParams,
   EngineState,
   FsListing,
   Generation,
@@ -147,6 +149,12 @@ export const api = {
     get<Estimate>("/api/enhance/estimate" + q({ asset_id: assetId, scale })),
   enhance: (params: EnhanceUIParams) => post<Generation>("/api/enhance", params),
 
+  interpolateDefaults: (assetId: number) =>
+    get<InterpolateDefaults>("/api/interpolate/defaults" + q({ asset_id: assetId })),
+  interpolateEstimate: (assetId: number, multiplier: number, model: string) =>
+    get<Estimate>("/api/interpolate/estimate" + q({ asset_id: assetId, multiplier, model })),
+  interpolate: (params: InterpolateUIParams) => post<Generation>("/api/interpolate", params),
+
   assistantStatus: () => get<AssistantStatus>("/api/assistant/status"),
   assistantModels: () => get<AssistantModel[]>("/api/assistant/models"),
   assistantDownload: () => post("/api/assistant/download"),
@@ -165,6 +173,7 @@ export const api = {
   },
   reveal: (assetId: number) => post(`/api/assets/${assetId}/reveal`),
   deleteAsset: (assetId: number) => del(`/api/assets/${assetId}`),
+  exportTimeline: (projectId = 1) => post<MediaAsset>(`/api/projects/${projectId}/export`),
 };
 
 export const urls = {

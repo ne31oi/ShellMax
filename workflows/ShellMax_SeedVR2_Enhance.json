@@ -1,5 +1,5 @@
 {
-  "_comment": "Golden API graph for ShellMax SeedVR2 enhance. Direct path (no temporal chunk) like ComfyUI blueprint default.",
+  "_comment": "Golden API graph for ShellMax SeedVR2 enhance. Direct path (no temporal chunk) like ComfyUI blueprint default. ImageBlend softens MiniMax overcook.",
   "1": {
     "class_type": "VHS_LoadVideoPath",
     "inputs": {
@@ -18,7 +18,7 @@
     "inputs": {
       "image": ["1", 0],
       "upscale_method": "lanczos",
-      "scale_by": 2.0
+      "scale_by": 1.0
     }
   },
   "3": {
@@ -92,10 +92,19 @@
       "color_correction_method": "lab"
     }
   },
+  "14": {
+    "class_type": "ImageBlend",
+    "inputs": {
+      "image1": ["2", 0],
+      "image2": ["12", 0],
+      "blend_factor": 0.55,
+      "blend_mode": "normal"
+    }
+  },
   "13": {
     "class_type": "VHS_VideoCombine",
     "inputs": {
-      "images": ["12", 0],
+      "images": ["14", 0],
       "audio": ["1", 2],
       "filename_prefix": "ShellMax/enhance",
       "frame_rate": 24.0,

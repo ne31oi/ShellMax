@@ -5,7 +5,7 @@ Stage lists are mirrored in frontend/src/lib/stages.ts - change both together.
 
 from dataclasses import dataclass, field
 
-from ..workflow import builder, builder_enhance, builder_face
+from ..workflow import builder, builder_enhance, builder_face, builder_interpolate
 
 
 @dataclass(frozen=True)
@@ -52,5 +52,11 @@ PIPELINES = {
         stage_by_node=builder_enhance.STAGE_BY_NODE,
         sampler_nodes=builder_enhance.SAMPLER_NODES,
         final_node=builder_enhance.FINAL_OUTPUT_NODE,
+    ),
+    "interpolate": Pipeline(
+        stages=[("load", 0.10), ("interpolate", 0.80), ("save", 0.10)],
+        stage_by_node=builder_interpolate.STAGE_BY_NODE,
+        sampler_nodes=builder_interpolate.SAMPLER_NODES,
+        final_node=builder_interpolate.FINAL_OUTPUT_NODE,
     ),
 }

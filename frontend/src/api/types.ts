@@ -104,6 +104,7 @@ export interface FaceDefaults {
 export interface EnhanceUIParams {
   source_asset_id: number;
   scale: number | null;
+  strength: number | null;
   color_correction: "lab" | "wavelet" | "adain" | "none" | null;
   seed: number | null;
 }
@@ -112,6 +113,13 @@ export interface EnhanceScalePreset {
   id: string;
   label: string;
   scale: number;
+  hint: string;
+}
+
+export interface EnhanceStrengthPreset {
+  id: string;
+  label: string;
+  strength: number;
   hint: string;
 }
 
@@ -124,12 +132,44 @@ export interface EnhanceColorPreset {
 export interface EnhanceDefaults {
   asset: MediaAsset;
   scale: number;
+  strength: number;
   color_correction: string;
   frames: number;
   scale_presets: EnhanceScalePreset[];
+  strength_presets: EnhanceStrengthPreset[];
   color_presets: EnhanceColorPreset[];
   unet: string;
   vae: string;
+}
+
+export interface InterpolateUIParams {
+  source_asset_id: number;
+  model: "rife" | "film" | null;
+  multiplier: number | null;
+}
+
+export interface InterpolateModelPreset {
+  id: string;
+  label: string;
+  hint: string;
+}
+
+export interface InterpolateMultiplierPreset {
+  id: string;
+  label: string;
+  multiplier: number;
+  hint: string;
+}
+
+export interface InterpolateDefaults {
+  asset: MediaAsset;
+  model: string;
+  multiplier: number;
+  frames: number;
+  source_fps: number;
+  model_presets: InterpolateModelPreset[];
+  multiplier_presets: InterpolateMultiplierPreset[];
+  model_path: string;
 }
 
 export interface EngineProfile {
@@ -185,7 +225,7 @@ export interface UIParams {
 export type GenStatus = "queued" | "running" | "done" | "draft_only" | "error" | "cancelled";
 export type Stage = "load" | "encode" | "pass1" | "draft" | "upscale" | "pass2" | "final" | "decode" | "done";
 
-export type JobKind = "generate" | "face" | "enhance";
+export type JobKind = "generate" | "face" | "enhance" | "interpolate";
 
 export interface Generation {
   id: number;
@@ -197,7 +237,7 @@ export interface Generation {
   status: GenStatus;
   stage: Stage | null;
   progress: number;
-  ui_params: UIParams & Partial<FaceUIParams> & Partial<EnhanceUIParams>;
+  ui_params: UIParams & Partial<FaceUIParams> & Partial<EnhanceUIParams> & Partial<InterpolateUIParams>;
   full_params: Record<string, unknown> | null;
   seed: number;
   profile_name: string;
@@ -225,7 +265,7 @@ export interface MediaAsset {
   height: number | null;
   fps: number | null;
   has_audio: boolean;
-  source: "generated" | "draft" | "imported";
+  source: "generated" | "draft" | "imported" | "exported";
   generation_id: number | null;
   thumb: string | null;
   created: string;
@@ -293,7 +333,10 @@ export interface Meta {
   defaults: { aspect: string; duration: number; quality: string; look?: string; camera?: string; light?: string; prompt_template: string };
   face_strength: FaceStrength[];
   enhance_scale?: EnhanceScalePreset[];
+  enhance_strength?: EnhanceStrengthPreset[];
   enhance_color?: EnhanceColorPreset[];
+  interpolate_model?: InterpolateModelPreset[];
+  interpolate_multiplier?: InterpolateMultiplierPreset[];
 }
 
 export interface FsListing {

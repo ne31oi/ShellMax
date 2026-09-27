@@ -214,6 +214,37 @@ class ShellMaxLatentUpscalerByPath:
         return (result[0],)
 
 
+class ShellMaxFrameInterpLoaderByPath:
+    """FrameInterpolationModelLoader with an absolute model path (RIFE / FILM)."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"model_path": PATH_INPUT}}
+
+    RETURN_TYPES = ("INTERP_MODEL",)
+    FUNCTION = "load"
+    CATEGORY = CATEGORY
+
+    def load(self, model_path):
+        import torch
+        import comfy.model_patcher
+        import comfy.utils
+        from comfy import model_management
+        from comfy_extras.nodes_frame_interpolation import FrameInterpolationModelLoader
+
+        path = normalize_path(model_path)
+        sd = comfy.utils.load_torch_file(path, safe_load=True)
+        model = FrameInterpolationModelLoader._detect_and_load(sd)
+        dtype = torch.float16 if model_management.should_use_fp16(model_management.get_torch_device()) else torch.float32
+        model.eval().to(dtype)
+        patcher = comfy.model_patcher.CoreModelPatcher(
+            model,
+            load_device=model_management.get_torch_device(),
+            offload_device=model_management.unet_offload_device(),
+        )
+        return (patcher,)
+
+
 NODE_CLASS_MAPPINGS = {
     "ShellMaxUNETLoaderByPath": ShellMaxUNETLoaderByPath,
     "ShellMaxCLIPLoaderByPath": ShellMaxCLIPLoaderByPath,
@@ -221,6 +252,7 @@ NODE_CLASS_MAPPINGS = {
     "ShellMaxLoraLoaderByPath": ShellMaxLoraLoaderByPath,
     "ShellMaxLoraModelOnlyByPath": ShellMaxLoraModelOnlyByPath,
     "ShellMaxLatentUpscalerByPath": ShellMaxLatentUpscalerByPath,
+    "ShellMaxFrameInterpLoaderByPath": ShellMaxFrameInterpLoaderByPath,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -230,6 +262,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ShellMaxLoraLoaderByPath": "ShellMax Load LoRA (path)",
     "ShellMaxLoraModelOnlyByPath": "ShellMax Load LoRA Model Only (path)",
     "ShellMaxLatentUpscalerByPath": "ShellMax Minimax H3 Latent Upscaler (path)",
+    "ShellMaxFrameInterpLoaderByPath": "ShellMax Load Frame Interpolation Model (path)",
 }
 
 logging.info("ShellMax: path loaders registered")

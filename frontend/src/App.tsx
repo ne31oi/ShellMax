@@ -1,9 +1,10 @@
 import clsx from "clsx";
-import { Clapperboard, Settings, Wand2, X } from "lucide-react";
+import { Clapperboard, PanelLeft, PanelRight, Settings, Wand2, X } from "lucide-react";
 import { useEffect } from "react";
 import { AssistantSetup } from "./components/assistant/AssistantSetup";
 import { FaceRefineDialog } from "./components/face/FaceRefineDialog";
 import { EnhanceDialog } from "./components/enhance/EnhanceDialog";
+import { InterpolateDialog } from "./components/enhance/InterpolateDialog";
 import { RefEditor } from "./components/generate/RefEditor";
 import { ChatView } from "./components/assistant/ChatView";
 import { GeneratePanel } from "./components/generate/GeneratePanel";
@@ -28,13 +29,15 @@ export default function App() {
   const loaded = useLibrary((s) => s.loaded);
   const workspace = useUI((s) => s.workspace);
   const setWorkspace = useUI((s) => s.setWorkspace);
-  const genDrawer = useUI((s) => s.genDrawer);
-  const toggleGenDrawer = useUI((s) => s.toggleGenDrawer);
+  const binOpen = useUI((s) => s.binOpen);
+  const panelOpen = useUI((s) => s.panelOpen);
+  const toggleBin = useUI((s) => s.toggleBin);
+  const togglePanel = useUI((s) => s.togglePanel);
   const openSettings = useUI((s) => s.openSettings);
 
-  const [binW, setBinW] = usePanelSize("bin", 300, 220, 520);
-  const [panelW, setPanelW] = usePanelSize("gen", 400, 340, 620);
-  const [timelineH, setTimelineH] = usePanelSize(`timeline.${workspace}`, workspace === "edit" ? 300 : 120, 90, 520);
+  const [binW, , adjustBinW] = usePanelSize("bin", 300, 220, 520);
+  const [panelW, , adjustPanelW] = usePanelSize("gen", 400, 340, 620);
+  const [timelineH, , adjustTimelineH] = usePanelSize("timeline.edit", 300, 90, 520);
 
   useHotkeys();
 
@@ -62,8 +65,6 @@ export default function App() {
       </div>
     );
   }
-
-  const showPanel = workspace === "generate";
 
   return (
     <TipProvider>
@@ -96,6 +97,26 @@ export default function App() {
               </button>
             ))}
           </div>
+          {workspace !== "assistant" && (
+            <div className="flex items-center gap-0.5 rounded-lg bg-raised p-0.5">
+              <IconButton
+                label={binOpen ? "Скрыть медиатеку (B)" : "Показать медиатеку (B)"}
+                size="sm"
+                active={binOpen}
+                onClick={toggleBin}
+              >
+                <PanelLeft size={14} />
+              </IconButton>
+              <IconButton
+                label={panelOpen ? "Скрыть панель генерации (G)" : "Показать панель генерации (G)"}
+                size="sm"
+                active={panelOpen}
+                onClick={togglePanel}
+              >
+                <PanelRight size={14} />
+              </IconButton>
+            </div>
+          )}
           <span className="flex-1" />
           <EngineStatus />
           <RestartAllButton />
@@ -111,50 +132,75 @@ export default function App() {
           </div>
         ) : (
         <div className="flex min-h-0 flex-1">
-          <aside style={{ width: binW }} className="shrink-0 bg-panel">
-            <MediaBin />
+          <aside
+            data-open={binOpen}
+            style={{ width: binOpen ? binW : 0 }}
+            className={clsx("sidebar-rail bg-panel", binOpen && "border-r border-line")}
+            aria-hidden={!binOpen}
+          >
+            <div className="sidebar-rail-inner" style={{ width: binW }}>
+              <MediaBin />
+            </div>
           </aside>
-          <Resizer axis="x" onDrag={(d) => setBinW(binW + d)} />
+          <div data-open={binOpen} className="sidebar-split" style={{ width: binOpen ? undefined : 0 }}>
+            <Resizer axis="x" onDrag={adjustBinW} />
+          </div>
 
           <main className="flex min-w-0 flex-1 flex-col">
             <div className="relative min-h-0 flex-1">
               <Viewer />
-              {workspace === "edit" && !genDrawer && (
+              {!binOpen && (
                 <button
-                  onClick={toggleGenDrawer}
-                  className="absolute right-3 top-3 flex items-center gap-1.5 rounded-lg border border-line bg-panel/90 px-2.5 py-1.5 text-xs text-muted shadow-lg backdrop-blur hover:text-fg"
+                  onClick={toggleBin}
+                  className="sidebar-chip absolute left-3 top-3 flex items-center gap-1.5 rounded-lg border border-line bg-panel/90 px-2 py-1.5 text-xs text-muted shadow-lg backdrop-blur hover:text-fg"
+                >
+                  <PanelLeft size={13} /> Медиатека <Kbd>B</Kbd>
+                </button>
+              )}
+              {!panelOpen && (
+                <button
+                  onClick={togglePanel}
+                  className="sidebar-chip absolute right-3 top-3 flex items-center gap-1.5 rounded-lg border border-line bg-panel/90 px-2.5 py-1.5 text-xs text-muted shadow-lg backdrop-blur hover:text-fg"
                 >
                   <Wand2 size={13} /> Сгенерировать <Kbd>G</Kbd>
                 </button>
               )}
             </div>
-            <Resizer axis="y" invert onDrag={(d) => setTimelineH(timelineH + d)} />
-            <div style={{ height: timelineH }} className="shrink-0 bg-panel">
-              <TimelineStrip tall={workspace === "edit"} />
-            </div>
+            {workspace === "edit" && (
+              <>
+                <Resizer axis="y" invert onDrag={adjustTimelineH} />
+                <div style={{ height: timelineH }} className="shrink-0 bg-panel">
+                  <TimelineStrip tall />
+                </div>
+              </>
+            )}
           </main>
 
-          {(showPanel || genDrawer) && (
-            <>
-              <Resizer axis="x" invert onDrag={(d) => setPanelW(panelW + d)} />
-              <aside style={{ width: panelW }} className="relative shrink-0 bg-panel">
-                {workspace === "edit" && (
-                  <div className="absolute right-2 top-2 z-10">
-                    <IconButton label="Скрыть панель (G)" size="sm" onClick={toggleGenDrawer}>
-                      <X size={14} />
-                    </IconButton>
-                  </div>
-                )}
-                <GeneratePanel />
-              </aside>
-            </>
-          )}
+          <div data-open={panelOpen} className="sidebar-split" style={{ width: panelOpen ? undefined : 0 }}>
+            <Resizer axis="x" invert onDrag={adjustPanelW} />
+          </div>
+          <aside
+            data-open={panelOpen}
+            style={{ width: panelOpen ? panelW : 0 }}
+            className={clsx("sidebar-rail relative bg-panel", panelOpen && "border-l border-line")}
+            aria-hidden={!panelOpen}
+          >
+            <div className="sidebar-rail-inner relative" style={{ width: panelW }}>
+              <div className="absolute right-2 top-2 z-10">
+                <IconButton label="Скрыть панель (G)" size="sm" onClick={togglePanel}>
+                  <X size={14} />
+                </IconButton>
+              </div>
+              <GeneratePanel />
+            </div>
+          </aside>
         </div>
         )}
       </div>
       <SettingsDialog />
       <FaceRefineDialog />
       <EnhanceDialog />
+      <InterpolateDialog />
       <RefEditor />
       <AssistantSetup />
       <Toasts />

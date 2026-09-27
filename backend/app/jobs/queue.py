@@ -17,7 +17,8 @@ from ..media import library
 from ..workflow.builder import build_prompt
 from ..workflow.builder_enhance import build_enhance_prompt
 from ..workflow.builder_face import build_face_prompt
-from ..workflow.params import EnhanceFullParams, FaceFullParams, FullParams
+from ..workflow.builder_interpolate import build_interpolate_prompt
+from ..workflow.params import EnhanceFullParams, FaceFullParams, FullParams, InterpolateFullParams
 from .pipelines import PIPELINES, Pipeline
 
 log = logging.getLogger("shellmax.jobs")
@@ -56,7 +57,8 @@ class Running:
 
 def humanize_error(exc_type: str, message: str, node_type: str = "") -> tuple[str, str]:
     low = f"{exc_type} {message}".lower()
-    if "out of memory" in low or "outofmemory" in low or "allocation on device" in low:
+    if ("out of memory" in low or "outofmemory" in low or "allocation on device" in low
+            or "mha_graph.execute" in low):
         return ("oom",
                 "Не хватило видеопамяти. Снизьте качество или длительность, либо включите «Экономию VRAM».")
     if "filenotfound" in low or "файл не найден" in low or "путь к файлу" in low:
@@ -127,6 +129,26 @@ class JobManager:
     def mark_cold(self) -> None:
         """Models were unloaded (e.g. for the assistant): the next job is a cold sample."""
         self.cold_next = True
+
+    async def _free_for_enhance(self) -> None:
+        """Unload lingering ComfyUI models so SeedVR2 gets free VRAM (same idea as assistant._free_comfy)."""
+        try:
+            await self.client.free_models()
+        except Exception:  # noqa: BLE001 - engine hiccup: still try to run
+            log.warning("could not free ComfyUI models before enhance", exc_info=True)
+            return
+        self.mark_cold()
+        last: float | None = None
+        for _ in range(30):
+            try:
+                free_mb = (await self.client.system_stats())["devices"][0]["vram_free"] / 2**20
+            except Exception:  # noqa: BLE001
+                return
+            if last is not None and abs(free_mb - last) < 64:
+                log.info("VRAM after free for enhance: %.0f MB", free_mb)
+                return
+            last = free_mb
+            await asyncio.sleep(1)
 
     def busy(self) -> bool:
         """A video job is running or waiting."""
@@ -219,6 +241,9 @@ class JobManager:
         elif g.kind == "enhance":
             full = EnhanceFullParams(**g.full_params)
             prompt = build_enhance_prompt(full)
+        elif g.kind == "interpolate":
+            full = InterpolateFullParams(**g.full_params)
+            prompt = build_interpolate_prompt(full)
         else:
             full = await self._upload_refs(FullParams(**g.full_params), g.ui_params)
             prompt = build_prompt(full)
@@ -230,6 +255,10 @@ class JobManager:
 
         if self.before_submit:
             await self.before_submit()
+        # SeedVR2 needs a clean slate: MiniMax weights left from the previous job
+        # otherwise trigger OOM / cryptic cuDNN MHA failures in KSampler.
+        if g.kind == "enhance":
+            await self._free_for_enhance()
         r.cold = self.cold_next or self.engine.pid != self._warm_pid
         try:
             r.prompt_id = await self.client.queue_prompt(prompt)
@@ -443,6 +472,11 @@ class JobManager:
                 src_asset = s.get(MediaAsset, g.source_asset_id) if g.source_asset_id else None
                 base = src_asset.name if src_asset else f"Клип {g.source_asset_id}"
                 title = f"{base} · детализация"
+            elif g.kind == "interpolate":
+                src_asset = s.get(MediaAsset, g.source_asset_id) if g.source_asset_id else None
+                base = src_asset.name if src_asset else f"Клип {g.source_asset_id}"
+                mult = (g.ui_params or {}).get("multiplier") or (g.full_params or {}).get("recipe", {}).get("multiplier") or 2
+                title = f"{base} · ×{mult}"
             else:
                 title = asset_title((g.ui_params or {}).get("prompt", ""), r.gen_id)
         asset_id = await register_asset(dest, generation_id=r.gen_id, source="draft" if is_draft else "generated",

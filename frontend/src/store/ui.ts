@@ -22,34 +22,52 @@ export interface EnhanceDialogState {
   fromGenerationId?: number;
 }
 
+/** Frame interpolation (RIFE / FILM) dialog. */
+export interface InterpolateDialogState {
+  assetId: number;
+  fromGenerationId?: number;
+}
+
 interface UIState {
   workspace: Workspace;
   selectedGen: number | null;
   selectedAsset: number | null;
   compareWith: number | null; // generation id shown on the right side of the A/B wipe
   settings: SettingsTab | null;
-  genDrawer: boolean; // generation panel in the Edit workspace
+  binOpen: boolean; // left media library
+  panelOpen: boolean; // right generate panel
   binFilter: "all" | "video" | "draft" | "imported";
   toasts: Toast[];
   faceDialog: FaceDialogState | null;
   enhanceDialog: EnhanceDialogState | null;
+  interpolateDialog: InterpolateDialogState | null;
   refEditor: string | null; // uid of the reference card being edited
+  viewingSequence: boolean; // montage: Viewer plays the timeline sequence
 
   setWorkspace: (w: Workspace) => void;
   selectGen: (id: number | null) => void;
   selectAsset: (id: number | null) => void;
   compare: (id: number | null) => void;
   openSettings: (tab: SettingsTab | null) => void;
-  toggleGenDrawer: () => void;
+  toggleBin: () => void;
+  togglePanel: () => void;
   setBinFilter: (f: UIState["binFilter"]) => void;
   toast: (text: string, tone?: Toast["tone"], action?: Toast["action"]) => void;
   openFaceDialog: (state: FaceDialogState | null) => void;
   openEnhanceDialog: (state: EnhanceDialogState | null) => void;
+  openInterpolateDialog: (state: InterpolateDialogState | null) => void;
   openRefEditor: (uid: string | null) => void;
+  setViewingSequence: (v: boolean) => void;
   dismiss: (id: number) => void;
 }
 
 let toastId = 0;
+
+function readBool(key: string, fallback: boolean): boolean {
+  const v = localStorage.getItem(key);
+  if (v === null) return fallback;
+  return v === "1";
+}
 
 export const useUI = create<UIState>((set) => ({
   workspace: (localStorage.getItem("sm.workspace") as Workspace) || "generate",
@@ -57,22 +75,42 @@ export const useUI = create<UIState>((set) => ({
   selectedAsset: null,
   compareWith: null,
   settings: null,
-  genDrawer: false,
+  binOpen: readBool("sm.binOpen", true),
+  panelOpen: readBool("sm.panelOpen", true),
   binFilter: "all",
   toasts: [],
   faceDialog: null,
   enhanceDialog: null,
+  interpolateDialog: null,
   refEditor: null,
+  viewingSequence: false,
 
   setWorkspace: (workspace) => {
     localStorage.setItem("sm.workspace", workspace);
-    set({ workspace, genDrawer: false });
+    // Montage starts with the generate panel tucked away; generation keeps last panel preference.
+    if (workspace === "edit") {
+      localStorage.setItem("sm.panelOpen", "0");
+      set({ workspace, panelOpen: false, viewingSequence: true });
+    } else {
+      set({ workspace, viewingSequence: false });
+    }
   },
-  selectGen: (selectedGen) => set({ selectedGen, selectedAsset: null, compareWith: null }),
-  selectAsset: (selectedAsset) => set({ selectedAsset, selectedGen: null, compareWith: null }),
+  selectGen: (selectedGen) => set({ selectedGen, selectedAsset: null, compareWith: null, viewingSequence: false }),
+  selectAsset: (selectedAsset) => set({ selectedAsset, selectedGen: null, compareWith: null, viewingSequence: false }),
   compare: (compareWith) => set({ compareWith }),
   openSettings: (settings) => set({ settings }),
-  toggleGenDrawer: () => set((s) => ({ genDrawer: !s.genDrawer })),
+  toggleBin: () =>
+    set((s) => {
+      const binOpen = !s.binOpen;
+      localStorage.setItem("sm.binOpen", binOpen ? "1" : "0");
+      return { binOpen };
+    }),
+  togglePanel: () =>
+    set((s) => {
+      const panelOpen = !s.panelOpen;
+      localStorage.setItem("sm.panelOpen", panelOpen ? "1" : "0");
+      return { panelOpen };
+    }),
   setBinFilter: (binFilter) => set({ binFilter }),
   toast: (text, tone = "info", action) => {
     const id = ++toastId;
@@ -82,5 +120,8 @@ export const useUI = create<UIState>((set) => ({
   dismiss: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
   openFaceDialog: (faceDialog) => set({ faceDialog }),
   openEnhanceDialog: (enhanceDialog) => set({ enhanceDialog }),
+  openInterpolateDialog: (interpolateDialog) => set({ interpolateDialog }),
   openRefEditor: (refEditor) => set({ refEditor }),
+  setViewingSequence: (viewingSequence) =>
+    set(viewingSequence ? { viewingSequence, selectedGen: null, selectedAsset: null, compareWith: null } : { viewingSequence }),
 }));

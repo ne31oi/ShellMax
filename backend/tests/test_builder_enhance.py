@@ -19,7 +19,9 @@ def default_params(**over) -> EnhanceFullParams:
         recipe=EnhanceRecipe(
             unet="F:/m/seedvr2.safetensors",
             vae="F:/m/seedvr2_vae.safetensors",
+            scale=1.0,
             color_correction="lab",
+            strength=0.55,
             crf=17,
         ),
         filename_prefix="ShellMax/enhance",
@@ -44,9 +46,12 @@ def test_graph_matches_golden_workflow():
         assert g[nid]["inputs"] == node["inputs"], f"node {nid}: {g[nid]['inputs']} != {node['inputs']}"
 
 
-def test_scale_and_color_override():
+def test_scale_color_and_strength_override():
     p = default_params(recipe=EnhanceRecipe(
-        unet="F:/u.safetensors", vae="F:/v.safetensors", scale=1.5, color_correction="lab"))
+        unet="F:/u.safetensors", vae="F:/v.safetensors",
+        scale=1.5, color_correction="lab", strength=0.75))
     g = build_enhance_prompt(p)
     assert g["2"]["inputs"]["scale_by"] == 1.5
     assert g["12"]["inputs"]["color_correction_method"] == "lab"
+    assert g["14"]["inputs"]["blend_factor"] == 0.75
+    assert g["13"]["inputs"]["images"] == ["14", 0]

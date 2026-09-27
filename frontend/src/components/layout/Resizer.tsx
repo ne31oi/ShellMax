@@ -1,21 +1,34 @@
 import clsx from "clsx";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
-/** Panel size persisted per key; returns [size, dragHandle]. */
+/** Panel size persisted per key; returns [size, setAbsolute, adjustByDelta]. */
 export function usePanelSize(key: string, initial: number, min: number, max: number) {
   const [size, setSize] = useState(() => {
     const saved = Number(localStorage.getItem(`sm.panel.${key}`));
     return saved >= min && saved <= max ? saved : initial;
   });
+  const sizeRef = useRef(size);
+  sizeRef.current = size;
+
   const commit = useCallback(
     (v: number) => {
       const c = Math.max(min, Math.min(max, v));
+      sizeRef.current = c;
       setSize(c);
       localStorage.setItem(`sm.panel.${key}`, String(c));
     },
     [key, min, max],
   );
-  return [size, commit] as const;
+
+  /** Use this from Resizer onDrag — avoids stale React closures during a drag. */
+  const adjust = useCallback(
+    (delta: number) => {
+      commit(sizeRef.current + delta);
+    },
+    [commit],
+  );
+
+  return [size, commit, adjust] as const;
 }
 
 export function Resizer({
@@ -30,6 +43,7 @@ export function Resizer({
   const [active, setActive] = useState(false);
   const start = (e: React.PointerEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setActive(true);
     let last = axis === "x" ? e.clientX : e.clientY;
     const move = (ev: PointerEvent) => {
@@ -49,14 +63,15 @@ export function Resizer({
     <div
       onPointerDown={start}
       className={clsx(
-        "group relative z-10 shrink-0",
+        "group relative z-20 shrink-0",
         axis === "x" ? "w-px cursor-col-resize bg-line" : "h-px cursor-row-resize bg-line",
       )}
     >
       <div
         className={clsx(
           "absolute transition-colors",
-          axis === "x" ? "-left-1 -right-1 inset-y-0" : "-top-1 -bottom-1 inset-x-0",
+          // Wider hit target on the timeline splitter — a 2px line is easy to miss.
+          axis === "x" ? "-left-1 -right-1 inset-y-0" : "-top-1.5 -bottom-1.5 inset-x-0",
           active ? "bg-accent/60" : "group-hover:bg-accent/40",
         )}
       />

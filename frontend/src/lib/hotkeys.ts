@@ -56,9 +56,18 @@ export function useHotkeys() {
         case "g":
         case "G": {
           const ui = useUI.getState();
-          if (ui.workspace === "edit") ui.toggleGenDrawer();
-          else emit("focusPrompt");
+          if (ui.workspace === "assistant") emit("focusPrompt");
+          else ui.togglePanel();
           e.preventDefault();
+          break;
+        }
+        case "b":
+        case "B": {
+          const ui = useUI.getState();
+          if (ui.workspace !== "assistant") {
+            ui.toggleBin();
+            e.preventDefault();
+          }
           break;
         }
         case "Escape":

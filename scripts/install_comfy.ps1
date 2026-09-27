@@ -65,7 +65,9 @@ $RequiredClasses = @(
     # SeedVR2 enhance
     'SeedVR2Preprocess', 'SeedVR2PostProcessing', 'SeedVR2Conditioning',
     'SeedVR2TemporalChunk', 'SeedVR2TemporalMerge', 'ImageScaleBy',
-    'VAEEncodeTiled', 'VAEDecodeTiled', 'KSampler'
+    'VAEEncodeTiled', 'VAEDecodeTiled', 'KSampler',
+    # frame interpolation (RIFE / FILM)
+    'FrameInterpolate', 'ShellMaxFrameInterpLoaderByPath'
 )
 
 # ---------------------------------------------------------------- paths
@@ -249,6 +251,30 @@ if (-not (Test-Path $seed3b) -and -not (Test-Path $seed7b)) {
     Ok 'seedvr2_3b_int8 уже на месте'
 } else {
     Ok 'seedvr2_7b_int8 будет использован как fallback (3B предпочтительнее на 16 ГБ)'
+}
+
+# Frame interpolation models (native RIFE / FILM)
+Step '6c/7 модели интерполяции кадров'
+$interpDir = Join-Path $Config.legacy_models_dir 'frame_interpolation'
+New-Item -ItemType Directory -Force -Path $interpDir | Out-Null
+$rife = Join-Path $interpDir 'rife_v4.26.safetensors'
+$film = Join-Path $interpDir 'film_net_fp16.safetensors'
+$rifeFb = Join-Path $Config.legacy_models_dir 'rife\rife49.pth'
+if (-not (Test-Path $rife) -and -not (Test-Path $rifeFb)) {
+    Write-Host '    скачиваю rife_v4.26.safetensors…' -ForegroundColor Yellow
+    Invoke-WebRequest -Uri 'https://huggingface.co/Comfy-Org/frame_interpolation/resolve/main/rife_v4.26.safetensors' -OutFile $rife -UseBasicParsing
+    Ok 'frame_interpolation/rife_v4.26.safetensors'
+} elseif (Test-Path $rife) {
+    Ok 'rife_v4.26 уже на месте'
+} else {
+    Ok 'rife49.pth будет использован как fallback'
+}
+if (-not (Test-Path $film)) {
+    Write-Host '    скачиваю film_net_fp16.safetensors…' -ForegroundColor Yellow
+    Invoke-WebRequest -Uri 'https://huggingface.co/Comfy-Org/frame_interpolation/resolve/main/film_net_fp16.safetensors' -OutFile $film -UseBasicParsing
+    Ok 'frame_interpolation/film_net_fp16.safetensors'
+} else {
+    Ok 'film_net_fp16 уже на месте'
 }
 
 # ---------------------------------------------------------------- 7. verify

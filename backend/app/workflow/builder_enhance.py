@@ -10,7 +10,9 @@ Value-preserving differences from the blueprint subgraph:
   - ShellMax*ByPath loaders with absolute paths;
   - VHS_LoadVideoPath + VHS_VideoCombine instead of LoadVideo/CreateVideo/SaveVideo
     so outputs match the rest of ShellMax (gifs/videos on the combine node);
-  - post color match defaults to lab (blueprint widget is none; lab keeps MiniMax look).
+  - post color match defaults to lab (blueprint widget is none; lab keeps MiniMax look);
+  - ImageBlend after post-process: pure SeedVR (blend_factor=1) overcooks sharp MiniMax
+    clips; default strength ~0.55 mixes restored detail with the source for realism.
 """
 
 from .params import EnhanceFullParams
@@ -20,7 +22,7 @@ STAGE_BY_NODE = {
     "2": "resize", "3": "resize",
     "6": "encode",
     "8": "sample", "9": "sample",
-    "11": "decode", "12": "decode",
+    "11": "decode", "12": "decode", "14": "decode",
     "13": "save",
 }
 FINAL_OUTPUT_NODE = "13"
@@ -64,8 +66,12 @@ def build_enhance_prompt(p: EnhanceFullParams) -> dict:
     g["12"] = {"class_type": "SeedVR2PostProcessing",
                "inputs": {"images": _link("11"), "original_resized_images": _link("2"),
                           "color_correction_method": r.color_correction}}
+    # image1=source, image2=SeedVR; blend_factor = how much SeedVR (0=source, 1=full).
+    g["14"] = {"class_type": "ImageBlend",
+               "inputs": {"image1": _link("2"), "image2": _link("12"),
+                          "blend_factor": float(r.strength), "blend_mode": "normal"}}
     g["13"] = {"class_type": "VHS_VideoCombine",
-               "inputs": {"images": _link("12"), "audio": _link("1", 2),
+               "inputs": {"images": _link("14"), "audio": _link("1", 2),
                           "filename_prefix": p.filename_prefix, "frame_rate": p.frame_rate,
                           "loop_count": 0, "format": "video/h264-mp4", "pix_fmt": "yuv420p",
                           "crf": r.crf, "save_metadata": True, "trim_to_audio": False,
