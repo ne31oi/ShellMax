@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { api } from "../api/client";
+import { loadMontageView, saveMontageView } from "../lib/montageView";
 import { snapToFrame } from "../lib/planH3";
 import { useUI } from "./ui";
 
@@ -65,9 +66,13 @@ export interface Track {
 }
 
 export interface TimelineMarkers {
+  /** Beat times: file-absolute when timespace==="file", else timeline-absolute (legacy). */
   beats: number[];
   downbeats: number[];
   sourceAssetId?: number | null;
+  /** Clip these beats belong to — display remaps via clip.start/in/out. */
+  sourceClipId?: string | null;
+  timespace?: "file" | "timeline" | null;
   bpm?: number | null;
   offset?: number;
 }
@@ -153,12 +158,82 @@ export function emptyPlan(partial?: Partial<Plan>): Plan {
   };
 }
 
+/** Fresh plan from an existing one — new id, no generation artifacts. */
+export function clonePlanFresh(plan: Plan, patch?: Partial<Plan>): Plan {
+  return emptyPlan({
+    ...plan,
+    refs: plan.refs.map((r) => ({ ...r })),
+    styles: plan.styles.map((s) => ({ ...s })),
+    audio: { ...plan.audio },
+    status: "empty",
+    generationId: null,
+    draftAssetId: null,
+    outputAssetId: null,
+    error: null,
+    ...patch,
+    // Must win over `...plan` — otherwise paste shares the source id and
+    // dragging one makes both blocks (same React key) jump together.
+    id: uid(),
+  });
+}
+
+type PlanClipboard = { plan: Plan; trackId: string };
+let planClipboard: PlanClipboard | null = null;
+
+export function copyPlanToClipboard(plan: Plan, trackId: string) {
+  planClipboard = {
+    trackId,
+    plan: {
+      ...plan,
+      refs: plan.refs.map((r) => ({ ...r })),
+      styles: plan.styles.map((s) => ({ ...s })),
+      audio: { ...plan.audio },
+    },
+  };
+}
+
+export function peekPlanClipboard(): PlanClipboard | null {
+  return planClipboard;
+}
+
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
+let playheadTimer: ReturnType<typeof setTimeout> | undefined;
+let pendingDoc: TimelineDoc | null = null;
+
 function persist(doc: TimelineDoc) {
+  pendingDoc = doc;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    api.saveTimeline(useUI.getState().projectId, doc).catch(() => undefined);
+    const body = pendingDoc;
+    pendingDoc = null;
+    if (!body) return;
+    api.saveTimeline(useUI.getState().projectId, body).catch(() => undefined);
   }, 500);
+}
+
+/** Flush debounced timeline save (reload / tab hide). */
+export function flushTimelinePersist() {
+  clearTimeout(saveTimer);
+  saveTimer = undefined;
+  clearTimeout(playheadTimer);
+  playheadTimer = undefined;
+  const projectId = useUI.getState().projectId;
+  const body = pendingDoc ?? useTimeline.getState().doc;
+  pendingDoc = null;
+  saveMontageView(projectId, { playhead: useTimeline.getState().playhead });
+  if (!body?.tracks?.length) return;
+  try {
+    void api.saveTimeline(projectId, body);
+  } catch {
+    /* ignore */
+  }
+}
+
+function persistPlayhead(t: number) {
+  clearTimeout(playheadTimer);
+  playheadTimer = setTimeout(() => {
+    saveMontageView(useUI.getState().projectId, { playhead: t });
+  }, 400);
 }
 
 export const useTimeline = create<TimelineState>((set, get) => ({
@@ -190,17 +265,23 @@ export const useTimeline = create<TimelineState>((set, get) => ({
     persist(doc);
     return cmd;
   },
-  load: (doc) =>
+  load: (doc) => {
+    const prefs = loadMontageView(useUI.getState().projectId);
     set({
       doc: normalizeLoaded(doc),
       past: [],
       future: [],
-      playhead: 0,
+      playhead: prefs.playhead,
       playing: false,
       selectedPlanId: null,
       selectedClipId: null,
-    }),
-  setPlayhead: (playhead) => set({ playhead: Math.max(0, playhead) }),
+    });
+  },
+  setPlayhead: (playhead) => {
+    const t = Math.max(0, playhead);
+    set({ playhead: t });
+    persistPlayhead(t);
+  },
   setPlaying: (playing) => set({ playing }),
   seekToClip: (clipId) => {
     const hit = findClip(get().doc, clipId);
@@ -264,7 +345,17 @@ function normalizeLoaded(doc: TimelineDoc | null | undefined): TimelineDoc {
   return {
     masterMute: !!doc.masterMute,
     masterVolume: typeof doc.masterVolume === "number" ? Math.max(0, Math.min(1, doc.masterVolume)) : 1,
-    markers: doc.markers ?? { beats: [], downbeats: [], bpm: null, offset: 0 },
+    markers: doc.markers
+      ? {
+          beats: Array.isArray(doc.markers.beats) ? doc.markers.beats : [],
+          downbeats: Array.isArray(doc.markers.downbeats) ? doc.markers.downbeats : [],
+          bpm: doc.markers.bpm ?? null,
+          offset: doc.markers.offset ?? 0,
+          sourceAssetId: doc.markers.sourceAssetId ?? null,
+          sourceClipId: doc.markers.sourceClipId ?? null,
+          timespace: doc.markers.timespace === "file" || doc.markers.timespace === "timeline" ? doc.markers.timespace : null,
+        }
+      : { beats: [], downbeats: [], bpm: null, offset: 0 },
     snapToBeats: doc.snapToBeats !== false,
     tracks,
   };
@@ -439,10 +530,79 @@ export function nearestBeat(t: number, beats: number[]): number {
   return beats.reduce((best, b) => (Math.abs(b - t) < Math.abs(best - t) ? b : best), beats[0]);
 }
 
-export function snapTime(doc: TimelineDoc, t: number): number {
-  if (!doc.snapToBeats) return t;
-  const beats = doc.markers?.beats ?? [];
-  return nearestBeat(t, beats);
+/** Resolve the timeline placement of the clip that owns beat markers. */
+export function markerClipPlacement(
+  doc: TimelineDoc,
+  clipId: string | null | undefined,
+): { start: number; in: number; out: number; clip: Clip } | null {
+  if (!clipId) return null;
+  for (const t of audioTracks(doc)) {
+    const clip = t.clips.find((c) => c.id === clipId);
+    if (clip) return { start: clip.start ?? 0, in: clip.in, out: clip.out, clip };
+  }
+  const hit = findClip(doc, clipId);
+  if (hit) return { start: hit.trackStart, in: hit.clip.in, out: hit.clip.out, clip: hit.clip };
+  return null;
+}
+
+/**
+ * Timeline-absolute beat times for ruler / snap.
+ * When timespace==="file", remap via the source clip's start/in/out so markers
+ * follow move/trim without re-analysis.
+ * 0:00 is always included as a snap/downbeat so plans can dock to the start.
+ */
+export function timelineBeats(doc: TimelineDoc): { beats: number[]; downbeats: number[] } {
+  const m = doc.markers;
+  if (!m?.beats?.length) return { beats: [], downbeats: [] };
+
+  let beats: number[];
+  let downbeats: number[];
+  if (m.timespace !== "file" || !m.sourceClipId) {
+    beats = [...m.beats];
+    downbeats = [...(m.downbeats ?? [])];
+  } else {
+    const place = markerClipPlacement(doc, m.sourceClipId);
+    if (!place) return { beats: [], downbeats: [] };
+    const map = (fileT: number) => {
+      if (fileT < place.in - 1e-3 || fileT > place.out + 1e-3) return null;
+      return snapToFrame(place.start + (fileT - place.in));
+    };
+    beats = m.beats.map(map).filter((t): t is number => t != null);
+    downbeats = (m.downbeats ?? []).map(map).filter((t): t is number => t != null);
+  }
+
+  const hasZero = (list: number[]) => list.some((b) => Math.abs(b) < 1e-3);
+  if (!hasZero(beats)) beats = [0, ...beats];
+  if (!hasZero(downbeats)) downbeats = [0, ...downbeats];
+  return { beats, downbeats };
+}
+
+export function snapEnabled(doc: TimelineDoc): boolean {
+  return doc.snapToBeats !== false;
+}
+
+/**
+ * Snap a time to the nearest beat when snap is on.
+ * - force: always (scrub / explicit "to beat")
+ * - with scale: magnetic — only if within thresholdPx of a beat (drag)
+ * - otherwise: magnetic in seconds (~1/8 s)
+ */
+export function snapTime(
+  doc: TimelineDoc,
+  t: number,
+  opts?: { scale?: number; thresholdPx?: number; force?: boolean },
+): number {
+  if (!snapEnabled(doc)) return t;
+  const { beats } = timelineBeats(doc);
+  if (!beats.length) return t;
+  const nearest = nearestBeat(t, beats);
+  // Default: always snap when enabled (Resolve "snap on").
+  // Pass force:false + scale for soft magnetic pull only.
+  if (opts?.force === false && opts.scale && opts.scale > 0) {
+    const px = opts.thresholdPx ?? 14;
+    if (Math.abs(nearest - t) * opts.scale > px) return t;
+  }
+  return nearest;
 }
 
 /** True if [a0,a1) overlaps [b0,b1). */

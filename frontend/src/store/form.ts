@@ -2,6 +2,78 @@ import { create } from "zustand";
 import { api } from "../api/client";
 import type { Generation, RefItem, StyleChoice, Upload } from "../api/types";
 import { fromModelPrompt, newUid, toModelPrompt } from "../lib/refs";
+import { sortedGenerations, useLibrary } from "./library";
+
+export type RecentRefKind = "image" | "video" | "audio";
+export type RecentRefs = Record<RecentRefKind, Upload[]>;
+
+const RECENT_LIMIT = 10;
+export const emptyRecentRefs = (): RecentRefs => ({ image: [], video: [], audio: [] });
+
+/** Same original, any edit, or a re-upload with the same filename. */
+function sameRecentFamily(a: Upload, b: Upload): boolean {
+  if (a.id === b.id) return true;
+  const aRoot = a.source_id || a.id;
+  const bRoot = b.source_id || b.id;
+  if (aRoot === bRoot) return true;
+  return !!a.orig_name && a.orig_name === b.orig_name;
+}
+
+function dedupeRecentList(list: Upload[]): Upload[] {
+  const out: Upload[] = [];
+  for (const u of list) {
+    if (out.some((x) => sameRecentFamily(x, u))) continue;
+    out.push(u);
+  }
+  return out;
+}
+
+function pushRecent(prev: RecentRefs, uploads: Upload[]): RecentRefs {
+  const next: RecentRefs = {
+    image: [...prev.image],
+    video: [...prev.video],
+    audio: [...prev.audio],
+  };
+  for (const upload of uploads) {
+    const kind = upload.kind as RecentRefKind;
+    if (kind !== "image" && kind !== "video" && kind !== "audio") continue;
+    next[kind] = [upload, ...next[kind].filter((u) => !sameRecentFamily(u, upload))].slice(0, RECENT_LIMIT);
+  }
+  return next;
+}
+
+function normalizeRecent(raw: unknown): RecentRefs {
+  const base = emptyRecentRefs();
+  if (!raw || typeof raw !== "object") return base;
+  const o = raw as Partial<RecentRefs>;
+  for (const kind of ["image", "video", "audio"] as const) {
+    const list = o[kind];
+    if (Array.isArray(list)) {
+      base[kind] = dedupeRecentList(
+        list
+          .filter((u) => u && typeof u === "object" && typeof (u as Upload).id === "string")
+          .slice(0, RECENT_LIMIT * 3) as Upload[],
+      ).slice(0, RECENT_LIMIT);
+    }
+  }
+  return base;
+}
+
+function KINDS_EMPTY(r: RecentRefs): boolean {
+  return r.image.length === 0 && r.video.length === 0 && r.audio.length === 0;
+}
+
+export function dedupeRecentRefs(r: RecentRefs): RecentRefs {
+  return {
+    image: dedupeRecentList(r.image).slice(0, RECENT_LIMIT),
+    video: dedupeRecentList(r.video).slice(0, RECENT_LIMIT),
+    audio: dedupeRecentList(r.audio).slice(0, RECENT_LIMIT),
+  };
+}
+
+export function recentFamilyInUse(refs: RefItem[], upload: Upload): boolean {
+  return refs.some((r) => sameRecentFamily(r.upload, upload));
+}
 
 /** The generation panel. Every value is sticky: restored from the last session. */
 interface FormState {
@@ -20,6 +92,8 @@ interface FormState {
   variants: number;
   profileId: number | null;
   promptHistory: string[];
+  /** Last used uploads per kind (MRU, sticky). */
+  recentRefs: RecentRefs;
   /** bumps when the prompt is replaced from outside (retry/template) so the editor reloads */
   promptRevision: number;
 
@@ -32,13 +106,17 @@ interface FormState {
   toggleRefAudio: (uid: string) => void;
   /** An edited (or reset) file for the same card: tag, order and 🔊 stay. */
   replaceRefUpload: (uid: string, upload: Upload) => void;
+  rememberRecent: (uploads: Upload[]) => void;
+  /** Fill empty MRU slots from past generate jobs (once per session if sticky list is empty). */
+  seedRecentFromHistory: () => Promise<void>;
   loadFromGeneration: (g: Generation) => Promise<void>;
   rememberPrompt: () => void;
 }
 
 const LIMITS = { image: 9, video: 3, audio: 3 } as const;
 const STICKY: (keyof FormState)[] = [
-  "refs", "prompt", "aspect", "duration", "quality", "look", "camera", "light", "styles", "seedLocked", "seed", "variants", "profileId", "promptHistory",
+  "refs", "prompt", "aspect", "duration", "quality", "look", "camera", "light", "styles",
+  "seedLocked", "seed", "variants", "profileId", "promptHistory", "recentRefs",
 ];
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -59,11 +137,27 @@ export const useForm = create<FormState>((set, get) => ({
   variants: 1,
   profileId: null,
   promptHistory: [],
+  recentRefs: emptyRecentRefs(),
   promptRevision: 0,
 
   hydrate: async (defaults) => {
     const saved = (await api.uiState().catch(() => ({}))) as Partial<FormState>;
-    set({ ...defaults, ...saved, hydrated: true, promptRevision: get().promptRevision + 1 });
+    let recentRefs = normalizeRecent(saved.recentRefs);
+    // Bootstrap MRU from sticky refs so existing sessions get a starting list
+    const stickyRefs = Array.isArray(saved.refs) ? (saved.refs as RefItem[]) : [];
+    if (stickyRefs.length && KINDS_EMPTY(recentRefs)) {
+      recentRefs = pushRecent(
+        recentRefs,
+        stickyRefs.map((r) => r.upload).filter((u) => u && typeof u.id === "string"),
+      );
+    }
+    set({
+      ...defaults,
+      ...saved,
+      recentRefs,
+      hydrated: true,
+      promptRevision: get().promptRevision + 1,
+    });
   },
 
   set: (patch) => set(patch),
@@ -84,14 +178,13 @@ export const useForm = create<FormState>((set, get) => ({
       refs.push(item);
       added.push(item);
     }
-    set({ refs });
+    set({ refs, recentRefs: pushRecent(get().recentRefs, added.map((a) => a.upload)) });
     return { added, rejected };
   },
 
   removeRef: (uid) =>
     set((s) => ({
       refs: s.refs.filter((r) => r.uid !== uid),
-      // drop the chip from the prompt as well
       prompt: s.prompt.replaceAll(`{{ref:${uid}}}`, "").replace(/ {2,}/g, " "),
       promptRevision: s.promptRevision + 1,
     })),
@@ -101,7 +194,6 @@ export const useForm = create<FormState>((set, get) => ({
       const refs = [...s.refs];
       const [item] = refs.splice(from, 1);
       refs.splice(to, 0, item);
-      // tokens reference uids, so the prompt stays correct; mention chips re-render their labels
       return { refs };
     }),
 
@@ -111,11 +203,48 @@ export const useForm = create<FormState>((set, get) => ({
   replaceRefUpload: (uid, upload) =>
     set((s) => ({
       refs: s.refs.map((r) => (r.uid === uid ? { ...r, upload, withAudio: r.withAudio && upload.has_audio } : r)),
+      recentRefs: pushRecent(s.recentRefs, [upload]),
     })),
+
+  rememberRecent: (uploads) => {
+    if (!uploads.length) return;
+    set((s) => ({ recentRefs: pushRecent(s.recentRefs, uploads) }));
+  },
+
+  seedRecentFromHistory: async () => {
+    const { recentRefs } = get();
+    const need = (["image", "video", "audio"] as const).filter((k) => recentRefs[k].length === 0);
+    if (!need.length) return;
+
+    const gens = sortedGenerations(useLibrary.getState().generations).filter(
+      (g) => g.kind === "generate" && Array.isArray(g.ui_params?.refs) && g.ui_params.refs.length,
+    );
+
+    const want = new Set(need);
+    const idsByKind: Record<RecentRefKind, string[]> = { image: [], video: [], audio: [] };
+    const seen = new Set<string>();
+    for (const g of gens) {
+      for (const r of g.ui_params.refs) {
+        const kind = r.kind as RecentRefKind;
+        if (!want.has(kind) || seen.has(r.upload_id)) continue;
+        if (idsByKind[kind].length >= RECENT_LIMIT) continue;
+        seen.add(r.upload_id);
+        idsByKind[kind].push(r.upload_id);
+      }
+      if (need.every((k) => idsByKind[k].length >= RECENT_LIMIT)) break;
+    }
+
+    // Oldest-first so pushRecent leaves newest at the front
+    const ids = need.flatMap((k) => [...idsByKind[k]].reverse());
+    if (!ids.length) return;
+    const uploads = (await Promise.all(ids.map((id) => api.uploadInfo(id).catch(() => null)))).filter(
+      (u): u is Upload => !!u,
+    );
+    if (uploads.length) set((s) => ({ recentRefs: pushRecent(s.recentRefs, uploads) }));
+  },
 
   loadFromGeneration: async (g) => {
     const p = g.ui_params;
-    // face / enhance have no generate fields — don't wipe the panel
     if (g.kind === "face" || g.kind === "enhance" || g.kind === "interpolate" || !p.refs) return;
     const uploads = await Promise.all(p.refs.map((r) => api.uploadInfo(r.upload_id).catch(() => null)));
     const refs: RefItem[] = [];
@@ -133,6 +262,7 @@ export const useForm = create<FormState>((set, get) => ({
       light: p.light ?? get().light,
       styles: (p.styles ?? []).map((st) => ({ style_id: st.style_id, strength: st.strength ?? 1 })),
       seed: g.seed,
+      recentRefs: pushRecent(s.recentRefs, refs.map((r) => r.upload)),
       promptRevision: s.promptRevision + 1,
     }));
   },

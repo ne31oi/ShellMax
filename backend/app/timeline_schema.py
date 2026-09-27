@@ -79,6 +79,10 @@ class TimelineMarkers(BaseModel):
     beats: list[float] = Field(default_factory=list)
     downbeats: list[float] = Field(default_factory=list)
     source_asset_id: int | None = Field(default=None, validation_alias=AliasChoices("sourceAssetId", "source_asset_id"))
+    # Clip that owns these beats; beats/downbeats are **file-absolute** when set.
+    source_clip_id: str | None = Field(default=None, validation_alias=AliasChoices("sourceClipId", "source_clip_id"))
+    # "file" = seconds in media; "timeline" = legacy absolute master-clock times
+    timespace: Literal["file", "timeline"] | None = None
     bpm: float | None = None
     offset: float = 0.0
 
@@ -184,6 +188,8 @@ def normalize_timeline(raw: dict[str, Any] | None) -> dict[str, Any]:
             "beats": list(markers.beats),
             "downbeats": list(markers.downbeats),
             "sourceAssetId": markers.source_asset_id,
+            "sourceClipId": markers.source_clip_id,
+            "timespace": markers.timespace,
             "bpm": markers.bpm,
             "offset": markers.offset,
         },

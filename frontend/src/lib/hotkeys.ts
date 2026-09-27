@@ -6,19 +6,30 @@ import { emit } from "./bus";
 const isTyping = (t: EventTarget | null) =>
   t instanceof HTMLElement && !!t.closest("input, textarea, select, [contenteditable=true]");
 
+/**
+ * Letter for a physical key (`KeyA`…`KeyZ`) — independent of keyboard layout.
+ * Prefer this over `e.key` for shortcuts (RU layout: Ctrl+C → key "с").
+ */
+export function physicalLetter(e: KeyboardEvent): string | null {
+  const m = /^Key([A-Z])$/.exec(e.code);
+  return m ? m[1].toLowerCase() : null;
+}
+
 /** Global shortcuts. Typing contexts keep their own keys (the prompt editor has its own undo). */
 export function useHotkeys() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const ctrl = e.ctrlKey || e.metaKey;
-      if (ctrl && e.key === "Enter") {
+      const letter = physicalLetter(e);
+
+      if (ctrl && e.code === "Enter") {
         e.preventDefault();
         emit("generate");
         return;
       }
       if (isTyping(e.target) || document.querySelector("[role=dialog]")) return;
 
-      if (ctrl && e.key.toLowerCase() === "z") {
+      if (ctrl && letter === "z") {
         e.preventDefault();
         const t = useTimeline.getState();
         const cmd = e.shiftKey ? t.redo() : t.undo();
@@ -26,43 +37,46 @@ export function useHotkeys() {
         return;
       }
       if (ctrl) return;
-      switch (e.key) {
-        case " ":
-          e.preventDefault();
-          emit("viewerToggle");
-          break;
-        case "ArrowLeft":
-          emit("viewerStep", e.shiftKey ? -10 : -1);
-          break;
-        case "ArrowRight":
-          emit("viewerStep", e.shiftKey ? 10 : 1);
-          break;
+
+      if (e.code === "Space") {
+        e.preventDefault();
+        emit("viewerToggle");
+        return;
+      }
+      if (e.code === "ArrowLeft") {
+        emit("viewerStep", e.shiftKey ? -10 : -1);
+        return;
+      }
+      if (e.code === "ArrowRight") {
+        emit("viewerStep", e.shiftKey ? 10 : 1);
+        return;
+      }
+      if (e.code === "Escape") {
+        useUI.getState().compare(null);
+        return;
+      }
+
+      switch (letter) {
         case "j":
-        case "J":
           emit("viewerRate", -1);
           break;
         case "k":
-        case "K":
           emit("viewerRate", 0);
           break;
         case "l":
-        case "L":
           emit("viewerRate", 1);
           break;
         case "f":
-        case "F":
           emit("viewerFullscreen");
           break;
-        case "g":
-        case "G": {
+        case "g": {
           const ui = useUI.getState();
           if (ui.workspace === "assistant") emit("focusPrompt");
           else ui.togglePanel();
           e.preventDefault();
           break;
         }
-        case "b":
-        case "B": {
+        case "b": {
           const ui = useUI.getState();
           if (ui.workspace !== "assistant") {
             ui.toggleBin();
@@ -70,9 +84,6 @@ export function useHotkeys() {
           }
           break;
         }
-        case "Escape":
-          useUI.getState().compare(null);
-          break;
       }
     };
     window.addEventListener("keydown", onKey);

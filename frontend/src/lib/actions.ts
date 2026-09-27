@@ -199,7 +199,7 @@ export function addToAudioTrack(asset: MediaAsset, opts?: { trackId?: string; st
     return;
   }
   let start = opts?.start ?? tl.playhead;
-  if (tl.doc.snapToBeats !== false) start = snapTime(tl.doc, start);
+  if (tl.doc.snapToBeats !== false) start = snapTime(tl.doc, start, { force: true });
   const dur = Math.max(0.15, asset.duration ?? 2);
   tl.run(
     commands.addAudioClip(

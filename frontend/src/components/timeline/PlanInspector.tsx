@@ -20,6 +20,7 @@ import {
   findPlan,
   openPlanInSidebar,
   planTracks,
+  timelineBeats,
   useTimeline,
   type Plan,
 } from "../../store/timeline";
@@ -222,9 +223,9 @@ export function PlanInspector() {
                 <div className="flex flex-col justify-end gap-1">
                   <Button
                     size="sm"
-                    disabled={locked || !doc.markers?.beats?.length}
+                    disabled={locked || !timelineBeats(doc).beats.length}
                     onClick={() => {
-                      const beats = doc.markers?.beats ?? [];
+                      const { beats } = timelineBeats(useTimeline.getState().doc);
                       const endBeat = beats.find((b) => b > plan.start + 0.05) ?? plan.start + plan.duration;
                       const cmd = commands.relocatePlan(
                         useTimeline.getState().doc,
@@ -481,10 +482,11 @@ export function PlanBatchBar({ selectedIds }: { selectedIds: string[] }) {
       </Button>
       <Button
         size="sm"
-        disabled={busy || !(doc.markers?.beats?.length)}
+        disabled={busy || !timelineBeats(doc).beats.length}
         title="Разложить бриф из панели генерации по битам"
         onClick={() => {
-          const marks = doc.markers?.downbeats?.length ? doc.markers.downbeats : doc.markers?.beats ?? [];
+          const { beats: tb, downbeats: td } = timelineBeats(useTimeline.getState().doc);
+          const marks = td.length ? td : tb;
           if (marks.length < 2) {
             useUI.getState().toast("Сначала найдите биты", "info");
             return;

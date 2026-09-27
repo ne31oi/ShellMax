@@ -25,7 +25,7 @@ import { connectLive } from "./lib/live";
 import { useAssistant } from "./store/assistant";
 import { useForm } from "./store/form";
 import { useLibrary } from "./store/library";
-import { type TimelineDoc, useTimeline } from "./store/timeline";
+import { type TimelineDoc, flushTimelinePersist, useTimeline } from "./store/timeline";
 import { unbindPlanForm } from "./lib/planForm";
 import { useUI } from "./store/ui";
 
@@ -52,9 +52,10 @@ export default function App() {
     useLibrary
       .getState()
       .load()
-      .then(() => {
+      .then(async () => {
         const meta = useLibrary.getState().meta!;
-        useForm.getState().hydrate(meta.defaults);
+        await useForm.getState().hydrate(meta.defaults);
+        await useForm.getState().seedRecentFromHistory();
       });
     void useAssistant.getState().refresh();
     const loadTimeline = () =>
@@ -63,7 +64,16 @@ export default function App() {
         .then((p) => useTimeline.getState().load(p.timeline as unknown as TimelineDoc))
         .catch(() => undefined);
     void loadTimeline();
-    return stop;
+    const flush = () => flushTimelinePersist();
+    window.addEventListener("beforeunload", flush);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") flush();
+    });
+    return () => {
+      stop();
+      flush();
+      window.removeEventListener("beforeunload", flush);
+    };
   }, []);
 
   if (!loaded) {

@@ -130,10 +130,14 @@ export const api = {
       mode,
     }),
   analyzeBeats: (assetId: number, range?: { start?: number; end?: number }) =>
-    post<{ beats: number[]; downbeats: number[]; bpm: number | null; offset: number; windowStart?: number }>(
-      `/api/assets/${assetId}/analyze-beats`,
-      range ?? {},
-    ),
+    post<{
+      beats: number[];
+      downbeats: number[];
+      bpm: number | null;
+      offset: number;
+      windowStart?: number;
+      timespace?: "file" | "timeline";
+    }>(`/api/assets/${assetId}/analyze-beats`, range ?? {}),
   /** Alias used by plan inspector (same as frameToRef). */
   assetFrameUpload: (assetId: number, t: number) => post<Upload>(`/api/assets/${assetId}/frame`, { t }),
 
@@ -146,6 +150,8 @@ export const api = {
     fd.append("file", file);
     return request<Upload>("POST", "/api/uploads", fd);
   },
+  /** Unique refs used in generations / plans (Import tab). */
+  listUsedUploads: () => get<Upload[]>("/api/uploads?used=true"),
   uploadInfo: (id: string) => get<Upload>(`/api/uploads/${id}`),
   chats: () => get<ChatInfo[]>("/api/assistant/chats"),
   chat: (id: string) => get<Chat>(`/api/assistant/chats/${id}`),

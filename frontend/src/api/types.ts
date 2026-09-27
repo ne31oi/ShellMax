@@ -10,6 +10,7 @@ export interface Upload {
   has_audio: boolean;
   source_id?: string | null; // set on an edited (cropped / trimmed) reference: the original upload
   edit?: { crop?: CropBox; start?: number; end?: number } | null;
+  created?: string;
 }
 
 /** A reference card in the generation panel. `uid` is stable across reorders (tags renumber). */

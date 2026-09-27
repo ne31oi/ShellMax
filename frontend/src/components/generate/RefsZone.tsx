@@ -14,6 +14,7 @@ import { useForm } from "../../store/form";
 import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
 import { Spinner, Tip } from "../ui";
+import { RecentRefsPicker } from "./RecentRefsPicker";
 
 export const ASSET_DRAG_TYPE = "application/x-shellmax-asset";
 const ACCEPT = "image/*,video/*,audio/*";
@@ -109,6 +110,9 @@ export function RefsZone() {
           <span className="mt-1 max-w-xs text-[11px] leading-snug text-faint">
             Для людей: нейтральный портрет лицом к камере, ровный свет — меньше «зловещей долины»
           </span>
+          <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+            <RecentRefsPicker />
+          </div>
         </button>
       ) : (
         <div
@@ -134,6 +138,7 @@ export function RefsZone() {
                     <Plus size={18} />
                   </button>
                 </Tip>
+                <RecentRefsPicker compact />
               </div>
             </SortableContext>
           </DndContext>

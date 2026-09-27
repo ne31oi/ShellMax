@@ -4,7 +4,7 @@ import { CSS } from "@dnd-kit/utilities";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import clsx from "clsx";
 import {
-  Download, Eraser, Film, Gauge, Magnet, Music2, Pause, Pencil, Play, Plus, Redo2, ScanFace, Scissors, Sparkles, Trash2, Undo2, Volume2, VolumeX, type LucideIcon,
+  Download, Eraser, Film, Gauge, Magnet, Music2, Pencil, Plus, Redo2, ScanFace, Scissors, Sparkles, Trash2, Undo2, Volume2, VolumeX, type LucideIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, urls } from "../../api/client";
@@ -12,22 +12,29 @@ import type { MediaAsset } from "../../api/types";
 import * as actions from "../../lib/actions";
 import { addToTimeline } from "../../lib/actions";
 import { fmtDuration, fmtTimecode } from "../../lib/format";
+import { physicalLetter } from "../../lib/hotkeys";
+import { loadMontageView, saveMontageView } from "../../lib/montageView";
 import { H3_FPS, nearestH3Duration, snapToFrame } from "../../lib/planH3";
 import { useLibrary } from "../../store/library";
 import {
   audioTracks,
   clipAtTime,
   clipDuration,
+  clonePlanFresh,
   commands,
+  copyPlanToClipboard,
   emptyPlan,
   findClip,
   findClipTrack,
-  hasSequenceContent,
+  findPlan,
   openPlanInSidebar,
+  peekPlanClipboard,
   planTracks,
   resolvePlanPlacement,
   clampPlanResize,
+  snapEnabled,
   snapTime,
+  timelineBeats,
   totalDuration,
   useTimeline,
   videoTrack,
@@ -60,8 +67,6 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
   const doc = useTimeline((s) => s.doc);
   const playhead = useTimeline((s) => s.playhead);
   const setPlayhead = useTimeline((s) => s.setPlayhead);
-  const playing = useTimeline((s) => s.playing);
-  const setPlaying = useTimeline((s) => s.setPlaying);
   const selectedPlanId = useTimeline((s) => s.selectedPlanId);
   const run = useTimeline((s) => s.run);
   const undo = useTimeline((s) => s.undo);
@@ -71,6 +76,7 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
   const pastLabel = useTimeline((s) => s.past.at(-1)?.label);
   const futureLabel = useTimeline((s) => s.future[0]?.label);
   const assets = useLibrary((s) => s.assets);
+  const projectId = useUI((s) => s.projectId);
   const [selected, setSelected] = useState<string | null>(null);
   const [planDrag, setPlanDrag] = useState<{
     planId: string;
@@ -94,10 +100,20 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
   const [railW, setRailW] = useState(0);
   const audioFileInput = useRef<HTMLInputElement>(null);
   const audioAddTrackId = useRef<string | null>(null);
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoomState] = useState(() => loadMontageView(useUI.getState().projectId).zoom);
+  const setZoom = (z: number) => {
+    const next = Math.max(0.5, Math.min(4, Math.round(z * 100) / 100));
+    setZoomState(next);
+    saveMontageView(useUI.getState().projectId, { zoom: next });
+  };
+  useEffect(() => {
+    setZoomState(loadMontageView(projectId).zoom);
+  }, [projectId]);
   const rail = useRef<HTMLDivElement>(null);
   const scrubRef = useRef({ scale: 1, total: 4, snapBeats: true });
   const zoomLayoutRef = useRef({ zoom: 1, scale: 1, total: 4, usable: 80 });
+  /** Last pointer position — Ctrl+V pastes under the cursor (time + nearest plan track). */
+  const pointerRef = useRef({ x: 0, y: 0 });
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const vTrack = videoTrack(doc);
   const pTracks = planTracks(doc);
@@ -106,10 +122,10 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
   // Always fill the rail width at zoom=1; zoom > 1 scrolls horizontally.
   const usable = Math.max(80, railW - LABEL_W - 4);
   const scale = (usable / total) * zoom;
-  scrubRef.current = { scale, total, snapBeats: doc.snapToBeats !== false };
+  scrubRef.current = { scale, total, snapBeats: snapEnabled(doc) };
   zoomLayoutRef.current = { zoom, scale, total, usable };
-  const beats = doc.markers?.beats ?? [];
-  const downbeats = new Set(doc.markers?.downbeats ?? []);
+  const { beats, downbeats: downsList } = timelineBeats(doc);
+  const downbeats = new Set(downsList);
   const timeMarks = buildTimeMarks(total, scale);
   useEffect(() => {
     const el = rail.current;
@@ -157,11 +173,105 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
   }, []);
 
   useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      pointerRef.current = { x: e.clientX, y: e.clientY };
+    };
+    window.addEventListener("pointermove", onMove, { passive: true });
+    return () => window.removeEventListener("pointermove", onMove);
+  }, []);
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest("input, textarea, [contenteditable=true]")) return;
       if (document.querySelector("[role=dialog]")) return;
       const d = useTimeline.getState().doc;
       const planId = useTimeline.getState().selectedPlanId;
+      const ctrl = e.ctrlKey || e.metaKey;
+      const letter = physicalLetter(e);
+
+      if (ctrl && letter === "c") {
+        if (!planId) return;
+        const hit = findPlan(d, planId);
+        if (!hit) return;
+        e.preventDefault();
+        copyPlanToClipboard(hit.plan, hit.track.id);
+        useUI.getState().toast("План скопирован", "ok");
+        return;
+      }
+
+      if (ctrl && letter === "v") {
+        const clip = peekPlanClipboard();
+        if (!clip) return;
+        e.preventDefault();
+        const tracks = planTracks(d);
+        if (!tracks.length) {
+          useUI.getState().toast("Нет дорожки планов", "info");
+          return;
+        }
+        const ptr = pointerRef.current;
+        const railEl = rail.current;
+        const railBox = railEl?.getBoundingClientRect();
+        const overRail =
+          !!railBox &&
+          ptr.x >= railBox.left &&
+          ptr.x <= railBox.right &&
+          ptr.y >= railBox.top &&
+          ptr.y <= railBox.bottom;
+
+        const startWant = overRail
+          ? timeAtClientX(ptr.x)
+          : snapToFrame(snapTime(d, useTimeline.getState().playhead, { force: true }));
+        const duration = Math.max(MIN_PLAN, snapToFrame(clip.plan.duration));
+
+        // Plan tracks ranked by vertical distance to cursor
+        const ranked = (() => {
+          const els = [...document.querySelectorAll<HTMLElement>("[data-plan-track]")];
+          const scored = els
+            .map((el) => {
+              const id = el.dataset.planTrack;
+              if (!id || !tracks.some((t) => t.id === id)) return null;
+              const r = el.getBoundingClientRect();
+              const mid = (r.top + r.bottom) / 2;
+              const dist =
+                ptr.y >= r.top && ptr.y <= r.bottom
+                  ? 0
+                  : Math.min(Math.abs(ptr.y - r.top), Math.abs(ptr.y - r.bottom), Math.abs(ptr.y - mid));
+              return { id, dist };
+            })
+            .filter((x): x is { id: string; dist: number } => !!x)
+            .sort((a, b) => a.dist - b.dist);
+          const ids = scored.map((s) => s.id);
+          for (const t of tracks) {
+            if (!ids.includes(t.id)) ids.push(t.id);
+          }
+          return ids;
+        })();
+
+        let placed: number | null = null;
+        let trackId: string | null = null;
+        for (const id of ranked) {
+          const track = tracks.find((t) => t.id === id);
+          if (!track) continue;
+          const at = resolvePlanPlacement(track.plans, startWant, duration);
+          if (at != null) {
+            placed = at;
+            trackId = id;
+            break;
+          }
+        }
+        if (placed == null || !trackId) {
+          useUI.getState().toast("Нет места без перекрытия на ближайших дорожках", "info");
+          return;
+        }
+        const plan = clonePlanFresh(clip.plan, { start: placed, duration });
+        run(commands.addPlan(plan, trackId));
+        openPlanInSidebar(plan.id);
+        const trackIdx = tracks.findIndex((t) => t.id === trackId);
+        const trackLabel = trackIdx >= 0 ? `P${trackIdx + 1}` : trackId;
+        useUI.getState().toast(`План → ${trackLabel} · ${fmtTimecode(placed)}`, "ok");
+        return;
+      }
+
       if ((e.key === "Delete" || e.key === "Backspace") && selected) {
         const hit = findClipTrack(d, selected);
         if (hit) run(commands.removeClip(d, selected, hit.track.id));
@@ -176,13 +286,13 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
           }
         }
       }
-      if (e.key === "s" || e.key === "S") {
+      if (letter === "s") {
         e.preventDefault();
         splitAtPlayhead();
       }
-      if (e.key === "n" || e.key === "N") {
+      if (letter === "n") {
         e.preventDefault();
-        run(commands.setSnapToBeats(d, !d.snapToBeats));
+        run(commands.setSnapToBeats(d, !snapEnabled(d)));
       }
     };
     window.addEventListener("keydown", onKey);
@@ -251,7 +361,7 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
     const x = clientX - r.left + el.scrollLeft - LABEL_W;
     let t = Math.max(0, Math.min(tot, x / Math.max(sc, 0.001)));
     t = snapToFrame(t);
-    if (snapBeats && !opts?.altKey) t = snapTime(useTimeline.getState().doc, t);
+    if (snapBeats && !opts?.altKey) t = snapTime(useTimeline.getState().doc, t, { force: true });
     return t;
   };
 
@@ -332,22 +442,22 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
 
     setAnalyzing(true);
     try {
-      // Analyze only the clip's media window; beats come back relative to clip.in (= 0).
+      // Backend returns **file-absolute** times; we store them + clip id and remap on display.
       const result = await api.analyzeBeats(clip.assetId, { start: clip.in, end: clip.out });
-      const mapBeat = (b: number) => snapToFrame(trackStart + Math.max(0, b));
-      const beatsMapped = result.beats.map(mapBeat);
-      const downsMapped = result.downbeats.map(mapBeat);
       run(
         commands.setMarkers(useTimeline.getState().doc, {
-          beats: beatsMapped,
-          downbeats: downsMapped,
+          beats: result.beats,
+          downbeats: result.downbeats,
           bpm: result.bpm,
-          offset: trackStart,
+          offset: result.offset ?? clip.in,
           sourceAssetId: clip.assetId,
+          sourceClipId: clip.id,
+          timespace: "file",
         }),
       );
+      const mapped = timelineBeats(useTimeline.getState().doc);
       useUI.getState().toast(
-        `Биты: ${beatsMapped.length}${result.bpm ? ` · ${Math.round(result.bpm)} BPM` : ""} · клип с ${fmtTimecode(trackStart)}`,
+        `Биты: ${mapped.beats.length}${result.bpm ? ` · ${Math.round(result.bpm)} BPM` : ""} · клип с ${fmtTimecode(trackStart)}`,
         "ok",
       );
     } catch (e) {
@@ -358,7 +468,7 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
   };
 
   const layOutByBeats = () => {
-    const marks = doc.markers?.downbeats?.length ? doc.markers.downbeats : beats;
+    const marks = downsList.length ? downsList : beats;
     if (marks.length < 2) {
       useUI.getState().toast("Сначала найдите биты", "info");
       return;
@@ -395,7 +505,7 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
       const r = el.getBoundingClientRect();
       const x = clientX - r.left - LABEL_W;
       let start = Math.max(0, x / scale);
-      if (doc.snapToBeats !== false) start = snapTime(doc, start);
+      if (doc.snapToBeats !== false) start = snapTime(doc, start, { force: true });
       actions.addToAudioTrack(asset, { trackId: track.id, start });
       return;
     }
@@ -431,32 +541,13 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="flex flex-wrap items-center gap-2 px-3 py-1.5">
           <h2 className="text-[11px] font-semibold uppercase tracking-wider text-faint">Монтаж</h2>
-          <IconButton
-            label={playing ? "Пауза (Пробел)" : "Проиграть монтаж (Пробел)"}
-            size="sm"
-            active={playing}
-            disabled={!hasSequenceContent(doc)}
-            onClick={() => {
-              useUI.getState().setViewingSequence(true);
-              if (playing) {
-                setPlaying(false);
-                return;
-              }
-              if (playhead >= total - 0.02) setPlayhead(0);
-              setPlaying(true);
-            }}
-          >
-            {playing ? <Pause size={13} /> : <Play size={13} />}
-          </IconButton>
-          <span className="text-[11px] tabular-nums text-accent">{fmtTimecode(playhead)}</span>
-          <span className="text-[11px] text-faint tabular-nums">/ {fmtTimecode(total)}</span>
           <PlanBatchBar selectedIds={selectedPlanId ? [selectedPlanId] : []} />
           <span className="ml-auto" />
           <IconButton
-            label={doc.snapToBeats ? "Snap к битам (N) — вкл" : "Snap к битам (N) — выкл"}
+            label={snapEnabled(doc) ? "Snap к битам (N) — вкл" : "Snap к битам (N) — выкл"}
             size="sm"
-            active={!!doc.snapToBeats}
-            onClick={() => run(commands.setSnapToBeats(useTimeline.getState().doc, !doc.snapToBeats))}
+            active={snapEnabled(doc)}
+            onClick={() => run(commands.setSnapToBeats(useTimeline.getState().doc, !snapEnabled(doc)))}
           >
             <Magnet size={13} />
           </IconButton>
@@ -480,6 +571,8 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
                   bpm: null,
                   offset: 0,
                   sourceAssetId: null,
+                  sourceClipId: null,
+                  timespace: null,
                 }),
               );
               useUI.getState().toast("Биты очищены", "ok");
@@ -664,7 +757,7 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
                 muted={pt.muted}
                 over={planDrag?.toTrackId === pt.id}
                 onAddPlan={() => {
-                  const start = snapToFrame(snapTime(doc, playhead));
+                  const start = snapToFrame(snapTime(doc, playhead, { force: true }));
                   const duration = nearestH3Duration(2);
                   const placed = resolvePlanPlacement(pt.plans, start, duration);
                   if (placed == null) {
@@ -734,7 +827,7 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
                           }
                           run(cmd);
                         }}
-                        snapBeats={!!doc.snapToBeats}
+                        snapBeats={snapEnabled(doc)}
                         resolvePreview={(toTrackId, start, duration, mode) => {
                           const dest = useTimeline.getState().doc.tracks.find((t) => t.id === toTrackId);
                           const peers = dest?.plans ?? [];
@@ -844,7 +937,7 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
                         selected={selected === c.id}
                         dragging={!!dragging}
                         trackId={at.id}
-                        snapBeats={!!doc.snapToBeats}
+                        snapBeats={snapEnabled(doc)}
                         onSelect={() => {
                           setSelected(c.id);
                           setPlayhead(c.start ?? 0);
@@ -893,7 +986,7 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
                           selected
                           dragging
                           trackId={at.id}
-                          snapBeats={!!doc.snapToBeats}
+                          snapBeats={snapEnabled(doc)}
                           ghost
                           onSelect={() => undefined}
                           onPreview={() => undefined}
@@ -1132,18 +1225,34 @@ function AudioClipBlock({
         nextStart = Math.max(0, s0 + dx);
         if (snapBeats) {
           const doc = useTimeline.getState().doc;
-          if (doc.markers?.beats?.length) nextStart = snapTime(doc, nextStart);
+          if (timelineBeats(doc).beats.length) {
+            nextStart = snapTime(doc, nextStart, { force: true });
+          }
         }
         nextStart = snapToFrame(nextStart);
       } else if (mode === "in") {
         // Trim left: slide in + start together, keep right edge fixed on timeline
-        const maxIn = out0 - MIN_CLIP;
-        nextIn = Math.max(0, Math.min(maxIn, in0 + dx));
-        nextIn = snapToFrame(nextIn);
-        nextStart = snapToFrame(Math.max(0, s0 + (nextIn - in0)));
+        let nextStartRaw = Math.max(0, s0 + dx);
+        if (snapBeats) {
+          const doc = useTimeline.getState().doc;
+          if (timelineBeats(doc).beats.length) {
+            nextStartRaw = snapTime(doc, nextStartRaw, { force: true });
+          }
+        }
+        nextStart = snapToFrame(nextStartRaw);
+        const delta = nextStart - s0;
+        nextIn = Math.max(0, Math.min(out0 - MIN_CLIP, in0 + delta));
         nextOut = out0;
       } else {
-        nextOut = Math.max(in0 + MIN_CLIP, Math.min(maxSrc, out0 + dx));
+        let nextOutTimeline = s0 + (out0 - in0) + dx; // right edge on master clock
+        if (snapBeats) {
+          const doc = useTimeline.getState().doc;
+          if (timelineBeats(doc).beats.length) {
+            nextOutTimeline = snapTime(doc, nextOutTimeline, { force: true });
+          }
+        }
+        nextOutTimeline = snapToFrame(nextOutTimeline);
+        nextOut = Math.max(in0 + MIN_CLIP, Math.min(maxSrc, in0 + (nextOutTimeline - s0)));
         nextOut = snapToFrame(nextOut);
         nextStart = s0;
         nextIn = in0;
@@ -1328,23 +1437,25 @@ function PlanBlock({
       const dx = (ev.clientX - originX) / scale;
       let nextStart = s0;
       let nextDur = d0;
+      const docNow = useTimeline.getState().doc;
+      const canSnap = snapBeats && timelineBeats(docNow).beats.length > 0;
       if (mode === "move") {
         nextStart = Math.max(0, s0 + dx);
         nextDur = d0;
+        if (canSnap) nextStart = snapTime(docNow, nextStart, { force: true });
       } else if (mode === "in") {
         const end = s0 + d0;
         nextStart = Math.max(0, Math.min(end - MIN_PLAN, s0 + dx));
+        if (canSnap) nextStart = snapTime(docNow, nextStart, { force: true });
         nextDur = end - nextStart;
       } else {
         nextStart = s0;
-        nextDur = Math.max(MIN_PLAN, d0 + dx);
+        const end = Math.max(s0 + MIN_PLAN, s0 + d0 + dx);
+        const snappedEnd = canSnap ? snapTime(docNow, end, { force: true }) : end;
+        nextDur = Math.max(MIN_PLAN, snappedEnd - s0);
       }
       nextStart = snapToFrame(nextStart);
       nextDur = Math.max(MIN_PLAN, snapToFrame(nextDur));
-      if (snapBeats && mode === "move") {
-        const beats = useTimeline.getState().doc.markers?.beats ?? [];
-        if (beats.length) nextStart = snapToFrame(snapTime(useTimeline.getState().doc, nextStart));
-      }
       const resolved = resolvePreview(toTrackId, nextStart, nextDur, mode);
       last = {
         planId: plan.id,

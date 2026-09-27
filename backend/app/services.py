@@ -99,6 +99,67 @@ async def save_upload(file: UploadFile) -> Upload:
     return up
 
 
+def _upload_family_key(up: Upload) -> str:
+    """Collapse edits and re-uploads of the same file name within a kind."""
+    return f"{up.kind}:{up.orig_name}"
+
+
+def _collect_used_upload_ids(s) -> list[str]:
+    """Upload ids referenced by generations and project timelines, newest-first."""
+    ordered: list[str] = []
+    seen: set[str] = set()
+
+    def add(uid: str | None) -> None:
+        if not uid or not isinstance(uid, str) or uid in seen:
+            return
+        seen.add(uid)
+        ordered.append(uid)
+
+    gens = list(s.exec(select(Generation).order_by(Generation.id.desc())).all())
+    for g in gens:
+        ui = g.ui_params or {}
+        for ref in ui.get("refs") or []:
+            if isinstance(ref, dict):
+                add(ref.get("upload_id"))
+        add(ui.get("identity_upload_id"))
+        add(ui.get("closeup_upload_id"))
+
+    for p in s.exec(select(Project)).all():
+        tl = p.timeline or {}
+        for track in tl.get("tracks") or []:
+            if not isinstance(track, dict):
+                continue
+            for plan in track.get("plans") or []:
+                if not isinstance(plan, dict):
+                    continue
+                for ref in plan.get("refs") or []:
+                    if isinstance(ref, dict):
+                        add(ref.get("uploadId") or ref.get("upload_id"))
+    return ordered
+
+
+def list_uploads(*, used_only: bool = True) -> list[Upload]:
+    """Unique uploads (by original/edit family). When used_only — only those referenced in jobs/plans."""
+    with session() as s:
+        if used_only:
+            ids = _collect_used_upload_ids(s)
+            uploads = [u for uid in ids if (u := s.get(Upload, uid)) is not None]
+        else:
+            uploads = list(s.exec(select(Upload).order_by(Upload.created.desc())).all())
+
+        out: list[Upload] = []
+        seen_family: set[str] = set()
+        for u in uploads:
+            root = s.get(Upload, u.source_id) if u.source_id else u
+            pick = root if root is not None else u
+            key = _upload_family_key(pick)
+            if key in seen_family:
+                continue
+            seen_family.add(key)
+            out.append(pick)
+        return out
+
+
 class RefEdit(BaseModel):
     """What to keep of a reference: an image/video region and/or an audio/video fragment."""
     crop: dict[str, float] | None = None  # normalized {x, y, w, h}

@@ -60,3 +60,23 @@ export function fileName(path: string | null | undefined): string {
 export function stripQuotes(s: string): string {
   return s.trim().replace(/^["']|["']$/g, "").trim();
 }
+
+/** Local calendar day key `YYYY-MM-DD`. */
+export function dayKey(iso: string | null | undefined): string {
+  const d = iso ? new Date(iso) : new Date();
+  const src = Number.isFinite(d.getTime()) ? d : new Date();
+  return `${src.getFullYear()}-${String(src.getMonth() + 1).padStart(2, "0")}-${String(src.getDate()).padStart(2, "0")}`;
+}
+
+/** «Сегодня» / «Вчера» / «27 сентября 2026». */
+export function fmtDayLabel(key: string): string {
+  const [y, m, d] = key.split("-").map(Number);
+  if (!y || !m || !d) return key;
+  const today = dayKey(null);
+  const yestDate = new Date();
+  yestDate.setDate(yestDate.getDate() - 1);
+  const yest = `${yestDate.getFullYear()}-${String(yestDate.getMonth() + 1).padStart(2, "0")}-${String(yestDate.getDate()).padStart(2, "0")}`;
+  if (key === today) return "Сегодня";
+  if (key === yest) return "Вчера";
+  return new Date(y, m - 1, d).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
+}

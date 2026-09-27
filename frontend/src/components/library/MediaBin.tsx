@@ -1,21 +1,53 @@
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import clsx from "clsx";
 import {
-  AlertCircle, Clapperboard, Copy, Dices, Film, FolderOpen, Gauge, ImagePlus, Pencil, ScanFace, Shuffle,
+  AlertCircle, AudioLines, ChevronDown, Clapperboard, Copy, Dices, Film, FolderOpen, Gauge, ImagePlus, Pencil, ScanFace, Shuffle,
   Sparkles, SplitSquareHorizontal, Square, Trash2, Upload as UploadIcon, Volume2,
 } from "lucide-react";
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, urls } from "../../api/client";
-import type { Generation, MediaAsset } from "../../api/types";
+import type { Generation, MediaAsset, Upload } from "../../api/types";
 import * as actions from "../../lib/actions";
-import { fmtDuration, fmtEstimate } from "../../lib/format";
-import { promptTitle } from "../../lib/refs";
+import { dayKey, fmtDayLabel, fmtDuration, fmtEstimate } from "../../lib/format";
+import { KIND_LABEL, promptTitle } from "../../lib/refs";
 import { stageInfo, stepProgress, timeBreakdown } from "../../lib/stages";
 import { useElapsed } from "../../lib/useElapsed";
+import { recentFamilyInUse, useForm } from "../../store/form";
 import { sortedGenerations, generationOwningAsset, useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
 import { ASSET_DRAG_TYPE } from "../generate/RefsZone";
 import { IconButton } from "../ui";
+
+type BinItem =
+  | { kind: "gen"; created: string; ts: number; gen: Generation }
+  | { kind: "asset"; created: string; ts: number; asset: MediaAsset }
+  | { kind: "ref"; created: string; ts: number; upload: Upload };
+
+const COLLAPSE_KEY = "sm.bin.collapsedDays";
+
+function loadCollapsed(): Set<string> {
+  try {
+    const raw = localStorage.getItem(COLLAPSE_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw) as unknown;
+    return new Set(Array.isArray(arr) ? arr.filter((x) => typeof x === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveCollapsed(set: Set<string>) {
+  try {
+    localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...set]));
+  } catch {
+    /* ignore */
+  }
+}
+
+function itemTs(iso: string | undefined): number {
+  const t = iso ? new Date(iso).getTime() : 0;
+  return Number.isFinite(t) ? t : 0;
+}
 
 export function MediaBin() {
   const generations = useLibrary((s) => s.generations);
@@ -24,13 +56,86 @@ export function MediaBin() {
   const setFilter = useUI((s) => s.setBinFilter);
   const importInput = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
+  const [collapsed, setCollapsed] = useState(loadCollapsed);
+  const [usedRefs, setUsedRefs] = useState<Upload[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .listUsedUploads()
+      .then((list) => {
+        if (!cancelled) setUsedRefs(list);
+      })
+      .catch(() => {
+        if (!cancelled) setUsedRefs([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [generations]); // refresh when library gens change
 
   const gens = sortedGenerations(generations).filter((g) =>
     filter === "all" ? true : filter === "video" ? g.status === "done" : filter === "draft" ? g.status === "draft_only" : false,
   );
-  const imported = Object.values(assets)
-    .filter((a) => (a.source === "imported" || a.source === "exported") && (filter === "all" || filter === "imported"))
+  const importedAssets = Object.values(assets)
+    .filter((a) => {
+      if (!(a.source === "imported" || a.source === "exported")) return false;
+      if (!(filter === "all" || filter === "imported")) return false;
+      // «Все» — только видео/картинки; аудио смотри во «Импорт»
+      if (filter === "all" && a.kind === "audio") return false;
+      return true;
+    })
     .sort((a, b) => b.id - a.id);
+
+  const refs =
+    filter === "all"
+      ? usedRefs.filter((u) => u.kind !== "audio")
+      : filter === "imported"
+        ? usedRefs
+        : [];
+
+  const groups = useMemo(() => {
+    const items: BinItem[] = [];
+    if (filter !== "imported") {
+      for (const gen of gens) {
+        items.push({ kind: "gen", created: gen.created, ts: itemTs(gen.created), gen });
+      }
+    }
+    if (filter === "all" || filter === "imported") {
+      for (const asset of importedAssets) {
+        items.push({ kind: "asset", created: asset.created, ts: itemTs(asset.created), asset });
+      }
+      for (const upload of refs) {
+        items.push({
+          kind: "ref",
+          created: upload.created ?? "",
+          ts: itemTs(upload.created),
+          upload,
+        });
+      }
+    }
+    const map = new Map<string, BinItem[]>();
+    for (const it of items) {
+      const k = dayKey(it.created || undefined);
+      const list = map.get(k);
+      if (list) list.push(it);
+      else map.set(k, [it]);
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => b.ts - a.ts);
+    }
+    return [...map.entries()].sort((a, b) => (a[0] < b[0] ? 1 : a[0] > b[0] ? -1 : 0));
+  }, [filter, gens, importedAssets, refs]);
+
+  const toggleDay = (key: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      saveCollapsed(next);
+      return next;
+    });
+  };
 
   const doImport = async (files: File[]) => {
     setImporting(true);
@@ -43,7 +148,7 @@ export function MediaBin() {
     }
   };
 
-  const empty = gens.length === 0 && imported.length === 0;
+  const empty = groups.every(([, items]) => items.length === 0);
 
   return (
     <div className="flex h-full flex-col">
@@ -81,18 +186,59 @@ export function MediaBin() {
         {empty ? (
           <div className="mt-10 px-4 text-center text-xs leading-relaxed text-faint">
             <Clapperboard size={28} className="mx-auto mb-2 opacity-50" />
-            Здесь появятся ваши видео.
-            <br />
-            Опишите сцену справа и нажмите «Создать».
+            {filter === "imported" ? (
+              <>
+                Здесь появятся референсы, которые вы уже использовали.
+                <br />
+                Добавьте рефы в панели генерации и создайте клип.
+              </>
+            ) : (
+              <>
+                Здесь появятся ваши видео.
+                <br />
+                Опишите сцену справа и нажмите «Создать».
+              </>
+            )}
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-2">
-            {gens.map((g) => (
-              <GenerationCard key={g.id} gen={g} />
-            ))}
-            {imported.map((a) => (
-              <AssetCard key={a.id} asset={a} />
-            ))}
+          <div className="flex flex-col gap-3">
+            {groups.map(([key, items]) => {
+              if (!items.length) return null;
+              const open = !collapsed.has(key);
+              return (
+                <section key={key}>
+                  <button
+                    type="button"
+                    onClick={() => toggleDay(key)}
+                    className="sticky top-0 z-10 mb-1.5 flex w-full items-center gap-1 rounded-md bg-bg/95 px-1 py-1 text-left backdrop-blur-sm hover:bg-hover/60"
+                  >
+                    <ChevronDown
+                      size={14}
+                      className={clsx("shrink-0 text-faint transition-transform", !open && "-rotate-90")}
+                    />
+                    <span className="text-[11px] font-semibold text-fg">{fmtDayLabel(key)}</span>
+                    <span className="ml-auto text-[10px] tabular-nums text-faint">{items.length}</span>
+                  </button>
+                  {open && (
+                    <div className="grid grid-cols-2 gap-2">
+                      {items.map((it) =>
+                        it.kind === "gen" ? (
+                          <GenerationCard key={`g-${it.gen.id}`} gen={it.gen} />
+                        ) : it.kind === "asset" ? (
+                          <AssetCard key={`a-${it.asset.id}`} asset={it.asset} />
+                        ) : (
+                          <RefCard
+                            key={`r-${it.upload.id}`}
+                            upload={it.upload}
+                            onGone={() => setUsedRefs((prev) => prev.filter((u) => u.id !== it.upload.id))}
+                          />
+                        ),
+                      )}
+                    </div>
+                  )}
+                </section>
+              );
+            })}
           </div>
         )}
       </div>
@@ -354,6 +500,70 @@ function AssetCard({ asset }: { asset: MediaAsset }) {
           <CtxItem icon={<FolderOpen size={13} />} onSelect={() => actions.reveal(asset)}>Показать в папке</CtxItem>
           <ContextMenu.Separator className="my-1 h-px bg-line" />
           <CtxItem icon={<Trash2 size={13} />} danger onSelect={() => actions.removeAsset(asset)}>Удалить</CtxItem>
+        </ContextMenu.Content>
+      </ContextMenu.Portal>
+    </ContextMenu.Root>
+  );
+}
+
+function RefCard({ upload, onGone }: { upload: Upload; onGone: () => void }) {
+  const panelRefs = useForm((s) => s.refs);
+  const inPanel = recentFamilyInUse(panelRefs, upload);
+  const kindLabel = KIND_LABEL[upload.kind];
+
+  const add = async () => {
+    if (inPanel) {
+      useUI.getState().toast("Уже в референсах", "info");
+      return;
+    }
+    try {
+      const fresh = await api.uploadInfo(upload.id);
+      actions.addUploadsAsRefs([fresh]);
+    } catch {
+      useUI.getState().toast("Файл больше недоступен", "bad");
+      onGone();
+    }
+  };
+
+  const card = (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => void add()}
+      onDoubleClick={() => void add()}
+      className={clsx(
+        "cursor-pointer rounded-xl p-1 transition-colors hover:bg-hover",
+        inPanel && "opacity-50",
+      )}
+      title={inPanel ? "Уже в референсах" : `Добавить в референсы: ${upload.orig_name}`}
+    >
+      <div className="relative aspect-video overflow-hidden rounded-lg bg-raised">
+        {upload.kind === "audio" ? (
+          <div className="flex h-full items-center justify-center text-audio">
+            <AudioLines size={28} />
+          </div>
+        ) : (
+          <img src={urls.uploadThumb(upload.id)} alt="" className="h-full w-full object-cover" draggable={false} />
+        )}
+        <span className="absolute left-1 top-1 rounded bg-black/70 px-1 text-[10px] text-white/80">{kindLabel}</span>
+        {upload.duration != null && upload.duration > 0 && (
+          <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[10px] text-white tabular-nums">
+            {fmtDuration(upload.duration)}
+          </span>
+        )}
+      </div>
+      <p className="truncate px-1 pt-1 text-xs">{upload.orig_name}</p>
+    </div>
+  );
+
+  return (
+    <ContextMenu.Root>
+      <ContextMenu.Trigger asChild>{card}</ContextMenu.Trigger>
+      <ContextMenu.Portal>
+        <ContextMenu.Content className="z-40 min-w-56 rounded-xl border border-line bg-panel p-1 shadow-2xl">
+          <CtxItem icon={<ImagePlus size={13} />} onSelect={() => void add()} disabled={inPanel}>
+            В референсы
+          </CtxItem>
         </ContextMenu.Content>
       </ContextMenu.Portal>
     </ContextMenu.Root>

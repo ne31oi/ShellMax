@@ -365,6 +365,12 @@ async def upload(file: UploadFile = File(...)):
     return await services.save_upload(file)
 
 
+@router.get("/uploads")
+def list_uploads(used: bool = True):
+    """Unique reference uploads the user has used (generations / face / plans)."""
+    return services.list_uploads(used_only=used)
+
+
 @router.get("/uploads/{uid}")
 def get_upload(uid: str):
     with session() as s:
@@ -835,7 +841,7 @@ def analyze_asset_beats(aid: int, body: BeatRangeIn | None = None):
         path = asset.path
     start = float(body.start or 0) if body else 0.0
     end = float(body.end) if body and body.end is not None else None
-    cache_key = f"beats:{aid}:{start:.3f}:{end if end is not None else 'full'}"
+    cache_key = f"beats:v2:{aid}:{start:.3f}:{end if end is not None else 'full'}"
     cached = kv_get(cache_key)
     if isinstance(cached, dict) and cached.get("beats") is not None:
         return cached

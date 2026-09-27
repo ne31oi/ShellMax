@@ -240,8 +240,8 @@ export function SequencePlayer() {
             <p>{audioClipsAtTime(doc, playhead).length ? "Только звук в этой точке" : "Нет картинки под курсором"}</p>
           </div>
         )}
-        <span className="absolute left-5 top-5 rounded-md bg-accent px-1.5 py-0.5 text-[11px] font-semibold text-accent-fg">
-          Монтаж
+        <span className="absolute left-5 top-5 rounded-md bg-black/70 px-1.5 py-0.5 text-[11px] text-white/80">
+          Последовательность
         </span>
         {asset && (
           <span className="absolute right-5 top-5 max-w-[40%] truncate rounded-md bg-black/70 px-1.5 py-0.5 text-[11px] text-white">
