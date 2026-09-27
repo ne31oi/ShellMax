@@ -1,11 +1,15 @@
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import * as ContextMenu from "@radix-ui/react-context-menu";
 import clsx from "clsx";
-import { Download, Film, Redo2, Scissors, Undo2, Volume2, VolumeX } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import {
+  Download, Film, Gauge, Pencil, Redo2, ScanFace, Scissors, Sparkles, Trash2, Undo2, Volume2, VolumeX, type LucideIcon,
+} from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, urls } from "../../api/client";
 import type { MediaAsset } from "../../api/types";
+import * as actions from "../../lib/actions";
 import { addToTimeline } from "../../lib/actions";
 import { fmtDuration } from "../../lib/format";
 import { useLibrary } from "../../store/library";
@@ -261,6 +265,10 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
                         useUI.getState().setViewingSequence(true);
                       }}
                       onTrim={(inn, out) => run(commands.trimClip(useTimeline.getState().doc, c.id, inn, out))}
+                      onRemove={() => {
+                        run(commands.removeClip(useTimeline.getState().doc, c.id));
+                        setSelected(null);
+                      }}
                     />
                   ))}
                 </div>
@@ -323,6 +331,11 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
   );
 }
 
+function armTimelineReplace(clipId: string, assetId: number) {
+  useUI.getState().setTimelineReplace({ clipId, expectSourceAssetId: assetId });
+  useUI.getState().toast("После готовности клип на таймлайне обновится сам", "info");
+}
+
 function ClipBlock({
   clip,
   asset,
@@ -331,6 +344,7 @@ function ClipBlock({
   tall,
   scale,
   onTrim,
+  onRemove,
 }: {
   clip: Clip;
   asset?: MediaAsset;
@@ -339,12 +353,15 @@ function ClipBlock({
   tall: boolean;
   scale: number;
   onTrim: (inn: number, out: number) => void;
+  onRemove: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: clip.id });
   const [draft, setDraft] = useState<{ in: number; out: number } | null>(null);
   const shown = draft ?? { in: clip.in, out: clip.out };
   const width = Math.max(56, (shown.out - shown.in) * scale);
   const srcDur = Math.max(clip.out, asset?.duration ?? clip.out);
+  const generations = useLibrary((s) => s.generations);
+  const gen = asset?.generation_id != null ? generations[asset.generation_id] : undefined;
   void tall;
 
   const dragEdge = (e: React.PointerEvent, which: "in" | "out") => {
@@ -376,7 +393,7 @@ function ClipBlock({
     window.addEventListener("pointerup", up);
   };
 
-  return (
+  const block = (
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition, width }}
@@ -421,5 +438,99 @@ function ClipBlock({
         onClick={(e) => e.stopPropagation()}
       />
     </div>
+  );
+
+  if (!asset) return block;
+
+  return (
+    <ContextMenu.Root>
+      <ContextMenu.Trigger asChild>{block}</ContextMenu.Trigger>
+      <ContextMenu.Portal>
+        <ContextMenu.Content className="z-40 min-w-56 rounded-xl border border-line bg-panel p-1 shadow-2xl">
+          <TlCtxItem
+            icon={ScanFace}
+            onSelect={() => {
+              armTimelineReplace(clip.id, asset.id);
+              useUI.getState().openFaceDialog({ assetId: asset.id });
+            }}
+          >
+            Улучшить лицо…
+          </TlCtxItem>
+          <TlCtxItem
+            icon={Sparkles}
+            onSelect={() => {
+              armTimelineReplace(clip.id, asset.id);
+              useUI.getState().openEnhanceDialog({ assetId: asset.id });
+            }}
+          >
+            Детализация (SeedVR2)…
+          </TlCtxItem>
+          <TlCtxItem
+            icon={Gauge}
+            onSelect={() => {
+              armTimelineReplace(clip.id, asset.id);
+              useUI.getState().openInterpolateDialog({ assetId: asset.id });
+            }}
+          >
+            Интерполяция (RIFE)…
+          </TlCtxItem>
+          <ContextMenu.Separator className="my-1 h-px bg-line" />
+          <TlCtxItem
+            icon={Pencil}
+            disabled={!gen}
+            onSelect={() => {
+              if (!gen) {
+                useUI.getState().toast("Нет связанной генерации — только для клипов из студии", "info");
+                return;
+              }
+              void actions.editAndRetry(gen);
+            }}
+          >
+            Изменить и повторить
+          </TlCtxItem>
+          <TlCtxItem
+            icon={Film}
+            disabled={!gen || gen.kind !== "generate"}
+            onSelect={() => {
+              if (gen) void actions.retry(gen, false);
+            }}
+          >
+            Повторить с новым сидом
+          </TlCtxItem>
+          <ContextMenu.Separator className="my-1 h-px bg-line" />
+          <TlCtxItem icon={Trash2} danger onSelect={onRemove}>
+            Убрать с таймлайна
+          </TlCtxItem>
+        </ContextMenu.Content>
+      </ContextMenu.Portal>
+    </ContextMenu.Root>
+  );
+}
+
+function TlCtxItem({
+  icon: Icon,
+  children,
+  onSelect,
+  danger,
+  disabled,
+}: {
+  icon: LucideIcon;
+  children: ReactNode;
+  onSelect: () => void;
+  danger?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <ContextMenu.Item
+      disabled={disabled}
+      onSelect={onSelect}
+      className={clsx(
+        "flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] outline-none data-[highlighted]:bg-hover data-[disabled]:opacity-40",
+        danger ? "text-bad" : "text-fg",
+      )}
+    >
+      <Icon size={13} />
+      {children}
+    </ContextMenu.Item>
   );
 }

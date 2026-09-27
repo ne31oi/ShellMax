@@ -229,7 +229,7 @@ export function SequenceEmptyHint() {
     <div className={clsx("flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-sm text-muted")}>
       <Film size={28} className="opacity-40" />
       <p>Соберите очередь клипов на таймлайне ниже.</p>
-      <p className="text-xs text-faint">Обрезка · S — разрез · дорожка звука · экспорт в медиатеку</p>
+      <p className="text-xs text-faint">Обрезка · S — разрез · ПКМ: лицо / деталь / повтор · экспорт</p>
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import type { EngineState, Generation, MediaAsset } from "../api/types";
 import { useAssistant } from "../store/assistant";
 import { useLibrary } from "../store/library";
+import { commands, findClip, useTimeline } from "../store/timeline";
+import { useUI } from "../store/ui";
 import { notifyDone } from "./notify";
 
 type LiveEvent =
@@ -49,6 +51,7 @@ function handle(ev: LiveEvent) {
       const prev = lib.generations[ev.generation.id];
       lib.upsertGeneration(ev.generation);
       if (prev && prev.status !== ev.generation.status) notifyDone(ev.generation);
+      maybeReplaceTimelineClip(prev, ev.generation);
       break;
     }
     case "generation_deleted":
@@ -70,4 +73,22 @@ function handle(ev: LiveEvent) {
       void useAssistant.getState().refresh();
       break;
   }
+}
+
+/** If the user started face/enhance/interpolate from a timeline clip, swap that clip when the job finishes. */
+function maybeReplaceTimelineClip(prev: Generation | undefined, gen: Generation) {
+  if (gen.status !== "done" || !gen.output_asset_id) return;
+  if (prev && prev.status === "done") return;
+  const pending = useUI.getState().timelineReplace;
+  if (!pending) return;
+  if (gen.source_asset_id !== pending.expectSourceAssetId) return;
+  const hit = findClip(useTimeline.getState().doc, pending.clipId);
+  if (!hit) {
+    useUI.getState().setTimelineReplace(null);
+    return;
+  }
+  useTimeline.getState().run(commands.replaceClipAsset(useTimeline.getState().doc, pending.clipId, gen.output_asset_id));
+  useUI.getState().setTimelineReplace(null);
+  useUI.getState().toast("Клип на таймлайне обновлён", "ok");
+  useUI.getState().setViewingSequence(true);
 }

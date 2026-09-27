@@ -306,4 +306,15 @@ export const commands = {
       revert: (d) => ({ ...d, masterVolume: was }),
     };
   },
+  replaceClipAsset(doc: TimelineDoc, clipId: string, assetId: number, trackId = "v1"): Command {
+    const prev = doc.tracks.find((t) => t.id === trackId)?.clips.find((c) => c.id === clipId);
+    const was = prev?.assetId ?? assetId;
+    return {
+      label: "Заменить клип на таймлайне",
+      apply: (d) =>
+        mapTrack(d, trackId, (clips) => clips.map((c) => (c.id === clipId ? { ...c, assetId } : c))),
+      revert: (d) =>
+        mapTrack(d, trackId, (clips) => clips.map((c) => (c.id === clipId ? { ...c, assetId: was } : c))),
+    };
+  },
 };

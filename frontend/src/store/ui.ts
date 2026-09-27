@@ -43,6 +43,8 @@ interface UIState {
   interpolateDialog: InterpolateDialogState | null;
   refEditor: string | null; // uid of the reference card being edited
   viewingSequence: boolean; // montage: Viewer plays the timeline sequence
+  /** After face/enhance/interpolate from the timeline, swap this clip's asset when the job finishes. */
+  timelineReplace: { clipId: string; expectSourceAssetId: number } | null;
 
   setWorkspace: (w: Workspace) => void;
   selectGen: (id: number | null) => void;
@@ -58,6 +60,7 @@ interface UIState {
   openInterpolateDialog: (state: InterpolateDialogState | null) => void;
   openRefEditor: (uid: string | null) => void;
   setViewingSequence: (v: boolean) => void;
+  setTimelineReplace: (v: UIState["timelineReplace"]) => void;
   dismiss: (id: number) => void;
 }
 
@@ -84,6 +87,7 @@ export const useUI = create<UIState>((set) => ({
   interpolateDialog: null,
   refEditor: null,
   viewingSequence: false,
+  timelineReplace: null,
 
   setWorkspace: (workspace) => {
     localStorage.setItem("sm.workspace", workspace);
@@ -124,4 +128,5 @@ export const useUI = create<UIState>((set) => ({
   openRefEditor: (refEditor) => set({ refEditor }),
   setViewingSequence: (viewingSequence) =>
     set(viewingSequence ? { viewingSequence, selectedGen: null, selectedAsset: null, compareWith: null } : { viewingSequence }),
+  setTimelineReplace: (timelineReplace) => set({ timelineReplace }),
 }));
