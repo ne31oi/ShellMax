@@ -142,13 +142,18 @@ def analyze(path: Path, start: float, end: float, cancel: threading.Event, progr
         progress(0.45, "Распознаю слова на CPU")
         model = WhisperModel(str(MODEL_DIR), device="cpu", compute_type="int8", cpu_threads=4)
         language = None
-        for offset in np.arange(start, end, SPEECH_WINDOW):
+        speech_starts = list(np.arange(start, end, SPEECH_WINDOW))
+        # A sub-second tail offers too little context and invites hallucinations.
+        if len(speech_starts) > 1 and end - speech_starts[-1] < 3:
+            speech_starts.pop()
+        for offset, keep_end in zip(speech_starts, speech_starts[1:] + [end]):
             check()
             wav = Path(tmp) / "speech.wav"
-            keep_end = min(end, offset + SPEECH_WINDOW)
             source_start = max(start, offset - SPEECH_CONTEXT)
             source_end = min(end, keep_end + SPEECH_CONTEXT)
-            subprocess.run([ffmpeg, "-y", "-v", "error", "-ss", str(source_start), "-i", str(path),
+            # Decode before trimming: fast MP3 input seeking can damage the first
+            # audio frames (bit reservoir), enough to derail singing recognition.
+            subprocess.run([ffmpeg, "-y", "-v", "error", "-i", str(path), "-ss", str(source_start),
                             "-t", str(source_end - source_start), "-vn", "-ac", "1", "-ar", "16000", str(wav)],
                            check=True, capture_output=True, timeout=180)
             audio, _ = librosa.load(wav, sr=16000, mono=True)

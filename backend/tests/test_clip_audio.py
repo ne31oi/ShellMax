@@ -33,7 +33,8 @@ def test_music_analysis_long_file(tmp_path, monkeypatch):
             assert kwargs["device"] == "cpu" and kwargs["compute_type"] == "int8"
         def transcribe(self, path, **kwargs):
             calls.append(path)
-            return iter([SimpleNamespace(end=1.0, words=[SimpleNamespace(start=0.1, end=0.9, word=" слово", probability=0.4)])]), None
+            assert kwargs["vad_filter"] is False
+            return iter([SimpleNamespace(end=2.0, words=[SimpleNamespace(start=1.1, end=1.9, word=" слово", probability=0.4)])]), None
     monkeypatch.setattr(faster_whisper, "WhisperModel", Speech)
     path = tmp_path / "long.wav"
     audio_file(path, 490)
@@ -42,7 +43,8 @@ def test_music_analysis_long_file(tmp_path, monkeypatch):
     assert result["start"] == 2 and result["end"] == 489
     assert result["energy"][-1][0] > 488 and max(result["beats"]) > 480
     assert result["sections"][0]["start"] == 2 and result["sections"][-1]["end"] == 489
-    assert result["words"][0]["start"] == pytest.approx(2.1)
+    assert result["version"] == clip_audio.VERSION
+    assert result["words"][0]["start"] == pytest.approx(3.1)
     assert result["words"][-1]["start"] > 480
     assert result["words"][0]["probability"] < 0.7
     assert result["pauses"]
@@ -73,3 +75,40 @@ def test_silence_has_no_beats_and_range_cache_is_distinct(tmp_path, monkeypatch)
         assert result["sections"][0]["start"] == start
         assert result["sections"][-1]["end"] == end
     assert len(list((tmp_path / "clip_analysis").glob("*.json"))) == 2
+
+
+def test_singing_keeps_refrains_but_excludes_overlap_and_locks_language():
+    calls = []
+    class Speech:
+        def transcribe(self, audio, **kwargs):
+            calls.append(kwargs)
+            assert not kwargs["vad_filter"]
+            assert kwargs["word_timestamps"]
+            words = [SimpleNamespace(start=a, end=b, word=" снова", probability=0.8)
+                     for a, b in [(0.1, 0.5), (0.8, 1.4), (5, 6), (12.7, 13.1), (13.2, 13.8)]]
+            return iter([SimpleNamespace(words=words)]), SimpleNamespace(language="ru", language_probability=0.99)
+    model = Speech()
+    audio = np.full(14 * 16000, 0.1, dtype=np.float32)
+    words, language = clip_audio._recognize_words(model, audio, 111, 112, 124, None, lambda: None)
+    assert language == "ru"
+    assert [(w.start, w.end) for w in words] == [(112, 112.4), (116, 117), (123.7, 124)]
+    assert len(words) == 3  # Equal lyrics at different times must survive.
+    clip_audio._recognize_words(model, audio, 123, 124, 136, language, lambda: None)
+    assert calls[0]["language"] is None and calls[1]["language"] == "ru"
+
+
+def test_music_recognition_does_not_hallucinate_on_digital_silence():
+    class Speech:
+        def transcribe(self, *args, **kwargs):
+            pytest.fail("Digital silence must not reach Whisper")
+    assert clip_audio._recognize_words(Speech(), np.zeros(16000), 0, 0, 1, None, lambda: None) == ([], None)
+
+
+def test_music_recognition_checks_cancellation_while_consuming_segments():
+    class Speech:
+        def transcribe(self, *args, **kwargs):
+            return iter([SimpleNamespace(words=[])]), None
+    def cancelled():
+        raise InterruptedError()
+    with pytest.raises(InterruptedError):
+        clip_audio._recognize_words(Speech(), np.ones(16000), 0, 0, 1, None, cancelled)

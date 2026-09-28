@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../../api/client";
 import type { FsListing, ScannedModel } from "../../api/types";
 import { fileName, fmtSize, stripQuotes } from "../../lib/format";
-import { Button, Dialog, IconButton, Spinner, Tip } from "../ui";
+import { Button, Dialog, ErrorMessage, IconButton, Spinner, Tip } from "../ui";
 
 export type ModelCategory = "unet" | "text_encoder" | "vae" | "lora" | "upscaler";
 
@@ -161,7 +161,7 @@ export function FileBrowser({ open, onOpenChange, start, onPick }: { open: boole
         {loading && <Spinner />}
       </div>
       <div className="h-[50vh] overflow-y-auto p-2">
-        {error && <p className="p-2 text-xs text-bad">{error}</p>}
+        {error && <ErrorMessage text={error} />}
         {listing?.dirs.map((d) => (
           <button key={d} onClick={() => go(join(d))} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-hover">
             {listing.path ? <Folder size={14} className="text-muted" /> : <HardDrive size={14} className="text-muted" />}

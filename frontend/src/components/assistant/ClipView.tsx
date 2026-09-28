@@ -6,7 +6,7 @@ import { applyClipBlock, assembleClip, clipEdit, clipOperation } from "../../lib
 import { useClip } from "../../store/clip";
 import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
-import { Button, Select, Spinner } from "../ui";
+import { Button, ErrorMessage, Select, Spinner } from "../ui";
 import { Markdown } from "./Markdown";
 import { ChatView } from "./ChatView";
 
@@ -62,7 +62,7 @@ function ClipView() {
         className={`w-full rounded-lg px-2 py-2 text-left text-xs ${active?.id === p.id && !creating ? "bg-hover text-fg" : "text-muted"}`}
         onClick={() => { setCreating(false); void action.run(() => open(p.id)); }}>{p.name}</button>)}</div>
       <p className="mt-6 text-[11px] text-faint">Решения и задания сохраняются на сервере. Генерации запускаются по блокам после вашей команды.</p>
-      {action.error && <p role="alert" className="mt-3 text-xs text-bad">{action.error}</p>}
+      {action.error && <ErrorMessage text={action.error} className="mt-3" />}
     </aside>
     <main className="min-w-0 flex-1 overflow-auto">
       {creating || !active ? <CreateClip onCreated={() => { setCreating(false); void load(); }} /> : <ClipProjectView key={active.id} />}
@@ -100,7 +100,7 @@ function CreateClip({ onCreated }: { onCreated: () => void }) {
     <Button disabled={action.pending || !idea.trim() || !audioId} onClick={() => void action.run(async () => {
       useClip.getState().setActive(await api.createClipProject({ project_id: useUI.getState().projectId, idea, audio_asset_id: Number(audioId), ref_ids: refs.map((r) => r.id) })); onCreated();
     })}>{action.pending ? <Spinner size={14} /> : null} Начать разработку</Button>
-    {action.error && <p role="alert" className="text-xs text-bad">{action.error}</p>}
+    {action.error && <ErrorMessage text={action.error} />}
   </div>;
 }
 
@@ -111,7 +111,7 @@ function AutoField({ label, value, save, rows = 2, disabled = false }: { label: 
   return <label className="block space-y-1 text-xs text-muted">{label}
     <textarea className={fieldClass} rows={rows} value={text} disabled={disabled || action.pending}
       onChange={(e) => setText(e.target.value)} onBlur={() => { if (text !== value) void action.run(() => save(text)); }} />
-    {action.error && <span role="alert" className="text-bad">{action.error}</span>}
+    {action.error && <ErrorMessage text={action.error} />}
   </label>;
 }
 
@@ -138,7 +138,7 @@ function ClipProjectView() {
       <Spinner size={14} /><span className="flex-1">{busy.stage} {busy.progress > 0 ? `${Math.round(busy.progress * 100)}%` : ""}</span>
       <Button size="sm" variant="ghost" onClick={() => void action.run(() => api.stopClipJob(clip.id, busy.id))}>Остановить</Button>
     </div>}
-    {(action.error || latestError) && <p role="alert" className="rounded-lg border border-bad/30 p-3 text-xs text-bad">{action.error || latestError}</p>}
+    {(action.error || latestError) && <ErrorMessage text={action.error || latestError!} />}
     {clip.jobs[0]?.status === "interrupted" && <p className="text-xs text-muted">Операция прервана перезапуском. Повторите её; утверждённая работа сохранена.</p>}
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
       <section className="min-w-0 space-y-4">
@@ -199,7 +199,7 @@ function ClipProjectView() {
         </section>
         <details className="rounded-xl border border-line p-3"><summary className="cursor-pointer text-xs">История операций</summary>
           {clip.jobs.map((j) => <details key={j.id} className="mt-2 text-xs"><summary>{j.stage} · {Math.round(j.progress * 100)}%</summary>
-            {j.error && <p className="text-bad">{j.error}</p>}
+            {j.error && <ErrorMessage text={j.error} />}
             {j.result.text && <Markdown text={j.result.text} />}
             {j.result.previous_document && <details><summary>Предыдущая концепция: {j.result.previous_document.passport.concept}</summary>
               {j.result.previous_document.blocks.map((b) => <div key={b.id}><p>{b.name}</p>{b.versions.map((v) => <details key={v.version}><summary>Версия {v.version}</summary>{v.shots.map((s) => <ShotDetails key={s.id} shot={s} />)}</details>)}</div>)}
@@ -222,7 +222,7 @@ function RevisionHistory({ clipId, revision }: { clipId: string; revision: numbe
       <dl>{Object.entries(item.document.passport).map(([key, value]) => <div key={key} className="mt-2"><dt className="text-muted">{passportLabels[key as keyof Passport]}</dt><dd>{value}</dd></div>)}</dl>
       {item.document.blocks.map((b) => <p key={b.id} className="mt-2">{b.name} · {b.versions.at(-1)?.final_approved ? "финал утверждён" : b.versions.at(-1)?.draft_approved ? "черновик утверждён" : "в разработке"}</p>)}
     </details>)}
-    {action.error && <p role="alert" className="text-xs text-bad">{action.error}</p>}
+    {action.error && <ErrorMessage text={action.error} />}
   </details>;
 }
 
@@ -245,7 +245,7 @@ function AudioSummary({ analysis, editable }: { analysis: AudioAnalysis; editabl
     {editable ? <AutoField label="Текст песни — можно исправить целиком" value={analysis.lyrics} rows={5} save={(lyrics) => clipEdit({ lyrics })} /> : <p className="max-h-48 overflow-auto whitespace-pre-wrap">{analysis.lyrics || "Слова не распознаны"}</p>}
     <details><summary className="cursor-pointer text-muted">Слова с таймкодами</summary><div className="max-h-48 overflow-auto leading-6">{analysis.words.map((w, i) => <span key={i} className={w.probability < 0.7 ? "text-amber-400" : "text-muted"} title={`${time(w.start)}–${time(w.end)} · ${Math.round(w.probability * 100)}%`}>{w.word} </span>)}</div><p className="text-faint">Жёлтым — неуверенное распознавание. Исправленный текст выше имеет приоритет.</p></details>
     {analysis.warnings.map((w, i) => <p key={i} className="text-[11px] text-faint">{w}</p>)}
-    {action.error && <p role="alert" className="text-bad">{action.error}</p>}
+    {action.error && <ErrorMessage text={action.error} />}
   </div>;
 }
 
@@ -321,6 +321,6 @@ function BlockView({ block, disabled }: { block: ClipBlock; disabled: boolean })
       <Button variant="outline" disabled={blocked || block.stale || !ready} onClick={() => void action.run(async () => { useClip.getState().setActive(await api.approveClipBlock(clip.id, block.id, clip.revision, mode, picks)); if (mode === "draft") { setMode("final"); setSelections({}); } })}>Просмотрено — утвердить {mode === "draft" ? "черновик" : "финал"}</Button>
       {block.versions.length > 1 && <details><summary className="cursor-pointer text-xs text-muted">Предыдущие версии постановки</summary>{block.versions.slice(0, -1).map((v) => <div key={v.version}><p className="mt-2 text-xs">Версия {v.version}</p>{v.shots.map((s) => <ShotDetails key={s.id} shot={s} />)}</div>)}</details>}
     </>}
-    {action.error && <p role="alert" className="text-xs text-bad">{action.error}</p>}
+    {action.error && <ErrorMessage text={action.error} />}
   </section>;
 }

@@ -143,7 +143,7 @@ export const useUI = create<UIState>((set) => ({
   toast: (text, tone = "info", action) => {
     const id = ++toastId;
     set((s) => ({ toasts: [...s.toasts, { id, text, tone, action }] }));
-    setTimeout(() => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), action ? 9000 : 4500);
+    setTimeout(() => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), tone === "bad" ? 12000 : action ? 9000 : 4500);
   },
   dismiss: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
   openFaceDialog: (faceDialog) => set({ faceDialog }),

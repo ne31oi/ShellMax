@@ -4,7 +4,7 @@ import { api } from "../../api/client";
 import type { QualityPresetValues, QualitySettings } from "../../api/types";
 import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
-import { Button, SectionTitle } from "../ui";
+import { Button, ErrorMessage, SectionTitle } from "../ui";
 
 const IDS = ["draft", "standard", "high"] as const;
 const ASPECT = "16:9 (Widescreen)";
@@ -74,7 +74,7 @@ export function QualitySettingsPanel() {
   if (error && !data) {
     return (
       <div className="space-y-3 p-5">
-        <p className="text-sm text-bad">{error}</p>
+        <ErrorMessage text={error} />
         <Button size="sm" onClick={reload}>
           Повторить
         </Button>

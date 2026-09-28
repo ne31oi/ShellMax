@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { fmtSize } from "../../lib/format";
 import { useAssistant } from "../../store/assistant";
 import { useUI } from "../../store/ui";
-import { Button, Dialog } from "../ui";
+import { Button, Dialog, ErrorMessage } from "../ui";
 
 /** Shown when the assistant is used before its model is downloaded (studio "Модель ассистента не скачана"). */
 export function AssistantSetup() {
@@ -60,13 +60,14 @@ export function AssistantSetup() {
         ) : (
           <div className="flex items-center justify-between gap-3">
             <span className="text-xs text-muted">
-              {failed ? <span className="text-bad">Ошибка: {failed.error}</span> : `Размер: ~${fmtSize(total - got)}`}
+              {failed ? `Ошибка: ${failed.error}` : `Размер: ~${fmtSize(total - got)}`}
             </span>
             <Button variant="primary" onClick={download}>
               <Download size={14} /> {failed ? "Повторить" : "Скачать"}
             </Button>
           </div>
         )}
+        {failed && <ErrorMessage text={failed.error || "Не удалось загрузить модель"} />}
 
         <button
           onClick={() => {

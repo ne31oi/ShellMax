@@ -8,7 +8,7 @@ import { estimateBasis, fmtEstimate, fmtSeconds } from "../../lib/format";
 import { useAssistant } from "../../store/assistant";
 import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
-import { Button, Dialog, SectionTitle, Select, Spinner } from "../ui";
+import { Button, Dialog, ErrorMessage, SectionTitle, Select, Spinner } from "../ui";
 import { EditPromptButton } from "../assistant/EditPromptButton";
 import { stripFence } from "../generate/PromptEditor";
 import { CropEditor } from "./CropEditor";
@@ -125,7 +125,7 @@ function FaceForm({ assetId, fromGenerationId, onDone }: { assetId: number; from
   if (!defaults) {
     return (
       <div className="flex h-60 items-center justify-center gap-2 text-muted">
-        {error ? <span className="text-bad">{error}</span> : <><Spinner /> Готовлю клип…</>}
+        {error ? <ErrorMessage text={error} /> : <><Spinner /> Готовлю клип…</>}
       </div>
     );
   }
@@ -342,7 +342,7 @@ function FaceForm({ assetId, fromGenerationId, onDone }: { assetId: number; from
         )}
       </section>
 
-      {error && <p className="text-xs text-bad">{error}</p>}
+      {error && <ErrorMessage text={error} />}
 
       <div className="flex items-center justify-end gap-2 border-t border-line pt-4">
         <Button variant="ghost" onClick={onDone}>Отмена</Button>

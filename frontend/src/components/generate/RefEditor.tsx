@@ -6,7 +6,7 @@ import { tagOf } from "../../lib/refs";
 import { useForm } from "../../store/form";
 import { useUI } from "../../store/ui";
 import { CropEditor } from "../face/CropEditor";
-import { Button, Dialog, Select, Spinner } from "../ui";
+import { Button, Dialog, ErrorMessage, Select, Spinner } from "../ui";
 import { TrimBar } from "./TrimBar";
 
 const VIDEO_MIN = 2;
@@ -72,7 +72,7 @@ function Body({ item, onDone }: { item: RefItem; onDone: () => void }) {
     };
   }, [range, src]);
 
-  if (!src) return <div className="flex h-40 items-center justify-center">{error ? <p className="text-xs text-bad">{error}</p> : <Spinner />}</div>;
+  if (!src) return <div className="flex h-40 items-center justify-center p-3">{error ? <ErrorMessage text={error} /> : <Spinner />}</div>;
 
   const duration = src.duration ?? 0;
   const mediaAspect = src.width && src.height ? src.width / src.height : 1;
@@ -210,7 +210,7 @@ function Body({ item, onDone }: { item: RefItem; onDone: () => void }) {
         </div>
       )}
 
-      {error && <p className="text-xs text-bad">{error}</p>}
+      {error && <ErrorMessage text={error} />}
 
       <div className="flex items-center gap-2 border-t border-line pt-4">
         {cur.source_id && (

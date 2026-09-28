@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api/client";
 import type { ClipJob } from "../../api/clip-types";
-import { Button, SectionTitle, Spinner } from "../ui";
+import { Button, ErrorMessage, SectionTitle, Spinner } from "../ui";
 
 export function AudioModelSettings() {
   const [status, setStatus] = useState<{ ready: boolean; job: ClipJob | null } | null>(null);
@@ -23,6 +23,6 @@ export function AudioModelSettings() {
       catch (e) { setError(e instanceof Error ? e.message : String(e)); }
       finally { setStarting(false); }
     }}>{busy ? <Spinner size={12} /> : null}{busy ? "Скачиваю модель…" : "Скачать модель слов"}</Button>}
-    {(error || status?.job?.error) && <p role="alert" className="text-xs text-bad">{error || status?.job?.error}</p>}
+    {(error || status?.job?.error) && <ErrorMessage text={error || status?.job?.error!} />}
   </section>;
 }

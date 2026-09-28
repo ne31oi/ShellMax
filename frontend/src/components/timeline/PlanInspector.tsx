@@ -13,6 +13,7 @@ import {
   unbindPlanForm,
 } from "../../lib/planForm";
 import { useForm } from "../../store/form";
+import { ErrorMessage } from "../ui";
 import { useLibrary } from "../../store/library";
 import {
   audioTracks,
@@ -319,7 +320,7 @@ export function PlanInspector() {
               </p>
             </section>
 
-            {plan.error && <p className="rounded-lg bg-bad/10 px-2 py-1.5 text-[12px] text-bad">{plan.error}</p>}
+            {plan.error && <ErrorMessage text={plan.error} />}
             {checklist.length > 0 && (
               <div className="rounded-lg border border-warn/30 bg-warn/5 px-2 py-1.5">
                 <p className="mb-1 text-[11px] font-medium text-warn">Перед стартом</p>

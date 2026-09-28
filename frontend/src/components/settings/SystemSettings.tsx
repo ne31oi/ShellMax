@@ -5,7 +5,7 @@ import { api } from "../../api/client";
 import { useRestartAll } from "../../lib/restart";
 import { notifySettings } from "../../lib/notify";
 import { useLibrary } from "../../store/library";
-import { Button, SectionTitle, Switch } from "../ui";
+import { Button, ErrorMessage, SectionTitle, Switch } from "../ui";
 import { ENGINE_LABEL } from "../layout/EngineStatus";
 
 export function SystemSettings() {
@@ -79,7 +79,7 @@ export function SystemSettings() {
               Модели не копируются — используются из текущей папки моделей.
             </div>
           )}
-          {engine?.detail && state === "error" && <p className="mt-3 whitespace-pre-wrap text-xs text-bad">{engine.detail}</p>}
+          {engine?.detail && state === "error" && <ErrorMessage text={engine.detail} className="mt-3" />}
         </div>
         <pre ref={logBox} className="mt-3 h-64 select-text overflow-auto rounded-xl border border-line bg-bg p-3 font-mono text-[11px] leading-relaxed text-muted">
           {lines.length ? lines.join("\n") : "Лог движка появится после запуска"}

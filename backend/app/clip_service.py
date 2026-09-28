@@ -8,6 +8,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from .clip_schema import (AudioAnalysis, BlockDraft, BlockVersion, ClipBlock, ClipDocument,
                           EditorialReview, Treatment, check_coverage)
@@ -98,7 +99,47 @@ def block_by_id(doc: ClipDocument, bid: str) -> ClipBlock:
 def decode_json(text: str, schema):
     text = text.strip()
     fenced = re.fullmatch(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
-    return schema.model_validate_json(fenced.group(1) if fenced else text)
+    try:
+        return schema.model_validate_json(fenced.group(1) if fenced else text)
+    except ValidationError as exc:
+        raise ValueError("Ассистент вернул неполное или некорректное предложение. "
+                         "Повторите операцию. Утверждённые решения сохранены.") from exc
+
+
+def incomplete_json(text: str, schema) -> bool:
+    try:
+        decode_json(text, schema)
+    except ValueError as exc:
+        cause = exc.__cause__
+        return isinstance(cause, ValidationError) and any(
+            e["type"] == "json_invalid" and "EOF" in e.get("ctx", {}).get("error", "")
+            for e in cause.errors()
+        )
+    return False
+
+
+def align_shots_to_block(shots, start: float, end: float) -> None:
+    """Snap sub-frame boundary drift to adjacent frames while preserving real gaps."""
+    start_frame, end_frame = round(start * FPS), round(end * FPS)
+    cursor = start_frame
+    for index, shot in enumerate(shots):
+        model_start = round(shot.start * FPS)
+        model_end = round((shot.start + shot.duration) * FPS)
+        if abs(model_start - cursor) > 1:
+            raise ValueError(f"Кадры блока должны идти подряд: проверьте границу около {cursor / FPS:.2f} с")
+        duration_frames = model_end - model_start
+        if duration_frames < 1:
+            raise ValueError("Длительность кадра должна быть не меньше одного кадра")
+        next_frame = cursor + duration_frames
+        if index == len(shots) - 1:
+            if abs(next_frame - end_frame) > 1:
+                raise ValueError(f"Кадры должны закрывать интервал до {end:.2f} с")
+            next_frame = end_frame
+        shot.start = cursor / FPS
+        shot.duration = (next_frame - cursor) / FPS
+        cursor = next_frame
+    if cursor != end_frame:
+        raise ValueError(f"Кадры должны закрывать интервал до {end:.2f} с")
 
 
 def ref_tags(ids: list[str]) -> tuple[dict[str, str], list[h3_prompt.RefInfo], list[Path]]:
@@ -223,21 +264,42 @@ class ClipManager:
             self.assistant.precheck()
             self.owned_llm_job = jid
             text = ""
-            completed = False
             if schema:
                 system += "\nВерни только JSON, без markdown, точно по схеме:\n" + json.dumps(schema.model_json_schema(), ensure_ascii=False)
             try:
-                async for event in self.assistant.stream(system, user, images or []):
+                request = user
+                request_system = system
+                # Keep the model's output budget; resume only an unfinished JSON value.
+                for attempt in range(3):
+                    completed = False
+                    finish_reason = None
+                    async for event in self.assistant.stream(request_system, request, images or []):
+                        self.check(jid)
+                        if event.get("error"):
+                            raise ValueError("Ошибка ассистента: " + str(event["error"]))
+                        text += event.get("delta", "")
+                        if event.get("done") and not event.get("cancelled"):
+                            completed = True
+                            finish_reason = event.get("finish_reason")
                     self.check(jid)
-                    if event.get("error"):
-                        raise ValueError("Ошибка ассистента: " + str(event["error"]))
-                    text += event.get("delta", "")
-                    if event.get("done") and not event.get("cancelled"):
-                        completed = True
+                    if not completed:
+                        raise ValueError("Ответ ассистента не завершён. Повторите операцию")
+                    if not schema:
+                        if finish_reason == "length":
+                            raise ValueError("Ответ ассистента достиг лимита длины. Повторите операцию")
+                        break
+                    if not incomplete_json(text, schema) or attempt == 2:
+                        decode_json(text, schema)
+                        break
+                    await self.update(jid, stage="Продолжаю незавершённый ответ")
+                    request_system = system + ("\nРежим продолжения: начало JSON уже получено. "
+                                               "Верни только его недостающий хвост, чтобы вместе "
+                                               "с префиксом он соответствовал схеме. Не повторяй префикс.")
+                    request = (user + "\nОтвет оборвался. Продолжи JSON точно с места обрыва, "
+                               "включая незавершённую строку. Верни только недостающий хвост: "
+                               "без повторения начала, пояснений и markdown. Уже полученный префикс:\n" + text)
             finally:
                 self.owned_llm_job = None
-            if not completed:
-                raise ValueError("Ответ ассистента не завершён. Повторите операцию")
             return text
 
     async def _run(self, jid: str, resume: bool):
@@ -331,24 +393,53 @@ class ClipManager:
         if block.versions:
             block_context["current_shots"] = [s.model_dump(exclude={"prompt"}) for s in block.versions[-1].shots]
         user = context(doc) + "\nБлок:\n" + json.dumps(block_context, ensure_ascii=False) + "\nПравка пользователя:\n" + job.request.get("text", "")
-        text = await self.llm(job.id, DIRECTING, user + "\nРазработай кадры блока без пропусков. Время от начала клипа. "
-                              "ref_ids — только из проекта. prompt оставь пустым. Все Camera Behavior Card обязательны.",
-                              images, BlockDraft)
-        draft = decode_json(text, BlockDraft)
-        check_coverage([(x.start, x.start + x.duration) for x in draft.shots], block.start, block.end)
-        for shot in draft.shots:
-            if not set(shot.ref_ids) <= set(doc.ref_ids):
-                raise ValueError("Ассистент предложил отсутствующие референсы — повторите разработку")
-            shot.id = uuid.uuid4().hex[:12]
-            end_frame = round((shot.start + shot.duration) * FPS)
-            shot.start = round(shot.start * FPS) / FPS
-            shot.duration = end_frame / FPS - shot.start
-        check_coverage([(x.start, x.start + x.duration) for x in draft.shots], block.start, block.end)
+        request = (user + "\nРазработай кадры блока без пропусков. Время от начала клипа. "
+                   "ref_ids — только из проекта. prompt оставь пустым. "
+                   "Camera Behavior Card — это обязательное поле camera в каждом Shot: заполни все его поля "
+                   "из схемы. Крепление камеры опиши реально существующей опорой (например, штатив или "
+                   "моторизованная головка), а не транспортом. Не добавляй движения, оптику, свет, реквизит, "
+                   "татуировки, липсинк или музыкальные события, которых нет в паспорте, исходных данных "
+                   "или правке пользователя. В ритме опирайся только на переданные измерения; не требуй "
+                   "склейки на каждый бит.")
+
+        def validate_draft(raw):
+            candidate = decode_json(raw, BlockDraft)
+            align_shots_to_block(candidate.shots, block.start, block.end)
+            for shot in candidate.shots:
+                if not set(shot.ref_ids) <= set(doc.ref_ids):
+                    raise ValueError("Ассистент предложил отсутствующие референсы — повторите разработку")
+                shot.id = uuid.uuid4().hex[:12]
+            check_coverage([(x.start, x.start + x.duration) for x in candidate.shots], block.start, block.end)
+            return candidate
+
+        draft = validate_draft(await self.llm(job.id, DIRECTING, request, images, BlockDraft))
         await self.update(job.id, stage="Проверяю постановку и канон", progress=0.2)
-        review = decode_json(await self.llm(job.id, DIRECTING,
-            user + "\nПроверь повторы, физику, канон и ритм. Предложение:\n" + draft.model_dump_json(), schema=EditorialReview), EditorialReview)
-        if not review.approved:
-            raise ValueError("Редакторская проверка: " + "; ".join(review.notes) + ". Уточните идею и повторите разработку.")
+        review = None
+        for attempt in range(3):
+            rubric = ("Проверь предложение только по данным паспорта, анализу и правке пользователя. "
+                      "Не добавляй новых требований. Поле camera — это Camera Behavior Card; его физическая "
+                      "опора, старт, траектория, ориентация, оптика/фокус, скорость, якорь/параллакс и конечный "
+                      "кадр уже заданы отдельными полями схемы. Не требуй буквального имени camera_behavior_card. "
+                      "Отклоняй только конкретное противоречие паспорту, недостающие обязательные поля, реальную "
+                      "ошибку физики или перекрытие/пропуск границ. Не требуй точной привязки к битам, активации "
+                      "деталей костюма, эффектов или реквизита, если их нет во входных данных. Срезы оценивай "
+                      "по входящему/исходящему кадру, не по наличию англоязычного названия типа перехода. "
+                      "Различай lipsync и обычную мимику/движение головы. Если конкретного нарушения нет, approved=true.")
+            review = decode_json(await self.llm(job.id, DIRECTING,
+                user + "\n" + rubric + "\nПредложение:\n" + draft.model_dump_json(), schema=EditorialReview), EditorialReview)
+            if review.approved:
+                break
+            if attempt == 2:
+                raise ValueError("Не удалось исправить конкретные замечания редактора за две попытки: "
+                                 + "; ".join(review.notes) + ". Уточните идею и повторите разработку.")
+            await self.update(job.id, stage=f"Исправляю замечания редактора ({attempt + 1}/2)")
+            repair = (request + "\nРедактор отметил конкретные проблемы в предложении ниже. Исправь только "
+                      "обоснованные замечания, которые следуют из паспорта и исходных данных. Поля схемы "
+                      "обязательны; используй существующий camera как карточку поведения камеры. "
+                      "Сохрани длительности и непрерывное покрытие блока. Замечания:\n"
+                      + json.dumps(review.notes, ensure_ascii=False) + "\nТекущее предложение:\n"
+                      + draft.model_dump_json())
+            draft = validate_draft(await self.llm(job.id, DIRECTING, repair, images, BlockDraft))
         for i, shot in enumerate(draft.shots):
             self.check(job.id)
             await self.update(job.id, stage=f"Пишу промпт кадра {i + 1}/{len(draft.shots)}", progress=0.3 + 0.6 * i / len(draft.shots))

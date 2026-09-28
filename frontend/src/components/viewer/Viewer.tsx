@@ -13,7 +13,7 @@ import { fmtDuration, fmtEstimate, fmtTimecode } from "../../lib/format";
 import { useElapsed } from "../../lib/useElapsed";
 import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
-import { Button, Dialog, IconButton, Kbd, Spinner } from "../ui";
+import { Button, Dialog, ErrorMessage, IconButton, Kbd, Spinner } from "../ui";
 import { useTimeline, hasSequenceContent } from "../../store/timeline";
 import { SequenceEmptyHint, SequencePlayer } from "../timeline/SequencePlayer";
 import { Welcome } from "./Welcome";
@@ -260,7 +260,7 @@ function ErrorView({ gen }: { gen: Generation }) {
           <AlertCircle size={18} />
           <span className="font-semibold">Не получилось</span>
         </div>
-        <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-fg">{gen.error}</p>
+        {gen.error && <ErrorMessage text={gen.error} />}
         <div className="mt-4 flex flex-wrap gap-2">
           {gen.error_kind === "oom" && (gen.kind === "generate" || gen.kind === "generate_nvfp4" || gen.kind === "generate_nvfp4_fast") && (
             <>

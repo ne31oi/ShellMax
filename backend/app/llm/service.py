@@ -131,6 +131,7 @@ class AssistantService:
                 "presence_penalty": smp.presence_penalty, "frequency_penalty": smp.frequency_penalty,
                 "repeat_penalty": smp.repeat_penalty,
             }
+            finish_reason = None
             async with httpx.AsyncClient(timeout=httpx.Timeout(300, connect=10)) as client:
                 async with client.stream("POST", f"{LLM_URL}/v1/chat/completions", json=body) as r:
                     if r.status_code != 200:
@@ -147,12 +148,15 @@ class AssistantService:
                             chunk = json.loads(payload)
                         except ValueError:
                             continue
-                        delta = (chunk.get("choices") or [{}])[0].get("delta", {}).get("content")
+                        result = (chunk.get("choices") or [{}])[0]
+                        finish_reason = result.get("finish_reason") or finish_reason
+                        delta = result.get("delta", {}).get("content")
                         if delta:  # reasoning_content (if any) is dropped, as in the studio
                             text += delta
                             self.runner.touch()
                             yield {"delta": delta}
-            yield {"done": True, "prompt": extract_prompt(text), "text": text, "cancelled": cancel.is_set()}
+            yield {"done": True, "prompt": extract_prompt(text), "text": text,
+                   "cancelled": cancel.is_set(), "finish_reason": finish_reason}
         except Exception as e:  # noqa: BLE001 - shown to the user
             log.exception("assistant failed")
             yield {"error": str(e)}

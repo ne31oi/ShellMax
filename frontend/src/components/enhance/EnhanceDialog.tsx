@@ -5,7 +5,7 @@ import type { EnhanceDefaults, Estimate } from "../../api/types";
 import { estimateBasis, fileName, fmtEstimate, fmtSeconds } from "../../lib/format";
 import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
-import { Button, Dialog, SectionTitle, Select, Spinner } from "../ui";
+import { Button, Dialog, ErrorMessage, SectionTitle, Select, Spinner } from "../ui";
 
 /**
  * SeedVR2 post-enhance on a finished clip: restore detail (and optional upscale).
@@ -91,7 +91,7 @@ function EnhanceForm({
   if (!defaults) {
     return (
       <div className="flex h-48 items-center justify-center gap-2 text-muted">
-        {error ? <span className="text-bad">{error}</span> : <><Spinner /> Готовлю клип…</>}
+        {error ? <ErrorMessage text={error} /> : <><Spinner /> Готовлю клип…</>}
       </div>
     );
   }
@@ -175,7 +175,7 @@ function EnhanceForm({
         ) : null}
       </p>
 
-      {error && <p className="text-sm text-bad">{error}</p>}
+      {error && <ErrorMessage text={error} />}
 
       <div className="flex justify-end gap-2 border-t border-line pt-4">
         <Button variant="ghost" onClick={onDone} disabled={busy}>

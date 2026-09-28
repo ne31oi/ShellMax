@@ -5,8 +5,8 @@ import * as SliderPrimitive from "@radix-ui/react-slider";
 import * as SwitchPrimitive from "@radix-ui/react-switch";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import clsx from "clsx";
-import { Check, ChevronDown, X } from "lucide-react";
-import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { Check, ChevronDown, Copy, X } from "lucide-react";
+import { forwardRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 
 // ---------------------------------------------------------------- buttons
 type Variant = "primary" | "ghost" | "subtle" | "danger" | "outline";
@@ -299,6 +299,44 @@ export function SectionTitle({ children, right }: { children: ReactNode; right?:
     <div className="mb-2 flex items-center justify-between">
       <h3 className="text-[11px] font-semibold uppercase tracking-wider text-faint">{children}</h3>
       {right}
+    </div>
+  );
+}
+
+export async function copyText(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const field = document.createElement("textarea");
+  field.value = text;
+  field.style.position = "fixed";
+  field.style.opacity = "0";
+  document.body.append(field);
+  field.select();
+  const copied = document.execCommand("copy");
+  field.remove();
+  if (!copied) throw new Error("Не удалось скопировать текст");
+}
+
+export function ErrorMessage({ text, className = "" }: { text: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await copyText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <div role="alert" className={clsx("flex min-w-0 items-start gap-3 rounded-lg border border-bad/30 bg-bad/5 p-2.5 text-xs text-bad", className)}>
+      <p className="min-w-0 flex-1 whitespace-pre-wrap break-words leading-relaxed">{text}</p>
+      <button type="button" onClick={() => void copy()} title="Скопировать ошибку" aria-label="Скопировать ошибку"
+        className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-1 text-[11px] text-muted hover:bg-hover hover:text-fg">
+        {copied ? <Check size={13} /> : <Copy size={13} />}{copied ? "Скопировано" : "Копировать"}
+      </button>
     </div>
   );
 }

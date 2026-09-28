@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -76,11 +77,62 @@ def test_coverage_checks_holes_overlaps_and_end():
             check_coverage(spans, 0, 2)
 
 
+def test_align_shots_closes_subframe_endpoint_drift_and_rejects_real_gap():
+    shots = [shot("s1", 0, 2.01), shot("s2", 2.01, 1.98)]
+    clip_service.align_shots_to_block(shots, 0, 3.99)
+    assert shots[0].start == 0 and shots[1].start == shots[0].duration
+    assert round((shots[-1].start + shots[-1].duration) * 24) == round(3.99 * 24)
+
+    with pytest.raises(ValueError, match="закрывать интервал"):
+        clip_service.align_shots_to_block([shot("s1", 0, 1)], 0, 3)
+    with pytest.raises(ValueError, match="идти подряд"):
+        clip_service.align_shots_to_block([shot("s1", 0, 1), shot("s2", 1.2, 2)], 0, 3)
+
+
 def test_partial_or_extra_model_json_rejected():
     with pytest.raises(ValueError):
         clip_service.decode_json('{"shots": [', BlockDraft)
     with pytest.raises(ValueError):
         clip_service.decode_json(json.dumps({"shots": [shot().model_dump()], "launch": True}), BlockDraft)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["complete", "resume", "exhausted", "invalid", "cancelled", "disconnected"])
+async def test_structured_reply_continuation_is_bounded_and_validated(mode):
+    full = json.dumps({"shots": [shot().model_dump()]}, ensure_ascii=False)
+    cut = full.index("subject_definitions") + 8
+    calls = []
+    class Assistant:
+        def precheck(self): pass
+        async def stream(self, system, user, images):
+            calls.append(user)
+            if mode == "complete":
+                yield {"delta": full}
+            elif mode == "invalid":
+                yield {"delta": '{"shots": []}'}
+            elif len(calls) == 1:
+                yield {"delta": full[:cut]}
+            elif mode == "resume":
+                assert full[:cut] in user
+                yield {"delta": full[cut:]}
+            else:
+                yield {"delta": "more text"}
+            if mode != "disconnected":
+                yield {"done": True, "cancelled": mode == "cancelled"}
+    manager = clip_service.ClipManager(Assistant(), None)
+    manager.cancels["test"] = threading.Event()
+    async def update(*args, **kwargs): pass
+    manager.update = update
+    if mode in ("complete", "resume"):
+        result = await manager.llm("test", "System", "Block", schema=BlockDraft)
+        assert result == full
+        assert clip_service.decode_json(result, BlockDraft).shots == [shot()]
+    else:
+        with pytest.raises(ValueError, match="Повторите операцию") as exc:
+            await manager.llm("test", "System", "Block", schema=BlockDraft)
+        assert "validation error" not in str(exc.value)
+    assert len(calls) == {"resume": 2, "exhausted": 3}.get(mode, 1)
+    assert manager.owned_llm_job is None
 
 
 def test_only_selected_block_gets_new_version(db):
