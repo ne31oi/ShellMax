@@ -6,7 +6,7 @@ import clsx from "clsx";
 import {
   Download, Eraser, Film, Gauge, Magnet, Music2, Pencil, Plus, Redo2, ScanFace, Scissors, Sparkles, Trash2, Undo2, Volume2, VolumeX, type LucideIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, urls } from "../../api/client";
 import type { MediaAsset } from "../../api/types";
 import * as actions from "../../lib/actions";
@@ -68,6 +68,7 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
   const playhead = useTimeline((s) => s.playhead);
   const setPlayhead = useTimeline((s) => s.setPlayhead);
   const selectedPlanId = useTimeline((s) => s.selectedPlanId);
+  const selectedPlanIds = useTimeline((s) => s.selectedPlanIds);
   const run = useTimeline((s) => s.run);
   const undo = useTimeline((s) => s.undo);
   const redo = useTimeline((s) => s.redo);
@@ -278,13 +279,22 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
         setSelected(null);
       }
       if ((e.key === "Delete" || e.key === "Backspace") && planId) {
-        for (const t of planTracks(d)) {
-          if (t.plans.some((p) => p.id === planId)) {
-            run(commands.removePlan(d, planId, t.id));
-            useTimeline.getState().selectPlan(null);
-            break;
+        const ids = useTimeline.getState().selectedPlanIds;
+        const toRemove = ids.length ? ids : [planId];
+        for (const pid of toRemove) {
+          for (const t of planTracks(useTimeline.getState().doc)) {
+            if (t.plans.some((p) => p.id === pid)) {
+              run(commands.removePlan(useTimeline.getState().doc, pid, t.id));
+              break;
+            }
           }
         }
+        useTimeline.getState().selectPlan(null);
+      }
+      if (e.key === "Escape") {
+        useTimeline.getState().selectPlan(null);
+        useTimeline.getState().selectPlans([]);
+        setSelected(null);
       }
       if (letter === "s") {
         e.preventDefault();
@@ -541,7 +551,7 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="flex flex-wrap items-center gap-2 px-3 py-1.5">
           <h2 className="text-[11px] font-semibold uppercase tracking-wider text-faint">Монтаж</h2>
-          <PlanBatchBar selectedIds={selectedPlanId ? [selectedPlanId] : []} />
+          <PlanBatchBar selectedIds={selectedPlanIds} />
           <span className="ml-auto" />
           <IconButton
             label={snapEnabled(doc) ? "Snap к битам (N) — вкл" : "Snap к битам (N) — выкл"}
@@ -606,8 +616,12 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
                 useUI.getState().toast("Нет готовых планов для сборки", "info");
                 return;
               }
-              run(commands.compilePlansToVideo(useTimeline.getState().doc));
-              useUI.getState().toast("Планы собраны на V", "ok");
+              try {
+                run(commands.compilePlansToVideo(useTimeline.getState().doc));
+                useUI.getState().toast("Планы собраны на V", "ok");
+              } catch (error) {
+                useUI.getState().toast(error instanceof Error ? error.message : String(error), "bad");
+              }
             }}
           >
             <Film size={13} />
@@ -806,9 +820,28 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
                         displayDuration={duration}
                         scale={scale}
                         selected={selectedPlanId === p.id}
+                        checked={selectedPlanIds.includes(p.id)}
                         dragging={!!dragging}
                         trackId={pt.id}
-                        onSelect={() => openPlanInSidebar(p.id)}
+                        onSelect={(mods) => {
+                          if (mods.toggle) {
+                            useTimeline.getState().togglePlanSelected(p.id);
+                            return;
+                          }
+                          if (mods.range) {
+                            const ordered = planTracks(useTimeline.getState().doc).flatMap((t) => t.plans.map((x) => x.id));
+                            const anchor = selectedPlanIds[0] ?? selectedPlanId ?? p.id;
+                            const a = ordered.indexOf(anchor);
+                            const b = ordered.indexOf(p.id);
+                            if (a >= 0 && b >= 0) {
+                              const lo = Math.min(a, b);
+                              const hi = Math.max(a, b);
+                              useTimeline.getState().selectPlans(ordered.slice(lo, hi + 1));
+                              return;
+                            }
+                          }
+                          openPlanInSidebar(p.id);
+                        }}
                         onPreview={(preview) => setPlanDrag(preview)}
                         onCommit={(final) => {
                           setPlanDrag(null);
@@ -937,6 +970,12 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
                         selected={selected === c.id}
                         dragging={!!dragging}
                         trackId={at.id}
+                        trackMuted={!!at.muted}
+                        playhead={playhead}
+                        beats={beats}
+                        downbeats={downsList}
+                        masterVolume={doc.masterVolume ?? 1}
+                        masterMute={!!doc.masterMute}
                         snapBeats={snapEnabled(doc)}
                         onSelect={() => {
                           setSelected(c.id);
@@ -986,6 +1025,12 @@ export function TimelineStrip({ tall }: { tall: boolean }) {
                           selected
                           dragging
                           trackId={at.id}
+                          trackMuted={!!at.muted}
+                          playhead={playhead}
+                          beats={beats}
+                          downbeats={downsList}
+                          masterVolume={doc.masterVolume ?? 1}
+                          masterMute={!!doc.masterMute}
                           snapBeats={snapEnabled(doc)}
                           ghost
                           onSelect={() => undefined}
@@ -1156,6 +1201,12 @@ function AudioClipBlock({
   selected,
   dragging,
   trackId,
+  trackMuted,
+  playhead,
+  beats,
+  downbeats,
+  masterVolume,
+  masterMute,
   snapBeats,
   ghost,
   onSelect,
@@ -1174,6 +1225,12 @@ function AudioClipBlock({
   selected: boolean;
   dragging: boolean;
   trackId: string;
+  trackMuted: boolean;
+  playhead: number;
+  beats: number[];
+  downbeats: number[];
+  masterVolume: number;
+  masterMute: boolean;
   snapBeats: boolean;
   ghost?: boolean;
   onSelect: () => void;
@@ -1185,6 +1242,16 @@ function AudioClipBlock({
   const maxSrc = assetDuration && assetDuration > 0 ? assetDuration : Math.max(displayOut, clip.out, 60);
   const dur = Math.max(MIN_CLIP, displayOut - displayIn);
   const widthPx = Math.max(32, dur * scale);
+  const clipEnd = displayStart + dur;
+  const progress =
+    playhead <= displayStart ? 0 : playhead >= clipEnd ? 1 : (playhead - displayStart) / dur;
+  const silent = !!clip.muted || trackMuted || masterMute;
+  const gain = silent ? 0 : Math.max(0, Math.min(1, masterVolume));
+  const downSet = useMemo(() => new Set(downbeats), [downbeats]);
+  const localBeats = useMemo(
+    () => beats.filter((b) => b > displayStart + 0.01 && b < clipEnd - 0.01),
+    [beats, displayStart, clipEnd],
+  );
 
   const drag = (e: React.PointerEvent, mode: "move" | "in" | "out") => {
     if (ghost) return;
@@ -1289,12 +1356,12 @@ function AudioClipBlock({
       style={{ left: displayStart * scale, width: widthPx }}
       className={clsx(
         "absolute top-1 bottom-1 cursor-grab overflow-hidden rounded-md ring-1 active:cursor-grabbing",
-        selected ? "ring-accent bg-audio/20" : "ring-audio/35 bg-audio/10",
-        clip.muted && "opacity-40",
+        selected ? "ring-accent bg-audio/25" : "ring-audio/40 bg-audio/12",
+        silent && "opacity-70",
         dragging && "z-30 opacity-90 shadow-lg",
         ghost && "pointer-events-none opacity-70",
       )}
-      title={`${assetName ?? "аудио"} · ${fmtTimecode(displayStart)}`}
+      title={`${assetName ?? "аудио"} · ${fmtTimecode(displayStart)}${silent ? " · без звука" : ""}`}
     >
       <AudioClipWave
         assetId={clip.assetId}
@@ -1302,9 +1369,24 @@ function AudioClipBlock({
         inn={displayIn}
         out={displayOut}
         widthPx={widthPx}
+        gain={gain}
+        muted={silent}
+        progress={progress}
       />
-      <span className="pointer-events-none absolute bottom-0.5 left-1 right-1 truncate text-[9px] text-fg/80 drop-shadow-[0_1px_1px_rgba(0,0,0,.8)]">
+      {/* Beat ticks on the waveform */}
+      {localBeats.map((b) => (
+        <div
+          key={`ab-${b}`}
+          className={clsx(
+            "pointer-events-none absolute top-0 bottom-0 z-[1] w-px",
+            downSet.has(b) ? "bg-accent/70" : "bg-accent/35",
+          )}
+          style={{ left: (b - displayStart) * scale }}
+        />
+      ))}
+      <span className="pointer-events-none absolute bottom-0.5 left-1 right-1 z-[2] truncate text-[9px] font-medium text-fg/85 drop-shadow-[0_1px_1px_rgba(0,0,0,.85)]">
         {assetName ?? "аудио"}
+        {silent ? " · mute" : ""}
       </span>
       {!ghost && (
         <>
@@ -1368,6 +1450,7 @@ function PlanBlock({
   displayDuration,
   scale,
   selected,
+  checked,
   dragging,
   trackId,
   snapBeats,
@@ -1381,10 +1464,11 @@ function PlanBlock({
   displayDuration: number;
   scale: number;
   selected: boolean;
+  checked: boolean;
   dragging: boolean;
   trackId: string;
   snapBeats: boolean;
-  onSelect: () => void;
+  onSelect: (mods: { toggle?: boolean; range?: boolean }) => void;
   onPreview: (d: PlanDragState | null) => void;
   onCommit: (d: PlanDragState | null) => void;
   resolvePreview: (
@@ -1420,7 +1504,7 @@ function PlanBlock({
       mode,
     };
     onPreview(last);
-    onSelect();
+    // Focus for inspector only — do not toggle batch checkboxes.
 
     const move = (ev: PointerEvent) => {
       let toTrackId = trackId;
@@ -1485,22 +1569,52 @@ function PlanBlock({
       tabIndex={0}
       onClick={(e) => {
         e.stopPropagation();
-        onSelect();
+        if (e.shiftKey) {
+          onSelect({ range: true });
+          return;
+        }
+        onSelect({});
       }}
       onPointerDown={(e) => {
         if ((e.target as HTMLElement).dataset.edge) return;
+        if ((e.target as HTMLElement).closest("[data-plan-check]")) return;
         if (e.button !== 0) return;
+        if (e.shiftKey) return;
         drag(e, "move");
       }}
-      style={{ left: displayStart * scale, width: Math.max(28, displayDuration * scale) }}
+      style={{ left: displayStart * scale, width: Math.max(36, displayDuration * scale) }}
       className={clsx(
-        "absolute top-1 bottom-1 cursor-grab overflow-hidden rounded-md px-1 ring-1 active:cursor-grabbing",
+        "absolute top-1 bottom-1 cursor-grab overflow-hidden rounded-md pl-5 pr-1 ring-1 active:cursor-grabbing",
         statusColor,
         selected && "ring-2 ring-accent",
+        checked && "ring-2 ring-accent bg-accent/30",
         dragging && "z-30 opacity-90 shadow-lg",
       )}
-      title={`${fmtTimecode(displayStart)} · ${Math.round(displayDuration * H3_FPS)} кадр.`}
+      title={`${fmtTimecode(displayStart)} · ${Math.round(displayDuration * H3_FPS)} кадр. · Shift — диапазон`}
     >
+      <label
+        data-plan-check="1"
+        className="absolute left-0.5 top-0.5 z-20 flex h-4 w-4 cursor-pointer items-center justify-center"
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
+        title="Выбрать для очереди"
+      >
+        <input
+          type="checkbox"
+          className="h-3.5 w-3.5 accent-[var(--color-accent,#7dd3fc)]"
+          checked={checked}
+          onChange={(e) => {
+            if ((e.nativeEvent as MouseEvent).shiftKey) onSelect({ range: true });
+            else onSelect({ toggle: true });
+          }}
+          onClick={(e) => {
+            if (e.shiftKey) {
+              e.preventDefault();
+              onSelect({ range: true });
+            }
+          }}
+        />
+      </label>
       <span className="pointer-events-none block truncate text-[10px] text-fg">
         {plan.name || plan.prompt.slice(0, 24) || "план"}
       </span>

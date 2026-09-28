@@ -1,7 +1,8 @@
 import clsx from "clsx";
-import { Copy, Frame, Magnet, Play, RefreshCw, Sparkles, Trash2 } from "lucide-react";
+import { Copy, Frame, Magnet, Play, RefreshCw, Sparkles, Square, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../../api/client";
+import * as actions from "../../lib/actions";
 import { isH3Aligned, nearestH3Duration, snapToFrame } from "../../lib/planH3";
 import {
   bindPlanToForm,
@@ -18,6 +19,7 @@ import {
   commands,
   emptyPlan,
   findPlan,
+  flushTimelinePersist,
   openPlanInSidebar,
   planTracks,
   timelineBeats,
@@ -28,7 +30,7 @@ import { useUI } from "../../store/ui";
 import { DurationChip, FormatChip, LookChip, QualityChip, StyleChip, useEstimates } from "../generate/Chips";
 import { PromptEditor } from "../generate/PromptEditor";
 import { RefsZone } from "../generate/RefsZone";
-import { Button, SectionTitle } from "../ui";
+import { Button, SectionTitle, Select } from "../ui";
 
 const STATUS_LABEL: Record<Plan["status"], string> = {
   empty: "Пусто",
@@ -107,14 +109,21 @@ export function PlanInspector() {
     try {
       const projectId = useUI.getState().projectId;
       const planIds = ids ?? [plan.id];
+      // Черновик-кнопка форсит пресет draft; иначе — то, что выбрано чипом «Качество».
+      const quality = mode === "draft" ? "draft" : useForm.getState().quality;
+      const qLabel =
+        useLibrary.getState().meta?.quality?.find((p) => p.id === quality)?.label ?? quality;
+      for (const id of planIds) {
+        const hit = findPlan(useTimeline.getState().doc, id);
+        if (!hit) continue;
+        useTimeline.getState().run(commands.updatePlan(useTimeline.getState().doc, id, hit.track.id, { quality, mode }));
+      }
+      await flushTimelinePersist();
       const res = await api.enqueuePlans(projectId, planIds, mode);
       res.generations.forEach((g) => useLibrary.getState().upsertGeneration(g));
       useTimeline.getState().load(res.timeline as never);
       openPlanInSidebar(plan.id);
-      useUI.getState().toast(
-        mode === "draft" ? `В очередь: ${planIds.length} · только черновик` : `В очередь: ${planIds.length} · финал`,
-        "ok",
-      );
+      useUI.getState().toast(`В очередь: ${planIds.length} · ${qLabel}`, "ok");
     } catch (e) {
       useUI.getState().toast(e instanceof Error ? e.message : "Не удалось поставить в очередь", "bad");
     } finally {
@@ -303,8 +312,11 @@ export function PlanInspector() {
                   disabled={locked}
                   onChange={(e) => patch({ mode: e.target.checked ? "draft" : "final" })}
                 />
-                Только черновик
+                Кнопка по умолчанию — черновик
               </label>
+              <p className="text-[11px] text-faint">
+                Качество выбирайте чипом выше (пресеты из Настройки → Качество).
+              </p>
             </section>
 
             {plan.error && <p className="rounded-lg bg-bad/10 px-2 py-1.5 text-[12px] text-bad">{plan.error}</p>}
@@ -331,7 +343,7 @@ export function PlanInspector() {
             disabled={busy || locked}
             onClick={() => void enqueue(plan.mode === "final" ? "final" : "draft")}
           >
-            <Play size={12} /> {plan.mode === "final" ? "В очередь · финал" : "В очередь · черновик"}
+            <Play size={12} /> {plan.mode === "final" ? "В очередь" : "В очередь · черновик"}
           </Button>
           <Button size="sm" disabled={busy || locked} title="Переген" onClick={() => void enqueue(plan.mode === "final" ? "final" : "draft")}>
             <RefreshCw size={12} />
@@ -339,7 +351,7 @@ export function PlanInspector() {
         </div>
         {plan.status === "draft" && (
           <Button size="sm" className="w-full" disabled={busy} onClick={() => void enqueue("final")}>
-            Добить до финала
+            В очередь с выбранным качеством
           </Button>
         )}
         {(plan.status === "queued" || plan.status === "running") && plan.generationId && (
@@ -422,8 +434,21 @@ export function PlanInspector() {
 export function PlanBatchBar({ selectedIds }: { selectedIds: string[] }) {
   const doc = useTimeline((s) => s.doc);
   const [busy, setBusy] = useState(false);
-  const allIds = planTracks(doc).flatMap((t) => t.plans.map((p) => p.id));
-  const ids = selectedIds.length ? selectedIds : allIds;
+  const presets = useLibrary((s) => s.meta?.quality ?? []);
+  const [finalQuality, setFinalQuality] = useState(() => localStorage.getItem("sm.planFinalQuality") || "high");
+  const allIds = [...new Set(planTracks(doc).flatMap((t) => t.plans.map((p) => p.id)))];
+  const picked = [...new Set(selectedIds)];
+  const ids = picked.length ? picked : allIds;
+  const usingAll = picked.length === 0 && allIds.length > 0;
+
+  // If stored id disappeared from settings, fall back to last preset / high / first.
+  const qualityOptions = presets.map((p) => ({ value: p.id, label: p.label }));
+  const effectiveFinal =
+    qualityOptions.some((o) => o.value === finalQuality)
+      ? finalQuality
+      : qualityOptions.find((o) => o.value === "high")?.value
+        ?? qualityOptions[qualityOptions.length - 1]?.value
+        ?? "high";
 
   const runBatch = async (mode: "draft" | "final") => {
     if (!ids.length) {
@@ -434,10 +459,18 @@ export function PlanBatchBar({ selectedIds }: { selectedIds: string[] }) {
     setBusy(true);
     try {
       const projectId = useUI.getState().projectId;
+      const quality = mode === "draft" ? "draft" : effectiveFinal;
+      const qLabel = presets.find((p) => p.id === quality)?.label ?? quality;
+      for (const id of ids) {
+        const hit = findPlan(useTimeline.getState().doc, id);
+        if (!hit) continue;
+        useTimeline.getState().run(commands.updatePlan(useTimeline.getState().doc, id, hit.track.id, { quality, mode }));
+      }
+      await flushTimelinePersist();
       const res = await api.enqueuePlans(projectId, ids, mode);
       res.generations.forEach((g) => useLibrary.getState().upsertGeneration(g));
       useTimeline.getState().load(res.timeline as never);
-      useUI.getState().toast(`Очередь: ${ids.length} · ${mode === "draft" ? "черновик" : "финал"}`, "ok");
+      useUI.getState().toast(`Очередь: ${ids.length} · ${qLabel}`, "ok");
     } catch (e) {
       useUI.getState().toast(e instanceof Error ? e.message : "Ошибка очереди", "bad");
     } finally {
@@ -445,6 +478,9 @@ export function PlanBatchBar({ selectedIds }: { selectedIds: string[] }) {
     }
   };
 
+  const queueCount = useLibrary((s) =>
+    Object.values(s.generations).filter((g) => g.status === "queued" || g.status === "running").length,
+  );
   const queueLabel = useLibrary((s) => {
     let n = 0;
     let eta = 0;
@@ -458,9 +494,43 @@ export function PlanBatchBar({ selectedIds }: { selectedIds: string[] }) {
   });
   const [night, setNight] = useState(() => localStorage.getItem("sm.nightMode") === "1");
 
+  const stopAll = async () => {
+    setBusy(true);
+    try {
+      await actions.cancelAll();
+      const projectId = useUI.getState().projectId;
+      try {
+        const proj = await api.project(projectId);
+        if (proj?.timeline) useTimeline.getState().load(proj.timeline as never);
+      } catch {
+        /* ignore */
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="flex items-center gap-1.5">
+      {picked.length > 0 ? (
+        <span className="text-[11px] tabular-nums text-accent" title="Чекбокс на плане · Shift+чекбокс — диапазон · Esc — сбросить">
+          выбрано: {picked.length}
+        </span>
+      ) : (
+        <span className="text-[11px] text-faint" title="Отметьте планы чекбоксом на таймлайне">
+          {allIds.length ? "все планы" : "нет планов"}
+        </span>
+      )}
       {queueLabel && <span className="text-[11px] tabular-nums text-faint">{queueLabel}</span>}
+      <Button
+        size="sm"
+        variant="danger"
+        disabled={busy || queueCount === 0}
+        title="Остановить текущую и снять все из очереди"
+        onClick={() => void stopAll()}
+      >
+        <Square size={11} className="fill-current" /> Стоп все
+      </Button>
       <label className="flex items-center gap-1 text-[11px] text-faint" title="Без ассистента и без preview-кадров">
         <input
           type="checkbox"
@@ -474,11 +544,30 @@ export function PlanBatchBar({ selectedIds }: { selectedIds: string[] }) {
         />
         ночь
       </label>
-      <Button size="sm" disabled={busy || !ids.length} onClick={() => void runBatch("draft")}>
+      <Button size="sm" disabled={busy || !ids.length} onClick={() => void runBatch("draft")} title="Пресет «Черновик» из настроек качества">
         Все → черновик
       </Button>
-      <Button size="sm" disabled={busy || !ids.length} onClick={() => void runBatch("final")}>
-        Выбранные → финал
+      <div className="w-[7.5rem] shrink-0" title="Пресет из Настройки → Качество">
+        <Select
+          value={effectiveFinal}
+          onChange={(v) => {
+            setFinalQuality(v);
+            localStorage.setItem("sm.planFinalQuality", v);
+          }}
+          options={qualityOptions.length ? qualityOptions : [{ value: "high", label: "Высокое" }]}
+        />
+      </div>
+      <Button
+        size="sm"
+        disabled={busy || !ids.length}
+        onClick={() => void runBatch("final")}
+        title={
+          usingAll
+            ? "Нет выбора — в очередь уйдут все планы. Отметьте чекбоксами на таймлайне."
+            : "Поставить выбранные планы с качеством из списка слева"
+        }
+      >
+        {usingAll ? "Все → очередь" : "Выбранные → очередь"}
       </Button>
       <Button
         size="sm"
@@ -556,6 +645,9 @@ function buildChecklist(doc: ReturnType<typeof useTimeline.getState>["doc"], pla
   }
   if (audioHits > 3) out.push(`Аудио пересечений: ${audioHits} (лимит 3)`);
   if (plan.lipsync && audioHits === 0) out.push("Липсинг включён, но нет пересечения с A-треком");
+  if (audioHits > 0 && !/<Audio\s+\d+>/i.test(plan.prompt)) {
+    out.push("A-трек пересекается — в промпт добавятся метки <Audio N> при постановке в очередь");
+  }
   if (!isH3Aligned(plan.duration)) out.push(`Длительность вне сетки H3 (→ ${nearestH3Duration(plan.duration).toFixed(2)} с)`);
   return out;
 }

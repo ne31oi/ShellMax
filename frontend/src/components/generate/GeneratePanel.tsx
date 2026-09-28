@@ -4,9 +4,10 @@ import { Check, ChevronDown, Dices, Lock, RotateCcw, Wand2 } from "lucide-react"
 import { useEffect, useState } from "react";
 import { generate } from "../../lib/actions";
 import { on } from "../../lib/bus";
+import { api } from "../../api/client";
 import type { Estimate } from "../../api/types";
 import { estimateBasis, fmtEstimate } from "../../lib/format";
-import { useForm } from "../../store/form";
+import { useForm, flushFormPersist } from "../../store/form";
 import { defaultProfile, sortedGenerations, useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
 import { Menu, MenuItem, MenuLabel, MenuSeparator, SectionTitle, Spinner, Tip } from "../ui";
@@ -124,7 +125,17 @@ function GenerateBar({ estimates }: { estimates: Record<string, Estimate | undef
                   <MenuSeparator />
                   <MenuLabel>Профиль движка</MenuLabel>
                   {profiles.map((p) => (
-                    <MenuItem key={p.id} onSelect={() => set({ profileId: p.id })}>
+                    <MenuItem
+                      key={p.id}
+                      onSelect={() => {
+                        set({ profileId: p.id });
+                        void flushFormPersist();
+                        // Also mark as server default: sticky alone was lost across restarts.
+                        if (!p.is_default) {
+                          void api.updateProfile(p.id, p.data, true).then(() => useLibrary.getState().reloadProfiles());
+                        }
+                      }}
+                    >
                       <span className="w-4">{activeProfile?.id === p.id && <Check size={13} className="text-accent" />}</span>
                       {p.name}
                     </MenuItem>

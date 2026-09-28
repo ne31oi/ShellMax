@@ -6,7 +6,7 @@ import { FaceRefineDialog } from "./components/face/FaceRefineDialog";
 import { EnhanceDialog } from "./components/enhance/EnhanceDialog";
 import { InterpolateDialog } from "./components/enhance/InterpolateDialog";
 import { RefEditor } from "./components/generate/RefEditor";
-import { ChatView } from "./components/assistant/ChatView";
+import { AssistantWorkspace } from "./components/assistant/ClipView";
 import { GeneratePanel } from "./components/generate/GeneratePanel";
 import { EngineStatus } from "./components/layout/EngineStatus";
 import { ProjectSwitcher } from "./components/layout/ProjectSwitcher";
@@ -23,8 +23,8 @@ import { api } from "./api/client";
 import { useHotkeys } from "./lib/hotkeys";
 import { connectLive } from "./lib/live";
 import { useAssistant } from "./store/assistant";
-import { useForm } from "./store/form";
-import { useLibrary } from "./store/library";
+import { useForm, flushFormPersist } from "./store/form";
+import { defaultProfile, useLibrary } from "./store/library";
 import { type TimelineDoc, flushTimelinePersist, useTimeline } from "./store/timeline";
 import { unbindPlanForm } from "./lib/planForm";
 import { useUI } from "./store/ui";
@@ -55,6 +55,15 @@ export default function App() {
       .then(async () => {
         const meta = useLibrary.getState().meta!;
         await useForm.getState().hydrate(meta.defaults);
+        // Pin a concrete engine profile id so restart does not silently fall back to Singularity.
+        const profiles = useLibrary.getState().profiles;
+        const cur = useForm.getState().profileId;
+        const stillThere = cur != null && profiles.some((p) => p.id === cur);
+        if (!stillThere) {
+          const fallback = defaultProfile(profiles);
+          if (fallback) useForm.getState().set({ profileId: fallback.id });
+        }
+        await flushFormPersist();
         await useForm.getState().seedRecentFromHistory();
       });
     void useAssistant.getState().refresh();
@@ -64,7 +73,10 @@ export default function App() {
         .then((p) => useTimeline.getState().load(p.timeline as unknown as TimelineDoc))
         .catch(() => undefined);
     void loadTimeline();
-    const flush = () => flushTimelinePersist();
+    const flush = () => {
+      flushTimelinePersist();
+      void flushFormPersist();
+    };
     window.addEventListener("beforeunload", flush);
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "hidden") flush();
@@ -147,7 +159,7 @@ export default function App() {
         {/* body */}
         {workspace === "assistant" ? (
           <div className="min-h-0 flex-1">
-            <ChatView />
+            <AssistantWorkspace />
           </div>
         ) : (
         <div className="flex min-h-0 flex-1">

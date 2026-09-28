@@ -310,7 +310,11 @@ def user_camera_directive(camera: str | None) -> str:
             "Камера (эксперт = Авто): если в описании явно назван ракурс/движение — следуй ему; "
             "иначе сам выбери ОДИН приём из каталога. В detailed_description опиши геометрию "
             "(height/pitch/distance/mm, path/speed) и NEGATIVE. Один клип — одно camera motion. "
-            "Запрещён голый «dynamic camera»."
+            "Запрещён голый «dynamic camera». "
+            "Крупность (shot size / ECU–WS / close-up / wide): если пользователь её назвал — "
+            "она сильнее прежней крупности в текущем промпте; обнови Shot size, Distance/Lens и "
+            "всю стартовую фразу [Shot N]. Удали кроп-клише прежней крупности "
+            "(chest-to-head = MCU-кроп, не высота; не пиши «wide at chest-to-head level»)."
         )
     v = _CAMERA[cid]
     return (

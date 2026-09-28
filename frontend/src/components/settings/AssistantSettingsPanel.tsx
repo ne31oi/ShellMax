@@ -6,6 +6,7 @@ import type { AssistantModel, AssistantSettings } from "../../api/types";
 import { fmtSize } from "../../lib/format";
 import { useAssistant } from "../../store/assistant";
 import { Button, SectionTitle, Select, Switch } from "../ui";
+import { AudioModelSettings } from "../assistant/AudioModelSettings";
 
 export function AssistantSettingsPanel() {
   const [s, setS] = useState<AssistantSettings | null>(null);
@@ -34,6 +35,7 @@ export function AssistantSettingsPanel() {
 
   return (
     <div className="space-y-6 p-5">
+      <AudioModelSettings />
       <p className="text-xs leading-relaxed text-muted">
         Локальная модель для кнопок «В промпт» и «Составить ассистентом». Промпты пишутся по спецификации
         MiniMax H3 Singularity. Набор моделей и параметры — как в Minimax Studio V6. Перед генерацией видео ассистент

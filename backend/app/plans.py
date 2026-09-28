@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from pathlib import Path
 
@@ -22,10 +23,83 @@ from .workflow.params import RefSpec, StyleSpec, UIParams
 
 log = logging.getLogger("shellmax.plans")
 
-LIPSYNC_HINT = (
-    "\n\nretention_analysis:\n"
-    "<Audio 1>: reference — exact spoken words and timing drive lip movement with precise lip synchronization.\n"
+# Without <Audio N> in the prompt H3 ignores LoadAudio refs even if they are wired in the graph.
+_SECTION_RE = re.compile(
+    r"(?im)^([a-z_][a-z0-9_]*)\s*:\s*\n(.*?)(?=^[a-z_][a-z0-9_]*\s*:|\Z)",
+    re.S,
 )
+
+
+def _split_prompt_sections(prompt: str) -> tuple[str, list[tuple[str, str]]]:
+    """Preamble + ordered (name, body) sections (first occurrence of each name wins)."""
+    matches = list(_SECTION_RE.finditer(prompt))
+    if not matches:
+        return prompt, []
+    preamble = prompt[: matches[0].start()]
+    seen: set[str] = set()
+    sections: list[tuple[str, str]] = []
+    for m in matches:
+        name = m.group(1).lower()
+        if name in seen:
+            continue
+        seen.add(name)
+        sections.append((name, m.group(2).rstrip() + "\n"))
+    return preamble, sections
+
+
+def _join_prompt_sections(preamble: str, sections: list[tuple[str, str]]) -> str:
+    parts = [preamble.rstrip()]
+    for name, body in sections:
+        parts.append(f"{name}:\n{body.rstrip()}\n")
+    return "\n".join(p for p in parts if p).rstrip() + "\n"
+
+
+def _upsert_retention_audio(body: str, n_audio: int, *, lipsync: bool) -> str:
+    lines = [ln for ln in body.splitlines() if not re.match(r"^\s*<Audio\s+\d+>", ln)]
+    extras: list[str] = []
+    for i in range(1, n_audio + 1):
+        if lipsync and i == 1:
+            extras.append(
+                f"<Audio {i}>: reference — exact spoken words and timing drive lip movement "
+                "with precise lip synchronization."
+            )
+        else:
+            extras.append(
+                f"<Audio {i}>: fully_copy — exact soundtrack from the timeline audio track for this plan."
+            )
+    out = "\n".join([*lines, *extras]).rstrip() + "\n"
+    return out
+
+
+def apply_timeline_audio_to_prompt(prompt: str, n_audio: int, *, lipsync: bool) -> str:
+    """Rewrite (not append) soundscape / retention so H3 actually follows A-track audio."""
+    if n_audio <= 0:
+        return prompt
+    text = (prompt or "").strip() or "A short cinematic shot of the subject."
+    preamble, sections = _split_prompt_sections(text)
+    by_name = {n: i for i, (n, _) in enumerate(sections)}
+
+    def set_section(name: str, body: str) -> None:
+        if name in by_name:
+            sections[by_name[name]] = (name, body if body.endswith("\n") else body + "\n")
+        else:
+            by_name[name] = len(sections)
+            sections.append((name, body if body.endswith("\n") else body + "\n"))
+
+    if "retention_analysis" in by_name:
+        set_section(
+            "retention_analysis",
+            _upsert_retention_audio(sections[by_name["retention_analysis"]][1], n_audio, lipsync=lipsync),
+        )
+    else:
+        set_section(
+            "retention_analysis",
+            _upsert_retention_audio("", n_audio, lipsync=lipsync),
+        )
+
+    set_section("overall_soundscape", "Only the exact supplied sound from <Audio 1>.\n")
+    set_section("non_diegetic_music", "N/A — soundtrack is fully provided by <Audio 1>.\n")
+    return _join_prompt_sections(preamble, sections)
 
 
 def _clip_span(c: TimelineClip) -> tuple[float, float]:
@@ -67,6 +141,7 @@ async def _ensure_trimmed_upload(asset: MediaAsset, src_in: float, src_out: floa
     with session() as s:
         existing = s.get(Upload, uid)
         if existing and Path(existing.path).is_file():
+            s.expunge(existing)
             return existing
     dest = settings.UPLOADS_DIR / f"{uid}.wav"
     settings.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
@@ -85,35 +160,60 @@ async def _ensure_trimmed_upload(asset: MediaAsset, src_in: float, src_out: floa
         edit={"start": src_in, "end": src_out},
     )
     with session() as s:
-        s.merge(up)
+        # merge() returns the persistent instance; the original `up` stays detached
+        row = s.merge(up)
         s.commit()
-        s.refresh(up)
-        return up
+        s.refresh(row)
+        return row
 
 
 async def build_ui_params(doc: TimelineDoc, plan: PlanBlock) -> UIParams:
+    # Image/video refs come from the plan; audio always from overlapping A-tracks
+    # (re-enqueue must not stack duplicate LoadAudio refs from a previous patch).
     refs: list[RefSpec] = [
-        RefSpec(kind=r.kind, upload_id=r.upload_id, with_audio=r.with_audio) for r in plan.refs
+        RefSpec(kind=r.kind, upload_id=r.upload_id, with_audio=r.with_audio)
+        for r in plan.refs
+        if r.kind != "audio"
     ]
     audio_hits = overlapping_audio(doc, plan)
+    # Resolve assets first, then trim outside the session — nested sessions + await
+    # must not touch ORM instances still bound to an open Session.
+    pending: list[tuple[MediaAsset, float, float]] = []
     with session() as s:
         for _track, clip, src_in, src_out in audio_hits:
             asset = s.get(MediaAsset, clip.asset_id)
             if not asset:
                 continue
-            up = await _ensure_trimmed_upload(asset, src_in, src_out)
-            refs.append(RefSpec(kind="audio", upload_id=up.id, with_audio=False))
+            s.expunge(asset)
+            pending.append((asset, src_in, src_out))
+    seen_audio: set[str] = set()
+    for asset, src_in, src_out in pending:
+        up = await _ensure_trimmed_upload(asset, src_in, src_out)
+        if up.id in seen_audio:
+            continue
+        seen_audio.add(up.id)
+        refs.append(RefSpec(kind="audio", upload_id=up.id, with_audio=False))
 
     prompt = plan.prompt.strip()
-    if plan.lipsync and audio_hits and "<Audio" not in prompt:
-        prompt = (prompt or "A short cinematic shot of the subject.") + LIPSYNC_HINT
+    # Stable reference tokens belong to the stored plan, model labels only to the submitted graph.
+    counts = {"image": 0, "video": 0, "audio": 0}
+    labels = {"image": "Picture", "video": "Video", "audio": "Audio"}
+    for ref in refs:
+        counts[ref.kind] += 1
+        prompt = prompt.replace("{{ref:" + ref.upload_id + "}}", f"<{labels[ref.kind]} {counts[ref.kind]}>")
+    if "{{ref:" in prompt:
+        raise ValueError("Промпт ссылается на отсутствующий референс — проверьте карточки")
+    n_audio = sum(1 for r in refs if r.kind == "audio")
+    if n_audio:
+        # Always rewrite soundscape/retention in place (appending a second section is ignored by H3).
+        prompt = apply_timeline_audio_to_prompt(prompt, n_audio, lipsync=plan.lipsync)
 
     styles = [StyleSpec(style_id=st.style_id, strength=st.strength) for st in plan.styles]
     return UIParams(
         prompt=prompt or "A short cinematic shot.",
         refs=refs,
         aspect=plan.aspect,
-        duration=plan.duration,
+        duration=min(150, plan.render_duration or plan.duration),
         quality=plan.quality,
         look=plan.look,
         light=plan.light,
@@ -192,21 +292,29 @@ async def create_plan_generations(project_id: int, plan_ids: list[str], mode: st
             raise ValueError("Проект не найден")
         doc = parse_timeline(proj.timeline)
 
-    draft_only = mode == "draft"
     created: list[Generation] = []
+    # Same plan id can appear twice on a track after a bad duplicate — enqueue once.
+    seen: set[str] = set()
     for plan_id in plan_ids:
+        if plan_id in seen:
+            continue
+        seen.add(plan_id)
         hit = find_plan(doc, plan_id)
         if not hit:
             raise ValueError(f"План {plan_id} не найден")
         _track, plan = hit
         ui = await build_ui_params(doc, plan)
+        # mode=draft → пресет «Черновик» из настроек; final → quality уже на плане (чип / селект).
+        if mode == "draft":
+            ui = ui.model_copy(update={"quality": "draft"})
         gens = services.create_generations(ui, project_id)
         for g in gens:
             with session() as s:
                 row = s.get(Generation, g.id)
                 info = dict(row.info or {})
                 info["plan_id"] = plan_id
-                info["draft_only"] = draft_only
+                info["plan_mode"] = mode
+                info.pop("draft_only", None)
                 row.info = info
                 s.add(row)
                 s.commit()
@@ -217,6 +325,11 @@ async def create_plan_generations(project_id: int, plan_ids: list[str], mode: st
                 plan_id,
                 status="queued",
                 mode=mode,
+                prompt=plan.prompt,
+                refs=[
+                    {"kind": r.kind, "uploadId": r.upload_id, "withAudio": r.with_audio}
+                    for r in ui.refs
+                ],
                 generation_id=g.id,
                 error=None,
             )

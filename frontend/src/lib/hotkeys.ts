@@ -22,7 +22,7 @@ export function useHotkeys() {
       const ctrl = e.ctrlKey || e.metaKey;
       const letter = physicalLetter(e);
 
-      if (ctrl && e.code === "Enter") {
+      if (ctrl && e.code === "Enter" && useUI.getState().workspace !== "assistant") {
         e.preventDefault();
         emit("generate");
         return;
@@ -37,6 +37,8 @@ export function useHotkeys() {
         return;
       }
       if (ctrl) return;
+      if (useUI.getState().workspace === "assistant" ||
+          (e.target instanceof HTMLElement && e.target.closest("button, audio, video, summary, [role=combobox]"))) return;
 
       if (e.code === "Space") {
         e.preventDefault();

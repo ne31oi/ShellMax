@@ -107,6 +107,26 @@ def test_apply_history_status_oom():
     assert r.error and r.error[0] == "oom"
 
 
+def test_apply_history_status_interrupted():
+    """Comfy reports intentional interrupt as status_str=error + execution_interrupted."""
+    from app.jobs.queue import Running, apply_history_status
+
+    r = Running(gen_id=1)
+    hist = {
+        "status": {
+            "status_str": "error",
+            "completed": False,
+            "messages": [
+                ["execution_start", {"prompt_id": "x"}],
+                ["execution_interrupted", {"prompt_id": "x", "node_id": "100"}],
+            ],
+        }
+    }
+    assert apply_history_status(r, hist) is True
+    assert r.cancelled
+    assert r.error is None
+
+
 def test_apply_history_status_empty():
     from app.jobs.queue import Running, apply_history_status
 

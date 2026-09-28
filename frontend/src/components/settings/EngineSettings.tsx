@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../../api/client";
 import type { EngineProfile, ExpertParams, FaceRecipe, LoraSpec, ProfileRow } from "../../api/types";
 import { defaultProfile, useLibrary } from "../../store/library";
+import { flushFormPersist, useForm } from "../../store/form";
 import { useUI } from "../../store/ui";
 import { Button, IconButton, Select as SelectField, SectionTitle, Slider, Switch, Tip } from "../ui";
 import { PathField, type ModelCategory } from "./PathField";
@@ -26,7 +27,8 @@ const PIPELINE_OPTIONS = [
 export function EngineSettings() {
   const profiles = useLibrary((s) => s.profiles);
   const reload = useLibrary((s) => s.reloadProfiles);
-  const [activeId, setActiveId] = useState<number | null>(null);
+  const formProfileId = useForm((s) => s.profileId);
+  const [activeId, setActiveId] = useState<number | null>(formProfileId);
   const row = profiles.find((p) => p.id === activeId) ?? defaultProfile(profiles);
   const [draft, setDraft] = useState<EngineProfile | null>(null);
   const [saved, setSaved] = useState<"idle" | "saving" | "saved">("idle");
@@ -120,6 +122,12 @@ export function EngineSettings() {
                 void (async () => {
                   await flushSave();
                   setActiveId(p.id);
+                  useForm.getState().set({ profileId: p.id });
+                  void flushFormPersist();
+                  if (!p.is_default) {
+                    await api.updateProfile(p.id, p.data, true);
+                    await reload();
+                  }
                 })();
               }}
               className={clsx("flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs", p.id === row.id ? "bg-hover text-fg" : "text-muted hover:text-fg")}
@@ -140,6 +148,8 @@ export function EngineSettings() {
               size="sm"
               onClick={async () => {
                 await api.updateProfile(row.id, draft, true);
+                useForm.getState().set({ profileId: row.id });
+                void flushFormPersist();
                 reload();
               }}
             >

@@ -7,6 +7,77 @@ import { commands, audioTracks, snapTime, useTimeline } from "../store/timeline"
 import { useUI } from "../store/ui";
 import { emit } from "./bus";
 import { toModelPrompt } from "./refs";
+import { useClip } from "../store/clip";
+import type { ClipOperation, ClipEdit } from "../api/clip-types";
+import { emptyPlan, type TimelineDoc, type Track } from "../store/timeline";
+
+export async function clipEdit(patch: ClipEdit) {
+  const active = useClip.getState().active;
+  if (!active) return;
+  useClip.getState().setActive(await api.editClipProject(active.id, active.revision, patch));
+}
+
+export async function clipOperation(operation: ClipOperation) {
+  const active = useClip.getState().active;
+  if (!active) return;
+  await api.clipOperation(active.id, active.revision, operation);
+  await useClip.getState().refresh();
+}
+
+function replaceClipTracks(label: string, incoming: Track[], output?: Partial<TimelineDoc>) {
+  const state = useTimeline.getState();
+  const before = state.doc;
+  const ids = new Set(incoming.map((t) => t.id));
+  const replacements = new Map(incoming.map((t) => [t.id, t]));
+  state.run({ label,
+    apply: (doc) => ({ ...doc, ...output, tracks: [
+      ...doc.tracks.map((t) => replacements.get(t.id) ?? t),
+      ...incoming.filter((t) => !doc.tracks.some((old) => old.id === t.id)),
+    ] }),
+    revert: (doc) => ({ ...doc, outputWidth: before.outputWidth, outputHeight: before.outputHeight, outputFps: before.outputFps,
+      masterMute: before.masterMute, masterVolume: before.masterVolume,
+      tracks: [...before.tracks.map((t) => ids.has(t.id) ? t : doc.tracks.find((now) => now.id === t.id) ?? t),
+        ...doc.tracks.filter((t) => !ids.has(t.id) && !before.tracks.some((old) => old.id === t.id))] }),
+  });
+}
+
+export async function applyClipBlock(blockId: string, replace = false) {
+  const active = useClip.getState().active;
+  if (!active) return;
+  const proposal = await api.clipPlanProposal(active.id, blockId);
+  if (useClip.getState().active?.id !== active.id || useClip.getState().active?.revision !== proposal.revision) throw new Error("Проект изменился — обновите блок");
+  const current = useTimeline.getState().doc;
+  const incoming: Track[] = [
+    { id: proposal.track_id, kind: "plan", name: active.document.blocks.find((b) => b.id === blockId)?.name,
+      clips: [], plans: proposal.plans.map((p) => emptyPlan(p)) }, proposal.audio_track,
+  ];
+  // A retry must never silently discard a manual edit or replace an older block version.
+  const changes = replace ? incoming : incoming.filter((t) => !current.tracks.some((old) => old.id === t.id));
+  if (changes.length) replaceClipTracks("Применить блок клипа", changes);
+  // Await this save explicitly: the ordinary timeline autosave is debounced.
+  await api.saveTimeline(active.project_id, useTimeline.getState().doc);
+}
+
+export async function assembleClip() {
+  const active = useClip.getState().active;
+  if (!active) return;
+  const proposal = await api.clipAssembly(active.id);
+  if (useClip.getState().active?.id !== active.id || useClip.getState().active?.revision !== proposal.revision) throw new Error("Проект изменился — обновите сборку");
+  const before = useTimeline.getState().doc;
+  const videoId = before.tracks.find((t) => t.kind === "video")?.id ?? "v1";
+  const incoming = proposal.timeline.tracks.map((t) => ({ ...t, id: t.kind === "video" ? videoId : t.id,
+    plans: t.plans ?? [], muted: false, solo: false }));
+  const audioId = incoming.find((t) => t.kind === "audio")?.id;
+  for (const t of before.tracks) if (t.kind === "audio" && t.id !== audioId) incoming.push({ ...t, muted: true, solo: false });
+  replaceClipTracks("Собрать клип", incoming, {
+    outputWidth: proposal.timeline.outputWidth, outputHeight: proposal.timeline.outputHeight, outputFps: 24,
+    masterMute: false, masterVolume: 1,
+  });
+  await api.saveTimeline(active.project_id, useTimeline.getState().doc);
+  useUI.getState().setWorkspace("edit");
+  useUI.getState().setViewingSequence(true);
+  useUI.getState().toast("Клип собран. Просмотрите монтаж и нажмите «Экспорт». Ctrl+Z отменит сборку", "ok");
+}
 
 const toast = (...a: Parameters<ReturnType<typeof useUI.getState>["toast"]>) => useUI.getState().toast(...a);
 
@@ -82,6 +153,18 @@ export async function editAndRetry(g: Generation) {
 
 export async function cancel(g: Generation) {
   await api.cancel(g.id).catch(handleError);
+}
+
+export async function cancelAll() {
+  try {
+    const res = await api.cancelAll();
+    const n = res.cancelled?.length ?? 0;
+    if (n === 0) toast("Нет активных генераций", "info");
+    else toast(n === 1 ? "Остановлена 1 генерация" : `Остановлено: ${n}`, "ok");
+    return res;
+  } catch (e) {
+    handleError(e);
+  }
 }
 
 export async function remove(g: Generation) {

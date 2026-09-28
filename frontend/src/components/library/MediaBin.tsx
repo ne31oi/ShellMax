@@ -87,9 +87,10 @@ export function MediaBin() {
     })
     .sort((a, b) => b.id - a.id);
 
+  // «Все» — только видео-рефы; картинки и аудио — во «Импорт»
   const refs =
     filter === "all"
-      ? usedRefs.filter((u) => u.kind !== "audio")
+      ? usedRefs.filter((u) => u.kind === "video")
       : filter === "imported"
         ? usedRefs
         : [];

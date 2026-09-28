@@ -44,6 +44,8 @@ class PlanBlock(BaseModel):
     id: str
     start: float = Field(ge=0)
     duration: float = Field(ge=0.2, le=150)
+    render_duration: float | None = Field(default=None, ge=0.2, le=151, validation_alias=AliasChoices("renderDuration", "render_duration"))
+    source_in: float = Field(default=0, ge=0, validation_alias=AliasChoices("sourceIn", "source_in"))
     prompt: str = ""
     refs: list[PlanRef] = Field(default_factory=list)
     aspect: str = "16:9 (Widescreen)"
@@ -91,6 +93,9 @@ class TimelineMarkers(BaseModel):
 
 class TimelineDoc(BaseModel):
     tracks: list[TimelineTrack] = Field(default_factory=list)
+    output_width: int | None = Field(default=None, ge=64, le=8192, validation_alias=AliasChoices("outputWidth", "output_width"))
+    output_height: int | None = Field(default=None, ge=64, le=8192, validation_alias=AliasChoices("outputHeight", "output_height"))
+    output_fps: int | None = Field(default=None, ge=1, le=120, validation_alias=AliasChoices("outputFps", "output_fps"))
     master_mute: bool = Field(default=False, validation_alias=AliasChoices("masterMute", "master_mute"))
     master_volume: float = Field(default=1.0, ge=0, le=1, validation_alias=AliasChoices("masterVolume", "master_volume"))
     markers: TimelineMarkers | None = None
@@ -134,6 +139,8 @@ def _dump_plan(p: PlanBlock) -> dict[str, Any]:
         "id": p.id,
         "start": p.start,
         "duration": p.duration,
+        "renderDuration": p.render_duration,
+        "sourceIn": p.source_in,
         "prompt": p.prompt,
         "refs": [
             {"kind": r.kind, "uploadId": r.upload_id, "withAudio": r.with_audio}
@@ -194,6 +201,9 @@ def normalize_timeline(raw: dict[str, Any] | None) -> dict[str, Any]:
             "offset": markers.offset,
         },
         "snapToBeats": doc.snap_to_beats,
+        "outputWidth": doc.output_width,
+        "outputHeight": doc.output_height,
+        "outputFps": doc.output_fps,
     }
 
 

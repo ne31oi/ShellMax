@@ -30,6 +30,7 @@ import type {
   Upload,
 } from "./types";
 import { useUI } from "../store/ui";
+import type { ClipProject, ClipListItem, ClipEdit, ClipOperation, ClipJob, PlanProposal, AssemblyProposal } from "./clip-types";
 
 export class ApiError extends Error {
   constructor(
@@ -87,6 +88,24 @@ function pid(explicit?: number): number {
 }
 
 export const api = {
+  clipProjects: (projectId: number) => get<ClipListItem[]>(`/api/assistant/clip-projects?project_id=${projectId}`),
+  clipProject: (id: string) => get<ClipProject>(`/api/assistant/clip-projects/${id}`),
+  clipRevisions: (id: string) => get<{ revision: number; document: ClipProject["document"] }[]>(`/api/assistant/clip-projects/${id}/revisions`),
+  createClipProject: (body: { project_id: number; idea: string; audio_asset_id: number; ref_ids: string[]; audio_start?: number; audio_end?: number }) =>
+    post<ClipProject>("/api/assistant/clip-projects", body),
+  editClipProject: (id: string, revision: number, patch: ClipEdit) =>
+    request<ClipProject>("PATCH", `/api/assistant/clip-projects/${id}`, { revision, ...patch }),
+  clipOperation: (id: string, revision: number, operation: ClipOperation) =>
+    post<ClipJob>(`/api/assistant/clip-projects/${id}/operations`, { revision, ...operation }),
+  acceptClipProposal: (id: string, jid: string, revision: number) => post<ClipProject>(`/api/assistant/clip-projects/${id}/accept/${jid}`, { revision }),
+  approveClipPassport: (id: string, revision: number) => post<ClipProject>(`/api/assistant/clip-projects/${id}/approve-passport`, { revision }),
+  approveClipBlock: (id: string, bid: string, revision: number, mode: "draft" | "final", selections: Record<string, number>) =>
+    post<ClipProject>(`/api/assistant/clip-projects/${id}/blocks/${bid}/approve`, { revision, mode, selections }),
+  clipPlanProposal: (id: string, bid: string) => get<PlanProposal>(`/api/assistant/clip-projects/${id}/blocks/${bid}/timeline`),
+  clipAssembly: (id: string) => get<AssemblyProposal>(`/api/assistant/clip-projects/${id}/assembly`),
+  stopClipJob: (id: string, jid: string) => post(`/api/assistant/clip-projects/${id}/jobs/${jid}/stop`),
+  audioModel: () => get<{ ready: boolean; job: ClipJob | null }>("/api/assistant/audio-model"),
+  downloadAudioModel: () => post<ClipJob>("/api/assistant/audio-model/download"),
   meta: () => get<Meta>("/api/meta"),
   estimate: (aspect: string, quality: string, duration: number, profileId?: number | null) =>
     get<Estimate>("/api/estimate" + q({ aspect, quality, duration, ...(profileId != null ? { profile_id: profileId } : {}) })),
@@ -173,6 +192,7 @@ export const api = {
   retry: (id: number, same_seed: boolean, variants = 1) =>
     post<Generation[]>(`/api/generations/${id}/retry`, { same_seed, variants }),
   cancel: (id: number) => post(`/api/generations/${id}/cancel`),
+  cancelAll: () => post<{ ok: boolean; cancelled: number[] }>("/api/generations/cancel-all"),
   deleteGeneration: (id: number) => del(`/api/generations/${id}`),
 
   faceDefaults: (assetId: number) => get<FaceDefaults>("/api/face/defaults" + q({ asset_id: assetId })),

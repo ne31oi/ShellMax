@@ -560,6 +560,12 @@ async def cancel_generation(gid: int, request: Request):
     return {"ok": True}
 
 
+@router.post("/generations/cancel-all")
+async def cancel_all_generations(request: Request):
+    ids = await _state(request).jobs.cancel_all()
+    return {"ok": True, "cancelled": ids}
+
+
 @router.delete("/generations/{gid}")
 async def delete_generation(gid: int, request: Request):
     jobs = _state(request).jobs

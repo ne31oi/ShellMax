@@ -238,7 +238,7 @@ async def edit_upload(upload_id: str, edit: RefEdit) -> Upload:
 
 
 # ---------------------------------------------------------------- generations
-def create_generations(ui: UIParams, project_id: int) -> list[Generation]:
+def create_generations(ui: UIParams, project_id: int, *, info: dict | None = None) -> list[Generation]:
     row, profile = get_profile(ui.profile_id)
     problems = profile_problems(profile)
     if problems:
@@ -268,7 +268,7 @@ def create_generations(ui: UIParams, project_id: int) -> list[Generation]:
         units = presets.work_units(full)
         g = Generation(project_id=project_id, kind=kind, ui_params=ui.model_dump(), full_params=full.model_dump(),
                        seed=seed, profile_name=row.name, work_units=units,
-                       estimate_s=estimate_seconds(units, kind))
+                         estimate_s=estimate_seconds(units, kind), info=info)
         with session() as s:
             s.add(g)
             s.commit()

@@ -121,6 +121,15 @@ const STICKY: (keyof FormState)[] = [
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 
+/** Write sticky form fields now (call on unload / profile switch — debounce alone loses the last pick). */
+export function flushFormPersist() {
+  clearTimeout(saveTimer);
+  const state = useForm.getState();
+  if (!state.hydrated) return;
+  const value = Object.fromEntries(STICKY.map((k) => [k, state[k]]));
+  return api.saveUiState(value).catch(() => undefined);
+}
+
 export const useForm = create<FormState>((set, get) => ({
   hydrated: false,
   refs: [],
@@ -280,7 +289,6 @@ useForm.subscribe((state) => {
   if (!state.hydrated) return;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    const value = Object.fromEntries(STICKY.map((k) => [k, state[k]]));
-    api.saveUiState(value).catch(() => undefined);
+    void flushFormPersist();
   }, 600);
 });

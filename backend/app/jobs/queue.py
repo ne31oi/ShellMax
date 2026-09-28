@@ -114,13 +114,17 @@ class JobManager:
 
     # ------------------------------------------------------------------ lifecycle
     async def start(self) -> None:
+        recovering = []
         with session() as s:
             for g in s.exec(select(Generation).where(Generation.status == "running")).all():
+                if (g.info or {}).get("clip_job_id") and g.comfy_prompt_id:
+                    recovering.append(g.id)
+                    continue
                 g.status, g.error, g.error_kind = "error", "Прервано перезапуском ShellMax", "generic"
                 s.add(g)
             s.commit()
             queued = s.exec(select(Generation.id).where(Generation.status == "queued").order_by(Generation.id)).all()
-        for gid in queued:
+        for gid in [*recovering, *queued]:
             self.queue.put_nowait(gid)
         asyncio.create_task(self.client.listen(self._on_ws, self._on_preview, self._stop))
         asyncio.create_task(self._worker())
@@ -187,16 +191,40 @@ class JobManager:
                 s.commit()
                 await push_generation(g)
 
+    async def cancel_all(self) -> list[int]:
+        """Cancel every queued job, then interrupt the one currently running."""
+        cancelled: list[int] = []
+        with session() as s:
+            rows = list(s.exec(select(Generation).where(Generation.status == "queued")).all())
+            for g in rows:
+                g.status, g.finished = "cancelled", utcnow()
+                s.add(g)
+                cancelled.append(g.id)
+            s.commit()
+            for g in rows:
+                s.refresh(g)
+                await push_generation(g)
+        running_id = self.running.gen_id if self.running else None
+        if running_id is not None:
+            await self.cancel(running_id)
+            if running_id not in cancelled:
+                cancelled.append(running_id)
+        return cancelled
+
     # ------------------------------------------------------------------ worker
     async def _worker(self) -> None:
         while not self._stop.is_set():
             gen_id = await self.queue.get()
             with session() as s:
                 g = s.get(Generation, gen_id)
-            if not g or g.status != "queued":
+            recovering = g and g.status == "running" and (g.info or {}).get("clip_job_id") and g.comfy_prompt_id
+            if not g or (g.status != "queued" and not recovering):
                 continue
             try:
-                await self._run(g)
+                if recovering:
+                    await self._resume(g)
+                else:
+                    await self._run(g)
             except Exception as e:  # noqa: BLE001 - a job must never kill the worker
                 log.exception("generation %s failed", gen_id)
                 await self._finish(gen_id, "error", error=("generic", f"Внутренняя ошибка: {e}"))
@@ -221,9 +249,6 @@ class JobManager:
 
     async def _run(self, g: Generation) -> None:
         r = self.running = Running(gen_id=g.id, pipe=PIPELINES.get(g.kind, PIPELINES["generate"]), kind=g.kind)
-        # Plan enqueue with mode=draft: stop after draft node without waiting for cancel.
-        if g.kind == "generate" and (g.info or {}).get("draft_only"):
-            r.stop_after_draft = True
         r.stage_marks.append(("prepare", r.started_at))
         with session() as s:
             row = s.get(Generation, g.id)
@@ -284,18 +309,36 @@ class JobManager:
 
         await self._await_prompt(r)
         await self._collect_missing_outputs(r)
+        await self._finish_result(r)
 
+    async def _resume(self, g: Generation) -> None:
+        # Reattach by persisted prompt id; never rebuild or resubmit a graph after a restart.
+        r = self.running = Running(gen_id=g.id, pipe=PIPELINES.get(g.kind, PIPELINES["generate"]),
+                                   kind=g.kind, prompt_id=g.comfy_prompt_id, stage=g.stage,
+                                   progress=g.progress, draft_asset_id=g.draft_asset_id,
+                                   final_asset_id=g.output_asset_id, cold=True)
+        problem = await self._ensure_engine()
+        if problem:
+            await self._finish(g.id, "error", error=("engine_down", problem))
+            return
+        if not await self._reconcile_prompt(r):
+            await self._await_prompt(r)
+        await self._collect_missing_outputs(r)
+        await self._finish_result(r)
+
+    async def _finish_result(self, r: Running) -> None:
         if r.error:
-            await self._finish(g.id, "error", error=r.error)
+            await self._finish(r.gen_id, "error", error=r.error)
         elif r.final_asset_id:
-            await self._finish(g.id, "done", elapsed=time.time() - r.started_at)
+            await self._finish(r.gen_id, "done", elapsed=time.time() - r.started_at)
             self.cold_next, self._warm_pid = False, self.engine.pid
         elif r.draft_asset_id and (r.stop_after_draft or r.cancelled):
-            await self._finish(g.id, "draft_only")
+            # User cancelled after draft appeared («Остановить, оставить черновик»)
+            await self._finish(r.gen_id, "draft_only")
         elif r.cancelled:
-            await self._finish(g.id, "cancelled")
+            await self._finish(r.gen_id, "cancelled")
         else:
-            await self._finish(g.id, "error", error=("generic", "Движок завершил работу без результата"))
+            await self._finish(r.gen_id, "error", error=("generic", "Движок завершил работу без результата"))
 
     async def _await_prompt(self, r: Running) -> None:
         """Block until Comfy finishes this prompt; poll history so a missed WS event cannot hang forever."""
@@ -540,8 +583,13 @@ class JobManager:
         status = hist.get("status") or {}
         if not r.error:
             apply_history_status(r, hist)
-            # apply_history_status sets done; we only need the error side-effect here
-            if not r.error and status.get("status_str") == "error":
+            # Comfy marks interrupted prompts as status_str=error. That is normal for
+            # stop-after-draft / user cancel — do not invent a failure on top.
+            if (
+                not r.error
+                and not r.cancelled
+                and status.get("status_str") == "error"
+            ):
                 r.error = ("generic", "Движок завершил задачу с ошибкой")
 
 

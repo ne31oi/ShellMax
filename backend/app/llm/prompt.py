@@ -238,11 +238,49 @@ EDIT_RULES = """Ты ПРАВИШЬ готовый промпт MiniMax H3 по 
   одежду, украшения и местоимения в retention_analysis и detailed_description. Удали оставшиеся признаки прежнего
   героя, кроме явно запрошенных пользователем изменений. Действие и постановку сохраняй. При правке только камеры
   или света не меняй внешность и личность персонажа.
+- КРУПНОСТЬ / framing / shot size (крупный план, средний, общий, ECU/CU/MCU/MS/WS, close-up, wide, medium…):
+  это НЕ «оставить как было». Обязательно согласованно перепиши ВСЕ места, где закодирована крупность:
+  (1) «Shot size: …» в блоке CAMERA / SHOT,
+  (2) стартовую фразу каждого [Shot N] в detailed_description (включая клише вроде
+  «at chest-to-head level frames», «head-and-shoulders», «waist-up», «full body», «face filling the frame»),
+  (3) Distance / Lens в CAMERA.
+  «chest-to-head» / «head-and-shoulders» — это КРОП кадра (MCU), а не высота камеры; при другой крупности
+  эти слова ЗАПРЕЩЕНЫ. Высоту пиши отдельно (eye-level / ~1.6 m), кроп — словами новой крупности
+  (ECU: face fills frame; CU: face+neck; MCU: chest-to-head; MS: waist-up; WS: full body / environment dominant).
+  Нельзя писать «wide … at chest-to-head level» — это противоречие. Прежнюю крупность нельзя оставлять нигде.
+  Движение камеры (static / push / orbit…) меняй только если об этом тоже просят.
 - Если правка по смыслу затрагивает другие поля (например, «ночь вместо дня» → свет в detailed_description и звук в
   overall_soundscape), обнови их минимально, чтобы промпт остался согласованным.
 - Новые детали пиши так же конкретно, как требует спецификация (действия цепочкой, камера, физика, свет, звук).
 - Реплики не придумывай: меняй или добавляй их только если пользователь дал текст.
 - Верни ПОЛНЫЙ исправленный промпт, а не только изменённые куски."""
+
+
+_SHOT_SIZE_HINT = (
+    "крупн", "крупны", "крупнее", "мельче", "общий план", "общи", "средн", "дальний", "ближн",
+    "поближе", "подальше", "приблизь", "отдали", "отдалить", "приблизить",
+    "close-up", "close up", "closeup", "ecu", "mcu", "ms", "ws", "medium shot", "wide shot",
+    "wide", "framing", "shot size", "waist", "head-and-shoulders", "chest-to-head", "chest to head",
+    "full body", "full-body", "cowboy", "establishing", "extreme close", "face fill",
+    "планкадр", "кадрир",
+)
+
+
+def shot_size_edit_directive(instruction: str) -> str:
+    """Extra user-message mandate when the edit asks to change framing / крупность."""
+    low = instruction.casefold()
+    if not any(k in low for k in _SHOT_SIZE_HINT):
+        return ""
+    return (
+        "\n\nКРУПНОСТЬ (shot size) — ПРИНУДИТЕЛЬНО ИЗМЕНИТЬ ПО ПРОСЬБЕ ВЫШЕ:\n"
+        "Согласованно перепиши (1) Shot size в CAMERA, (2) ВСЮ стартовую фразу каждого [Shot N] "
+        "(не только первое слово — весь кроп), (3) Distance и Lens equivalent.\n"
+        "УДАЛИ из [Shot N] любые хвосты прежней крупности: «chest-to-head level», «head-and-shoulders», "
+        "«waist-up», «face filling», «medium close-up», если они не совпадают с новой крупностью.\n"
+        "«chest-to-head» = кроп MCU, НЕ высота камеры. Для wide/WS пиши full body / environment dominant + "
+        "дистанцию в метрах; для ECU/CU — face fills / face+shoulders. Запрещено: «wide … chest-to-head».\n"
+        "Path/speed камеры не трогай, если об этом не просили."
+    )
 
 
 def edit_system(refs: list[RefInfo], duration: float, face: bool = False, look: str | None = None,

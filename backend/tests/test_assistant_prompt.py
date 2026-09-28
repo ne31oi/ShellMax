@@ -53,8 +53,21 @@ def test_edit_system_keeps_spec_and_refs():
     s = prompt.edit_system([prompt.RefInfo(kind="image", name="girl.png")], 5.0)
     assert prompt.SPEC in s and "ТОЛЬКО то, о чём просят" in s
     assert "<Picture 1> = girl.png" in s and "~5.0 с" in s
+    assert "КРУПНОСТЬ" in s
     face = prompt.edit_system([], 2.0, face=True)
     assert "УЛУЧШЕНИЯ ЛИЦА" in face and "<Picture 2>" in face and "РЕФЕРЕНСЫ" not in face
+
+
+def test_shot_size_edit_directive():
+    assert "КРУПНОСТЬ" in prompt.shot_size_edit_directive("сделай крупный план")
+    assert "MCU" in prompt.shot_size_edit_directive("close-up please") or "chest-to-head" in prompt.shot_size_edit_directive("close-up please")
+    assert "chest-to-head" in prompt.shot_size_edit_directive("сделай общий план")
+    assert "chest-to-head" in prompt.shot_size_edit_directive("wide shot")
+    assert "КРУПНОСТЬ" in prompt.shot_size_edit_directive("приблизь камеру")
+    assert prompt.shot_size_edit_directive("поменяй цвет куртки") == ""
+    # EDIT_RULES must forbid contradictory wide+chest-to-head
+    assert "chest-to-head" in prompt.EDIT_RULES
+    assert "wide … at chest-to-head" in prompt.EDIT_RULES or "wide … chest-to-head" in prompt.EDIT_RULES
 
 
 def test_dialogue_lines_verbatim():

@@ -1,16 +1,23 @@
 """Plan audio overlap + beat helpers."""
 
+import asyncio
 import wave
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
+import pytest
+from sqlmodel import Session, SQLModel, create_engine
 
+from app import settings
+from app.db.models import MediaAsset, Upload
 from app.media.beats import (
     SAMPLE_RATE,
     _bpm_from_onset,
     _onset_envelope,
     analyze_beats,
 )
+from app import plans as plans_mod
 from app.plans import overlapping_audio
 from app.timeline_schema import parse_timeline
 
@@ -67,6 +74,78 @@ def test_overlapping_respects_disabled_track():
         ],
     })
     assert overlapping_audio(doc, doc.tracks[1].plans[0]) == []
+
+
+def test_audio_prompt_hint_injects_tags():
+    out = plans_mod.apply_timeline_audio_to_prompt(
+        "summary:\nA woman smiles.\n\noverall_soundscape:\nRoom tone.\n\nnon_diegetic_music:\nSoft piano.\n",
+        1,
+        lipsync=False,
+    )
+    assert out.lower().count("overall_soundscape:") == 1
+    assert out.lower().count("non_diegetic_music:") == 1
+    assert "<Audio 1>" in out
+    assert "fully_copy" in out
+    assert "Only the exact supplied sound from <Audio 1>." in out
+    assert "Room tone" not in out
+    assert "Soft piano" not in out
+    lips = plans_mod.apply_timeline_audio_to_prompt("summary:\nx\n", 1, lipsync=True)
+    assert "lip synchronization" in lips
+    assert plans_mod.apply_timeline_audio_to_prompt("x", 0, lipsync=False) == "x"
+    # Stale prompts with a second appended soundscape (pre-fix) must collapse to one.
+    doubled = (
+        "summary:\nx\n\noverall_soundscape:\nRoom tone.\n\nnon_diegetic_music:\nPiano.\n"
+        "\noverall_soundscape:\nOnly the exact supplied sound from <Audio 1>.\n"
+    )
+    fixed = plans_mod.apply_timeline_audio_to_prompt(doubled, 1, lipsync=False)
+    assert fixed.lower().count("overall_soundscape:") == 1
+    assert "Room tone" not in fixed
+    assert "Only the exact supplied sound from <Audio 1>." in fixed
+
+
+@pytest.fixture
+def plan_upload_env(tmp_path, monkeypatch):
+    engine = create_engine(f"sqlite:///{tmp_path / 'db.sqlite'}")
+    SQLModel.metadata.create_all(engine)
+    monkeypatch.setattr(plans_mod, "session", lambda: Session(engine, expire_on_commit=False))
+    monkeypatch.setattr(settings, "UPLOADS_DIR", tmp_path / "uploads")
+    (tmp_path / "uploads").mkdir()
+    src = tmp_path / "src.wav"
+    with wave.open(str(src), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(24000)
+        w.writeframes(b"\x00\x00" * 24000)
+
+    async def fake_edit(src_path, dest, kind, crop=None, start=None, end=None):
+        Path(dest).write_bytes(Path(src_path).read_bytes())
+
+    async def fake_probe(path):
+        return SimpleNamespace(duration=1.0)
+
+    monkeypatch.setattr(plans_mod.library, "edit_media", fake_edit)
+    monkeypatch.setattr(plans_mod.library, "probe", fake_probe)
+    asset = MediaAsset(
+        project_id=1, kind="audio", name="track", path=str(src),
+        duration=1.0, has_audio=True,
+    )
+    with Session(engine) as s:
+        s.add(asset)
+        s.commit()
+        s.refresh(asset)
+        s.expunge(asset)
+    return asset
+
+
+def test_ensure_trimmed_upload_persists(plan_upload_env):
+    """Regression: merge()+refresh(up) used to raise InvalidRequestError."""
+    asset = plan_upload_env
+    up = asyncio.run(plans_mod._ensure_trimmed_upload(asset, 0.1, 0.5))
+    assert isinstance(up, Upload)
+    assert up.id
+    assert Path(up.path).is_file()
+    again = asyncio.run(plans_mod._ensure_trimmed_upload(asset, 0.1, 0.5))
+    assert again.id == up.id
 
 
 def _click_train(bpm: float, duration_s: float, phase_s: float = 0.0) -> np.ndarray:

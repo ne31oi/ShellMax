@@ -121,6 +121,42 @@ class KV(SQLModel, table=True):
     value: Any = Field(sa_column=Column(JSON))
 
 
+class ClipProject(SQLModel, table=True):
+    __tablename__ = "clip_project"
+    id: str = Field(primary_key=True)
+    project_id: int = Field(index=True)
+    chat_id: str = Field(index=True)
+    revision: int = 0
+    document: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    created: datetime = Field(default_factory=utcnow)
+    updated: datetime = Field(default_factory=utcnow)
+
+
+class ClipRevision(SQLModel, table=True):
+    __tablename__ = "clip_revision"
+    id: int | None = Field(default=None, primary_key=True)
+    clip_id: str = Field(index=True)
+    revision: int
+    document: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    created: datetime = Field(default_factory=utcnow)
+
+
+class ClipJob(SQLModel, table=True):
+    __tablename__ = "clip_job"
+    id: str = Field(primary_key=True)
+    clip_id: str = Field(index=True)
+    kind: str
+    status: str = "queued"
+    stage: str = "В очереди"
+    progress: float = 0
+    base_revision: int = 0
+    request: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    result: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    error: str | None = None
+    created: datetime = Field(default_factory=utcnow)
+    updated: datetime = Field(default_factory=utcnow)
+
+
 engine = create_engine(
     f"sqlite:///{settings.DB_PATH}",
     connect_args={"check_same_thread": False},

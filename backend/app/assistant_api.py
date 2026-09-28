@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from . import settings
-from .db.models import AssistantChat, Generation, MediaAsset, Upload, select, session, utcnow
+from .db.models import AssistantChat, ClipProject, Generation, MediaAsset, Upload, select, session, utcnow
 from .llm import config, prompt
 from .llm.downloader import downloads
 from .llm.registry import CHOICES, FILES
@@ -201,7 +201,8 @@ def edit(body: EditIn, request: Request):
             "остальной текст, структуру полей и теги референсов не меняй."
         )
     user = (f"Текущий промпт:\n```text\n{body.prompt.strip()}\n```\n\n"
-            f"Что изменить (слова пользователя):\n{instruction}{extras}\n\n"
+            f"Что изменить (слова пользователя):\n{instruction}{extras}"
+            f"{prompt.shot_size_edit_directive(instruction)}\n\n"
             "Верни полный исправленный промпт.")
     return _sse(svc.stream(system, user, images), scrub_style_slogans=True)
 
@@ -294,8 +295,10 @@ def create_chat():
         s.add(chat)
         # keep the most recent MAX_CHATS, as the studio does
         old = s.exec(select(AssistantChat).order_by(AssistantChat.updated.desc()).offset(MAX_CHATS)).all()
+        protected = {p.chat_id for p in s.exec(select(ClipProject)).all()}
         for c in old:
-            s.delete(c)
+            if c.id not in protected:
+                s.delete(c)
         s.commit()
     return chat
 
@@ -312,6 +315,8 @@ def delete_chat(cid: str, request: Request):
     if svc.chat_id == cid:
         svc.cancel()
     with session() as s:
+        if s.exec(select(ClipProject).where(ClipProject.chat_id == cid)).first():
+            raise HTTPException(409, "Этот чат связан с проектом клипа и хранит его обсуждение")
         if chat := s.get(AssistantChat, cid):
             s.delete(chat)
             s.commit()
@@ -350,6 +355,9 @@ class ChatIn(BaseModel):
 @router.post("/chats/{cid}/send")
 def send(cid: str, body: ChatIn, request: Request):
     svc = _svc(request)
+    with session() as s:
+        if s.exec(select(ClipProject).where(ClipProject.chat_id == cid)).first():
+            raise HTTPException(409, "Продолжите обсуждение в режиме «Клип» — там сохраняется паспорт и контекст проекта")
     if not body.text.strip() and not body.attachment:
         raise HTTPException(422, "Напишите сообщение")
     if (busy := _precheck(svc)) is not None:

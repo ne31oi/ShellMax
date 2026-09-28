@@ -37,6 +37,8 @@ export interface Plan {
   id: string;
   start: number;
   duration: number;
+  renderDuration?: number | null;
+  sourceIn?: number;
   prompt: string;
   refs: PlanRef[];
   aspect: string;
@@ -78,6 +80,9 @@ export interface TimelineMarkers {
 }
 
 export interface TimelineDoc {
+  outputWidth?: number | null;
+  outputHeight?: number | null;
+  outputFps?: number | null;
   tracks: Track[];
   masterMute?: boolean;
   masterVolume?: number;
@@ -112,6 +117,7 @@ interface TimelineState {
   playhead: number;
   playing: boolean;
   selectedPlanId: string | null;
+  selectedPlanIds: string[];
   selectedClipId: string | null;
   run: (cmd: Command) => void;
   undo: () => Command | undefined;
@@ -122,6 +128,8 @@ interface TimelineState {
   seekToClip: (clipId: string) => void;
   patchDoc: (partial: Partial<TimelineDoc>) => void;
   selectPlan: (id: string | null) => void;
+  togglePlanSelected: (id: string) => void;
+  selectPlans: (ids: string[]) => void;
   selectClip: (id: string | null) => void;
 }
 
@@ -211,8 +219,8 @@ function persist(doc: TimelineDoc) {
   }, 500);
 }
 
-/** Flush debounced timeline save (reload / tab hide). */
-export function flushTimelinePersist() {
+/** Flush debounced timeline save (reload / tab hide). Returns the in-flight save promise. */
+export function flushTimelinePersist(): Promise<void> {
   clearTimeout(saveTimer);
   saveTimer = undefined;
   clearTimeout(playheadTimer);
@@ -221,12 +229,8 @@ export function flushTimelinePersist() {
   const body = pendingDoc ?? useTimeline.getState().doc;
   pendingDoc = null;
   saveMontageView(projectId, { playhead: useTimeline.getState().playhead });
-  if (!body?.tracks?.length) return;
-  try {
-    void api.saveTimeline(projectId, body);
-  } catch {
-    /* ignore */
-  }
+  if (!body?.tracks?.length) return Promise.resolve();
+  return api.saveTimeline(projectId, body).then(() => undefined).catch(() => undefined);
 }
 
 function persistPlayhead(t: number) {
@@ -243,6 +247,7 @@ export const useTimeline = create<TimelineState>((set, get) => ({
   playhead: 0,
   playing: false,
   selectedPlanId: null,
+  selectedPlanIds: [],
   selectedClipId: null,
   run: (cmd) => {
     const doc = cmd.apply(get().doc);
@@ -274,6 +279,7 @@ export const useTimeline = create<TimelineState>((set, get) => ({
       playhead: prefs.playhead,
       playing: false,
       selectedPlanId: null,
+      selectedPlanIds: [],
       selectedClipId: null,
     });
   },
@@ -292,7 +298,28 @@ export const useTimeline = create<TimelineState>((set, get) => ({
     set({ doc });
     persist(doc);
   },
-  selectPlan: (selectedPlanId) => set({ selectedPlanId, selectedClipId: null }),
+  selectPlan: (selectedPlanId) =>
+    set({
+      selectedPlanId,
+      selectedClipId: null,
+      // selectedPlanIds — только чекбоксы / Shift-диапазон, обычный клик их не трогает
+    }),
+  togglePlanSelected: (id) =>
+    set((s) => {
+      const has = s.selectedPlanIds.includes(id);
+      const selectedPlanIds = has ? s.selectedPlanIds.filter((x) => x !== id) : [...s.selectedPlanIds, id];
+      return {
+        selectedPlanIds,
+        selectedClipId: null,
+      };
+    }),
+  selectPlans: (ids) => {
+    const selectedPlanIds = [...new Set(ids)];
+    set({
+      selectedPlanIds,
+      selectedClipId: null,
+    });
+  },
   selectClip: (selectedClipId) => set({ selectedClipId, selectedPlanId: null }),
 }));
 
@@ -344,6 +371,9 @@ function normalizeLoaded(doc: TimelineDoc | null | undefined): TimelineDoc {
   }
   return {
     masterMute: !!doc.masterMute,
+    outputWidth: doc.outputWidth,
+    outputHeight: doc.outputHeight,
+    outputFps: doc.outputFps,
     masterVolume: typeof doc.masterVolume === "number" ? Math.max(0, Math.min(1, doc.masterVolume)) : 1,
     markers: doc.markers
       ? {
@@ -824,7 +854,8 @@ export const commands = {
   addPlan(plan: Plan, trackId: string): Command {
     return {
       label: "Добавить план",
-      apply: (d) => mapPlans(d, trackId, (ps) => [...ps, plan]),
+      apply: (d) =>
+        mapPlans(d, trackId, (ps) => (ps.some((p) => p.id === plan.id) ? ps : [...ps, plan])),
       revert: (d) => mapPlans(d, trackId, (ps) => ps.filter((p) => p.id !== plan.id)),
     };
   },
@@ -1074,7 +1105,7 @@ export const commands = {
     const solos = pts.filter((t) => t.solo);
     const visible = solos.length ? solos : pts;
     // Gather intervals; higher track (earlier in list) wins
-    type Seg = { start: number; end: number; assetId: number };
+    type Seg = { start: number; end: number; assetId: number; sourceIn: number };
     const segs: Seg[] = [];
     for (const t of visible) {
       for (const p of [...t.plans].sort((a, b) => a.start - b.start)) {
@@ -1097,17 +1128,26 @@ export const commands = {
           pieces = next;
         }
         for (const [a, b] of pieces) {
-          if (b - a >= MIN_CLIP) segs.push({ start: a, end: b, assetId });
+          if (b - a >= MIN_CLIP) segs.push({ start: a, end: b, assetId, sourceIn: (p.sourceIn ?? 0) + a - p.start });
         }
       }
     }
     segs.sort((a, b) => a.start - b.start);
+    let cursor = 0;
+    for (const segment of segs) {
+      if (Math.round(segment.start * 24) !== Math.round(cursor * 24)) {
+        throw new Error(`Нет готового кадра около ${cursor.toFixed(2)} с — заполните пропуск перед сборкой`);
+      }
+      cursor = segment.end;
+    }
+    const expectedEnd = Math.max(0, ...visible.flatMap((t) => t.plans.map((p) => p.start + p.duration)));
+    if (Math.round(cursor * 24) !== Math.round(expectedEnd * 24)) throw new Error("В конце остались неготовые планы");
     const clips: Clip[] = segs.map((s) => ({
       id: uid(),
       assetId: s.assetId,
-      in: 0,
-      out: s.end - s.start,
-      muted: false,
+      in: s.sourceIn,
+      out: s.sourceIn + s.end - s.start,
+      muted: doc.tracks.some((t) => t.kind === "audio" && !t.muted && t.clips.length > 0),
     }));
     return {
       label: "Собрать планы на видео",

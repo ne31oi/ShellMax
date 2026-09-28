@@ -14,6 +14,8 @@ from fastapi.staticfiles import StaticFiles
 from . import services, settings
 from .api import router
 from .assistant_api import router as assistant_router
+from .clip_api import router as clip_router
+from .clip_service import ClipManager
 from .comfy.client import ComfyClient
 from .comfy.supervisor import EngineSupervisor
 from .db.models import init_db
@@ -38,13 +40,16 @@ async def lifespan(app: FastAPI):
     assistant = AssistantService(client, jobs.busy, jobs.mark_cold)
     jobs.before_submit = assistant.release_for_generation  # the LLM leaves the GPU before MiniMax runs
     app.state.engine, app.state.jobs, app.state.assistant = engine, jobs, assistant
+    app.state.clips = ClipManager(assistant, jobs)
     asyncio.create_task(assistant.runner.idle_watchdog(assistant.busy))
     await jobs.start()
+    await app.state.clips.start()
     asyncio.create_task(engine.start())  # warm the engine up right away
     asyncio.create_task(engine.watch())
     if os.environ.get("SHELLMAX_OPEN_BROWSER") and settings.FRONTEND_DIST.exists():
         webbrowser.open(f"http://{settings.API_HOST}:{settings.API_PORT}")
     yield
+    await app.state.clips.stop()
     await jobs.stop()
     await assistant.runner.stop()
     await engine.stop()
@@ -54,6 +59,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="ShellMax", lifespan=lifespan)
 app.include_router(router)
 app.include_router(assistant_router)
+app.include_router(clip_router)
 
 if settings.FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=settings.FRONTEND_DIST / "assets"), name="static")

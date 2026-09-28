@@ -2,8 +2,9 @@ import type { EngineState, Generation, MediaAsset } from "../api/types";
 import { api } from "../api/client";
 import { useAssistant } from "../store/assistant";
 import { useLibrary } from "../store/library";
-import { commands, findClip, useTimeline } from "../store/timeline";
+import { commands, findClip, useTimeline, type TimelineDoc } from "../store/timeline";
 import { useUI } from "../store/ui";
+import { useClip } from "../store/clip";
 import { notifyDone } from "./notify";
 
 type LiveEvent =
@@ -13,7 +14,8 @@ type LiveEvent =
   | { type: "asset_deleted"; id: number }
   | { type: "preview"; generation_id: number; data: string }
   | { type: "engine"; engine: EngineState }
-  | { type: "assistant_download" };
+  | { type: "assistant_download" }
+  | { type: "clip_job"; clip_id: string };
 
 /** Keeps a websocket to the backend open forever; reconnects with backoff. */
 export function connectLive(): () => void {
@@ -28,6 +30,7 @@ export function connectLive(): () => void {
       retry = 500;
       // catch up on anything missed while disconnected
       useLibrary.getState().load().catch(() => undefined);
+      useClip.getState().refresh().catch(() => undefined);
     };
     ws.onmessage = (e) => handle(JSON.parse(e.data) as LiveEvent);
     ws.onclose = () => {
@@ -48,11 +51,15 @@ export function connectLive(): () => void {
 function handle(ev: LiveEvent) {
   const lib = useLibrary.getState();
   switch (ev.type) {
+    case "clip_job":
+      if (useClip.getState().active?.id === ev.clip_id) void useClip.getState().refresh().catch(() => undefined);
+      break;
     case "generation": {
       const prev = lib.generations[ev.generation.id];
       lib.upsertGeneration(ev.generation);
       if (prev && prev.status !== ev.generation.status) notifyDone(ev.generation);
       maybeReplaceTimelineClip(prev, ev.generation);
+      if (!prev || prev.status !== ev.generation.status) void useClip.getState().refresh().catch(() => undefined);
       // Only sync plan row when status changes — not on every progress tick.
       if (!prev || prev.status !== ev.generation.status) {
         maybeRefreshPlanTimeline(ev.generation);
@@ -107,8 +114,14 @@ function maybeRefreshPlanTimeline(gen: Generation) {
   if (!["done", "draft_only", "error", "running", "queued"].includes(gen.status)) return;
   const projectId = useUI.getState().projectId;
   void api.project(projectId).then((p) => {
-    const selected = useTimeline.getState().selectedPlanId;
-    useTimeline.getState().load(p.timeline as never);
-    if (selected) useTimeline.getState().selectPlan(selected);
+    if (projectId !== useUI.getState().projectId) return;
+    const remote = new Map((p.timeline as TimelineDoc).tracks.flatMap((t) => t.plans ?? []).map((plan) => [plan.id, plan]));
+    useTimeline.setState((state) => ({ doc: { ...state.doc, tracks: state.doc.tracks.map((track) => ({
+      ...track, plans: track.plans.map((plan) => {
+        const update = remote.get(plan.id);
+        return update ? { ...plan, status: update.status, generationId: update.generationId,
+          draftAssetId: update.draftAssetId, outputAssetId: update.outputAssetId, error: update.error } : plan;
+      }),
+    })) } }));
   }).catch(() => undefined);
 }
