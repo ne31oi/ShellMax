@@ -54,6 +54,7 @@ export interface Plan {
   draftAssetId?: number | null;
   outputAssetId?: number | null;
   error?: string | null;
+  reviewNotes?: string[];
   name?: string;
 }
 

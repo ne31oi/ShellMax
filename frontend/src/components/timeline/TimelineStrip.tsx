@@ -1586,11 +1586,12 @@ function PlanBlock({
       className={clsx(
         "absolute top-1 bottom-1 cursor-grab overflow-hidden rounded-md pl-5 pr-1 ring-1 active:cursor-grabbing",
         statusColor,
+        !!plan.reviewNotes?.length && "ring-warn/70",
         selected && "ring-2 ring-accent",
         checked && "ring-2 ring-accent bg-accent/30",
         dragging && "z-30 opacity-90 shadow-lg",
       )}
-      title={`${fmtTimecode(displayStart)} · ${Math.round(displayDuration * H3_FPS)} кадр. · Shift — диапазон`}
+      title={`${fmtTimecode(displayStart)} · ${Math.round(displayDuration * H3_FPS)} кадр. · Shift — диапазон${plan.reviewNotes?.length ? " · Замечания редактора" : ""}`}
     >
       <label
         data-plan-check="1"
@@ -1616,7 +1617,7 @@ function PlanBlock({
         />
       </label>
       <span className="pointer-events-none block truncate text-[10px] text-fg">
-        {plan.name || plan.prompt.slice(0, 24) || "план"}
+        {plan.reviewNotes?.length ? "⚠ " : ""}{plan.name || plan.prompt.slice(0, 24) || "план"}
       </span>
       <span className="pointer-events-none text-[9px] text-faint">
         {fmtDuration(displayDuration)} · {Math.round(displayDuration * H3_FPS)}f

@@ -114,6 +114,7 @@ class BlockVersion(StrictModel):
     version: int
     shots: list[Shot]
     review: list[str] = Field(default_factory=list)
+    editor_approved: bool = True
     draft_approved: bool = False
     final_approved: bool = False
     selected_draft: dict[str, int] = Field(default_factory=dict)

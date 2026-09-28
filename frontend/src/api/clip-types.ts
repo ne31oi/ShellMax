@@ -15,7 +15,7 @@ export interface Shot {
   outgoing_cut: string; camera: CameraCard; light: string; ref_ids: string[]; lipsync: boolean; prompt: string;
 }
 export interface BlockVersion {
-  version: number; shots: Shot[]; review: string[]; draft_approved: boolean; final_approved: boolean;
+  version: number; shots: Shot[]; review: string[]; editor_approved: boolean; draft_approved: boolean; final_approved: boolean;
   selected_draft: Record<string, number>; selected_final: Record<string, number>;
 }
 export interface ClipBlock {
@@ -40,7 +40,7 @@ export interface ClipJob {
   stage: string; progress: number; base_revision: number; error: string | null;
   request: { block_id?: string; mode?: "draft" | "final"; selections?: Record<string, number> };
   result: { text?: string; analysis?: AudioAnalysis; passport?: Passport; blocks?: ClipBlock[];
-    block_id?: string; shots?: Shot[]; review?: string[]; technical?: string[]; observations?: string[];
+    block_id?: string; shots?: Shot[]; review?: string[]; editor_approved?: boolean; technical?: string[]; observations?: string[];
     notice?: string; asset_id?: number; failed?: number[]; previous_document?: ClipDocument };
 }
 export interface ClipProject {

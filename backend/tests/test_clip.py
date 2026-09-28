@@ -97,6 +97,32 @@ def test_partial_or_extra_model_json_rejected():
 
 
 @pytest.mark.asyncio
+async def test_editorial_disagreement_returns_reviewable_block(db, monkeypatch):
+    doc = seed(db)
+    monkeypatch.setattr(clip_service, "ref_tags", lambda ids: ({}, [], []))
+    manager = clip_service.ClipManager(None, None)
+    manager.cancels["develop"] = threading.Event()
+    async def update(*args, **kwargs): pass
+    manager.update = update
+    calls = []
+    async def llm(jid, system, user, images=None, schema=None):
+        calls.append(schema)
+        if schema is BlockDraft:
+            return json.dumps({"shots": [shot().model_dump()]}, ensure_ascii=False)
+        if schema is clip_service.EditorialReview:
+            return json.dumps({"approved": False, "notes": ["Спорная смена камеры между кадрами"]})
+        return "\n".join(f"{field}: заполнено" for field in (
+            "subject_definitions", "summary", "retention_analysis", "detailed_description",
+            "overall_soundscape", "non_diegetic_music"))
+    manager.llm = llm
+    result = await manager._develop(ClipJob(id="develop", request={"block_id": "b1"}), doc)
+    assert result["editor_approved"] is False
+    assert result["review"] == ["Спорная смена камеры между кадрами"]
+    assert len(result["shots"]) == 1 and result["shots"][0]["prompt"]
+    assert calls.count(BlockDraft) == 3
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("mode", ["complete", "resume", "exhausted", "invalid", "cancelled", "disconnected"])
 async def test_structured_reply_continuation_is_bounded_and_validated(mode):
     full = json.dumps({"shots": [shot().model_dump()]}, ensure_ascii=False)
@@ -140,13 +166,16 @@ def test_only_selected_block_gets_new_version(db):
     before = doc.blocks[1].model_dump()
     with db() as s:
         s.add(ClipJob(id="j1", clip_id="c1", kind="develop", status="done", base_revision=0,
-                      result={"block_id": "b1", "shots": [shot("replacement").model_dump()], "review": ["Проверено"]}))
+                      result={"block_id": "b1", "shots": [shot("replacement").model_dump()],
+                              "review": ["Проверить камеру"], "editor_approved": False}))
         s.commit()
     result = clip_api.accept("c1", "j1", clip_api.RevisionIn(revision=0))
     assert result["document"]["blocks"][1] == before
     versions = result["document"]["blocks"][0]["versions"]
     assert len(versions) == 2 and versions[0]["shots"][0]["id"] == "s1"
     assert versions[1]["draft_approved"] is False
+    assert versions[1]["editor_approved"] is False
+    assert clip_service.proposal_timeline("c1", "b1")["plans"][0]["reviewNotes"] == ["Проверить камеру"]
     with pytest.raises(HTTPException):
         clip_api.accept("c1", "j1", clip_api.RevisionIn(revision=1))
 

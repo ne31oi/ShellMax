@@ -200,7 +200,8 @@ def accept(cid: str, jid: str, body: RevisionIn):
         draft = BlockDraft.model_validate({"shots": job.result["shots"]})
         check_coverage([(s.start, s.start + s.duration) for s in draft.shots], block.start, block.end)
         block.versions.append(BlockVersion(version=(block.versions[-1].version + 1) if block.versions else 1,
-                                           shots=draft.shots, review=job.result["review"]))
+                                           shots=draft.shots, review=job.result["review"],
+                                           editor_approved=job.result.get("editor_approved", True)))
         block.stale = False
     else:
         raise HTTPException(422, "Эта операция не содержит предложения")

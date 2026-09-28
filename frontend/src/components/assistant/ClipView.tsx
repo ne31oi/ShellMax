@@ -161,8 +161,16 @@ function ClipProjectView() {
           {proposal.result.passport && <dl className="space-y-2 text-xs">{Object.entries(proposal.result.passport).map(([key, value]) => <div key={key}><dt className="text-muted">{passportLabels[key as keyof Passport]}</dt><dd>{value}</dd></div>)}</dl>}
           {proposal.result.blocks?.map((b) => <p key={b.id} className="text-xs"><b>{time(b.start)}–{time(b.end)} · {b.name}</b><br />{b.intent}</p>)}
           {proposal.result.shots?.map((shot) => <ShotDetails key={shot.id} shot={shot} />)}
-          {proposal.result.review?.map((note, i) => <p key={i} className="text-xs text-muted">{note}</p>)}
-          <Button disabled={disabled} onClick={() => void action.run(async () => { useClip.getState().setActive(await api.acceptClipProposal(clip.id, proposal.id, clip.revision)); })}>Принять предложение</Button>
+          {proposal.result.editor_approved === false ?
+            <ErrorMessage tone="warn" text={["Редактор предлагает проверить замечания перед принятием блока.", ...(proposal.result.review ?? [])].join("\n\n")} /> :
+            proposal.result.review?.map((note, i) => <p key={i} className="text-xs text-muted">{note}</p>)}
+          <Button disabled={disabled} onClick={() => void action.run(async () => {
+            useClip.getState().setActive(await api.acceptClipProposal(clip.id, proposal.id, clip.revision));
+            if (proposal.kind === "develop" && proposal.result.block_id) {
+              const applied = await applyClipBlock(proposal.result.block_id);
+              useUI.getState().toast(applied ? "Блок размещён на монтаже" : "Версия принята; планы с ручными изменениями сохранены на монтаже", "info");
+            }
+          })}>{proposal.kind === "develop" ? "Принять и разместить на монтаже" : "Принять предложение"}</Button>
         </section>}
         {doc.blocks.length > 0 && <>
           <Select label="Блок клипа" value={block?.id ?? ""} onChange={setBlockId} options={doc.blocks.map((b) => ({ value: b.id, label: `${time(b.start)}–${time(b.end)} · ${b.name}${b.versions.at(-1)?.final_approved ? " ✓" : ""}` }))} />
@@ -284,6 +292,7 @@ function BlockView({ block, disabled }: { block: ClipBlock; disabled: boolean })
   const blocked = disabled || action.pending;
   return <section className="space-y-3 rounded-xl border border-line bg-panel p-4">
     <h3 className="text-sm font-medium">{block.name} {version ? `· версия ${version.version}` : ""}</h3><p className="text-xs text-muted">{block.intent}</p>
+    {version?.editor_approved === false && <ErrorMessage tone="warn" text={["Замечания редактора к этой версии:", ...version.review].join("\n\n")} />}
     {block.stale && <p className="text-xs text-amber-400">Изменился паспорт, референсы или музыка. Разработайте новую версию блока.</p>}
     <textarea className={fieldClass} rows={2} value={instruction} onChange={(e) => setInstruction(e.target.value)} placeholder="Что исправить в этом блоке: действие, ритм, камера…" aria-label="Правка блока" disabled={blocked} />
     <Button variant="outline" disabled={blocked || !clip.document.passport_approved} onClick={() => void action.run(() => clipOperation({ kind: "develop", block_id: block.id, text: instruction }))}>{version ? "Предложить новую версию" : "Разработать блок"}</Button>

@@ -60,7 +60,7 @@ export function AssistantSetup() {
         ) : (
           <div className="flex items-center justify-between gap-3">
             <span className="text-xs text-muted">
-              {failed ? `Ошибка: ${failed.error}` : `Размер: ~${fmtSize(total - got)}`}
+              {failed ? "Загрузка модели остановлена" : `Размер: ~${fmtSize(total - got)}`}
             </span>
             <Button variant="primary" onClick={download}>
               <Download size={14} /> {failed ? "Повторить" : "Скачать"}

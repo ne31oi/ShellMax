@@ -319,7 +319,7 @@ export async function copyText(text: string): Promise<void> {
   if (!copied) throw new Error("Не удалось скопировать текст");
 }
 
-export function ErrorMessage({ text, className = "" }: { text: string; className?: string }) {
+export function ErrorMessage({ text, className = "", tone = "bad" }: { text: string; className?: string; tone?: "bad" | "warn" }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
@@ -331,7 +331,8 @@ export function ErrorMessage({ text, className = "" }: { text: string; className
     }
   };
   return (
-    <div role="alert" className={clsx("flex min-w-0 items-start gap-3 rounded-lg border border-bad/30 bg-bad/5 p-2.5 text-xs text-bad", className)}>
+    <div role="alert" className={clsx("flex min-w-0 items-start gap-3 rounded-lg border p-2.5 text-xs",
+      tone === "warn" ? "border-warn/30 bg-warn/5 text-warn" : "border-bad/30 bg-bad/5 text-bad", className)}>
       <p className="min-w-0 flex-1 whitespace-pre-wrap break-words leading-relaxed">{text}</p>
       <button type="button" onClick={() => void copy()} title="Скопировать ошибку" aria-label="Скопировать ошибку"
         className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-1 text-[11px] text-muted hover:bg-hover hover:text-fg">

@@ -424,14 +424,18 @@ class ClipManager:
                       "ошибку физики или перекрытие/пропуск границ. Не требуй точной привязки к битам, активации "
                       "деталей костюма, эффектов или реквизита, если их нет во входных данных. Срезы оценивай "
                       "по входящему/исходящему кадру, не по наличию англоязычного названия типа перехода. "
-                      "Различай lipsync и обычную мимику/движение головы. Если конкретного нарушения нет, approved=true.")
+                      "Различай lipsync и обычную мимику/движение головы. Разные движения камеры в соседних "
+                      "кадрах допустимы: правило одного движения относится только к отдельному кадру. "
+                      "Времена музыкального анализа указаны в исходном файле; переводи их в время клипа "
+                      "через clip_time_offset и не объявляй точное музыкальное событие без данных. "
+                      "Если конкретного нарушения нет, approved=true.")
             review = decode_json(await self.llm(job.id, DIRECTING,
                 user + "\n" + rubric + "\nПредложение:\n" + draft.model_dump_json(), schema=EditorialReview), EditorialReview)
             if review.approved:
                 break
             if attempt == 2:
-                raise ValueError("Не удалось исправить конкретные замечания редактора за две попытки: "
-                                 + "; ".join(review.notes) + ". Уточните идею и повторите разработку.")
+                # Editorial judgment is advisory; the user decides whether to accept the proposal.
+                break
             await self.update(job.id, stage=f"Исправляю замечания редактора ({attempt + 1}/2)")
             repair = (request + "\nРедактор отметил конкретные проблемы в предложении ниже. Исправь только "
                       "обоснованные замечания, которые следуют из паспорта и исходных данных. Поля схемы "
@@ -464,7 +468,8 @@ class ClipManager:
             if re.search(r"<(Picture|Video|Audio)\s+\d+>", compiled):
                 raise ValueError("Промпт содержит неподключённый референс — повторите разработку")
             shot.prompt = compiled
-        return {"block_id": block.id, "shots": [x.model_dump() for x in draft.shots], "review": review.notes}
+        return {"block_id": block.id, "shots": [x.model_dump() for x in draft.shots],
+                "review": review.notes, "editor_approved": review.approved}
 
     async def _generate(self, job, doc, project_id, resume):
         from . import plans, services
@@ -603,9 +608,10 @@ def proposal_timeline(cid: str, bid: str) -> dict:
                     raise ValueError("Референс удалён — прикрепите его снова")
                 refs.append({"kind": up.kind, "uploadId": uid})
             plans.append({"id": plan_id(cid, bid, version.version, shot.id), "name": shot.name,
-                          "start": shot.start, "duration": shot.duration, "renderDuration": frame_count(shot.duration) / FPS,
-                          "prompt": shot.prompt, "refs": refs, "aspect": doc.passport.aspect, "quality": doc.quality,
-                          "look": "cinema", "audio": {audio_id: True}, "lipsync": shot.lipsync})
+                            "start": shot.start, "duration": shot.duration, "renderDuration": frame_count(shot.duration) / FPS,
+                            "prompt": shot.prompt, "refs": refs, "aspect": doc.passport.aspect, "quality": doc.quality,
+                            "look": "cinema", "audio": {audio_id: True}, "lipsync": shot.lipsync,
+                            "reviewNotes": version.review if not version.editor_approved else []})
     return {"revision": row.revision, "track_id": f"clip_plans_{cid}_{bid}", "plans": plans,
             "audio_track": {"id": audio_id, "kind": "audio", "name": "Музыка клипа", "plans": [],
                             "clips": [{"id": f"clip_music_{cid}", "assetId": doc.audio_asset_id,

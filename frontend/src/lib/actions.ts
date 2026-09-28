@@ -53,9 +53,10 @@ export async function applyClipBlock(blockId: string, replace = false) {
   ];
   // A retry must never silently discard a manual edit or replace an older block version.
   const changes = replace ? incoming : incoming.filter((t) => !current.tracks.some((old) => old.id === t.id));
-  if (changes.length) replaceClipTracks("Применить блок клипа", changes);
+    if (changes.length) replaceClipTracks("Применить блок клипа", changes);
   // Await this save explicitly: the ordinary timeline autosave is debounced.
-  await api.saveTimeline(active.project_id, useTimeline.getState().doc);
+    await api.saveTimeline(active.project_id, useTimeline.getState().doc);
+    return changes.some((track) => track.id === proposal.track_id);
 }
 
 export async function assembleClip() {

@@ -62,6 +62,7 @@ class PlanBlock(BaseModel):
     draft_asset_id: int | None = Field(default=None, validation_alias=AliasChoices("draftAssetId", "draft_asset_id"))
     output_asset_id: int | None = Field(default=None, validation_alias=AliasChoices("outputAssetId", "output_asset_id"))
     error: str | None = None
+    review_notes: list[str] = Field(default_factory=list, validation_alias=AliasChoices("reviewNotes", "review_notes"))
     name: str = ""
 
     model_config = {"populate_by_name": True}
@@ -159,6 +160,7 @@ def _dump_plan(p: PlanBlock) -> dict[str, Any]:
         "draftAssetId": p.draft_asset_id,
         "outputAssetId": p.output_asset_id,
         "error": p.error,
+        "reviewNotes": p.review_notes,
         "name": p.name,
     }
 

@@ -321,6 +321,7 @@ export function PlanInspector() {
             </section>
 
             {plan.error && <ErrorMessage text={plan.error} />}
+            {!!plan.reviewNotes?.length && <ErrorMessage tone="warn" text={plan.reviewNotes.join("\n\n")} />}
             {checklist.length > 0 && (
               <div className="rounded-lg border border-warn/30 bg-warn/5 px-2 py-1.5">
                 <p className="mb-1 text-[11px] font-medium text-warn">Перед стартом</p>
