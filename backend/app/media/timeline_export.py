@@ -10,7 +10,7 @@ from .timeline_render import export_timeline
 
 
 async def export_project_timeline(project_id: int, timeline_raw: dict, *, check=None, progress=None) -> MediaAsset:
-    from ..jobs.queue import register_asset
+    from ..jobs.persist import register_asset
 
     doc = parse_timeline(timeline_raw)
     with session() as s:

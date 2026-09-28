@@ -1,0 +1,12 @@
+---
+description: Post-process dialogs must reuse the shared shell and job form hook
+globs: frontend/src/components/{enhance,face}/**
+alwaysApply: false
+---
+
+# Post-job UI
+
+- Enhance / Interpolate / Face dialogs share lifecycle via `useAssetJobForm` + `PostProcessDialogShell` (defaults → estimate → submit → `missing_file` → asset card → footer).
+- Do not paste a new dialog that reimplements loading, estimate, or error toast.
+- Face-only pieces (identity, crop, assistant) stay in Face; the shell stays generic.
+- Surface `missing_file` through the shared ApiError helper (toast + fix action), same as Viewer.

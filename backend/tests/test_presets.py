@@ -1,6 +1,7 @@
 """UI decisions -> full workflow parameters."""
 
-from app.jobs.queue import asset_title, humanize_error
+from app.jobs.errors import humanize_error
+from app.jobs.registry import asset_title
 from app.workflow.params import EngineProfile, LoraSpec, ResolvedRef, UIParams, clean_path
 from app.workflow.presets import (
     REALISM_STEM,

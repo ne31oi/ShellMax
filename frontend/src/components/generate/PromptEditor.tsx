@@ -14,7 +14,7 @@ import { KIND_COLOR, REF_TOKEN, danglingTags, fromModelPrompt, tagOf, toModelPro
 import { frameCount } from "../../lib/format";
 import { useAssistant } from "../../store/assistant";
 import { ComposeAssistButton, EditAssistButton, PromptAssistDialog } from "../assistant/PromptAssistDialog";
-import { useForm } from "../../store/form";
+import { selectedCinematicTechniqueIds, useForm } from "../../store/form";
 import { useUI } from "../../store/ui";
 import { useLibrary } from "../../store/library";
 import { Button, Menu, MenuItem, MenuLabel, Spinner } from "../ui";
@@ -273,8 +273,9 @@ export function PromptEditor() {
       refs: f.refs.map((r) => ({ upload_id: r.upload.id, with_audio: r.withAudio })),
       duration: frameCount(f.duration) / 24,
       look: f.look,
-      camera: f.camera,
-      light: f.light,
+      camera: "auto",
+      light: "auto",
+      cinematic_techniques: selectedCinematicTechniqueIds(f),
     });
     if (!result) return;
     useForm.getState().setPrompt(fromModelPrompt(result, useForm.getState().refs), true);
@@ -291,8 +292,9 @@ export function PromptEditor() {
       refs: f.refs.map((r) => ({ upload_id: r.upload.id, with_audio: r.withAudio })),
       duration: frameCount(f.duration) / 24,
       look: f.look,
-      camera: f.camera,
-      light: f.light,
+      camera: "auto",
+      light: "auto",
+      cinematic_techniques: selectedCinematicTechniqueIds(f),
     });
     if (!result) return;
     useForm.getState().setPrompt(fromModelPrompt(result, useForm.getState().refs), true);
@@ -320,6 +322,8 @@ export function PromptEditor() {
               <Spinner size={12} />
               {job.stage === "loading"
                 ? "Загружаю ассистента… первый раз это может занять минуту"
+                : job.stage === "repairing"
+                  ? "Проверяю крупность во всём промпте…"
                 : job.target === "edit" ? "Вношу правки…" : "Пишу промпт по спецификации…"}
             </div>
             <pre ref={liveBox} className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap px-3 py-2 font-mono text-[11px] leading-relaxed text-muted">

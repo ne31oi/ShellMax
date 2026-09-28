@@ -1,5 +1,6 @@
 /** User actions shared by the generate panel, media cards, context menus and the viewer. */
-import { api, ApiError } from "../api/client";
+import { api } from "../api/client";
+import { reportJobError } from "./errors";
 import type { Generation, MediaAsset, UIParams, Upload } from "../api/types";
 import { useForm } from "../store/form";
 import { defaultProfile, useLibrary } from "../store/library";
@@ -83,11 +84,7 @@ export async function assembleClip() {
 const toast = (...a: Parameters<ReturnType<typeof useUI.getState>["toast"]>) => useUI.getState().toast(...a);
 
 function handleError(e: unknown) {
-  if (e instanceof ApiError && e.detail && typeof e.detail === "object" && (e.detail as { kind?: string }).kind === "missing_file") {
-    toast(e.message, "bad", { label: "Открыть настройки", run: () => useUI.getState().openSettings("engine") });
-    return;
-  }
-  toast(e instanceof Error ? e.message : String(e), "bad");
+  reportJobError(e);
 }
 
 export async function generate(): Promise<void> {

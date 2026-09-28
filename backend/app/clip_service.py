@@ -473,7 +473,7 @@ class ClipManager:
 
     async def _generate(self, job, doc, project_id, resume):
         from . import plans, services
-        from .jobs.queue import push_generation
+        from .jobs.persist import push_generation
         from .timeline_schema import parse_timeline
 
         block = block_by_id(doc, job.request["block_id"])

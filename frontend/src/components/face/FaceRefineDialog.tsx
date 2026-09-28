@@ -1,20 +1,21 @@
 import clsx from "clsx";
 import { AlertTriangle, ChevronRight, ImagePlus, ScanFace, Sparkles, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { api, ApiError, urls } from "../../api/client";
+import { api, urls } from "../../api/client";
 import type { CropBox, Estimate, FaceDefaults, Upload } from "../../api/types";
 import { uploadFiles } from "../../lib/actions";
 import { estimateBasis, fmtEstimate, fmtSeconds } from "../../lib/format";
 import { useAssistant } from "../../store/assistant";
 import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
+import { JobLoading, runAssetJob } from "../jobs/PostProcessShell";
 import { Button, Dialog, ErrorMessage, SectionTitle, Select, Spinner } from "../ui";
 import { EditPromptButton } from "../assistant/EditPromptButton";
 import { stripFence } from "../generate/PromptEditor";
 import { CropEditor } from "./CropEditor";
 
 // H3FaceTrackCrop "select" modes that need no extra coordinates
-export const FACE_SELECT = [
+const FACE_SELECT = [
   { value: "largest_face", label: "Самое крупное" },
   { value: "centre_most", label: "Ближе к центру кадра" },
   { value: "left_most", label: "Левее всех" },
@@ -93,42 +94,32 @@ function FaceForm({ assetId, fromGenerationId, onDone }: { assetId: number; from
     }
   };
 
-  const submit = async () => {
+  const submit = () => {
     if (!identity) return;
-    setBusy(true);
-    setError("");
-    try {
-      const g = await api.faceRefine({
-        source_asset_id: assetId,
-        identity_upload_id: identity.id,
-        closeup_upload_id: null,
-        closeup_crop: crop,
-        prompt,
-        denoise,
-        select: select === "largest_face" ? null : select,
-        seed: fromGen?.seed ?? null,
-        profile_id: null,
-      });
-      useLibrary.getState().upsertGeneration(g);
-      useUI.getState().selectGen(g.id);
-      onDone();
-    } catch (e) {
-      if (e instanceof ApiError && typeof e.detail === "object" && e.detail && (e.detail as { kind?: string }).kind === "missing_file") {
-        useUI.getState().toast(e.message, "bad", { label: "Открыть настройки", run: () => useUI.getState().openSettings("engine") });
-      }
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
+    void runAssetJob(
+      () =>
+        api.faceRefine({
+          source_asset_id: assetId,
+          identity_upload_id: identity.id,
+          closeup_upload_id: null,
+          closeup_crop: crop,
+          prompt,
+          denoise,
+          select: select === "largest_face" ? null : select,
+          seed: fromGen?.seed ?? null,
+          profile_id: null,
+        }),
+      {
+        upsert: (g) => useLibrary.getState().upsertGeneration(g),
+        select: (id) => useUI.getState().selectGen(id),
+        onDone,
+        setBusy,
+        setError,
+      },
+    );
   };
 
-  if (!defaults) {
-    return (
-      <div className="flex h-60 items-center justify-center gap-2 text-muted">
-        {error ? <ErrorMessage text={error} /> : <><Spinner /> Готовлю клип…</>}
-      </div>
-    );
-  }
+  if (!defaults) return <JobLoading error={error} tall />;
 
   const usesTemplate = prompt === defaults.prompt;
 

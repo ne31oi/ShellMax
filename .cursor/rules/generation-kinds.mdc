@@ -1,0 +1,13 @@
+---
+description: New generation kinds go through jobs/registry — no create_* / if-elif copies
+globs: backend/app/{jobs,workflow}/**/*.py,backend/app/services.py,backend/app/api*.py
+alwaysApply: false
+---
+
+# Generation kinds
+
+- Register every kind in `jobs/registry.py`: pipeline, params_cls, build, expand, upload_refs, title, work_units.
+- `queue.py` and retry dispatch only through the registry — no new `if g.kind == ...` branches.
+- Persist via shared `persist_generation` / post-process create helper; do not copy double-commit `filename_prefix`.
+- Graph builders share `_link`; enhance/interpolate share `_resolve`.
+- Keep parity: workflow JSON + builder + `test_builder_*` must stay green.

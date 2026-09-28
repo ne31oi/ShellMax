@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .. import settings
 from .params import EnhanceFullParams, EnhanceRecipe, EnhanceUIParams
+from .paths import resolve_model
 
 WORKFLOW_SEED = 42  # fixed like FaceRefine / blueprint — random seed changes the restore look
 
@@ -25,26 +26,20 @@ def strength_presets() -> list[dict]:
     return settings.defaults()["enhance_strength_presets"]
 
 
-def _resolve(rel: str) -> str:
-    if Path(rel).is_absolute():
-        return rel
-    return str((settings.legacy_models_dir() / rel).resolve())
-
-
 def default_recipe() -> EnhanceRecipe:
     """Paths from config/defaults.json, with fallbacks when preferred files are absent."""
     d = settings.defaults()["enhance"]
-    unet = _resolve(d["unet"])
+    unet = resolve_model(d["unet"])
     if not Path(unet).is_file():
         for alt in d.get("unet_fallbacks", []):
-            p = _resolve(alt)
+            p = resolve_model(alt)
             if Path(p).is_file():
                 unet = p
                 break
-    vae = _resolve(d["vae"])
+    vae = resolve_model(d["vae"])
     if not Path(vae).is_file():
         for alt in d.get("vae_fallbacks", []):
-            p = _resolve(alt)
+            p = resolve_model(alt)
             if Path(p).is_file():
                 vae = p
                 break

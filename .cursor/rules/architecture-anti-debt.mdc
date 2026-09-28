@@ -1,0 +1,14 @@
+---
+description: Anti-debt checklist — no copy-paste kinds/dialogs, no scratch, no monolith growth
+alwaysApply: true
+---
+
+# Architecture anti-debt
+
+- New `Generation.kind` → workflow + builder + parity test + `jobs/registry.py` + `PIPELINES` + `stages.ts`. Never copy `create_*` or add kind if/elif.
+- New post-process UI → extend `PostProcessDialogShell` / `useAssetJobForm` only.
+- Generate stage variants share one `GENERATE_STAGES` array; do not duplicate the list.
+- No scratch in repo: `_patch_*`, one-off audits under `docs/`, temp scripts beside `app/`.
+- Touching `TimelineStrip` / `Viewer` / `store/timeline` → extract the touched piece first; do not grow the monolith.
+- Layers: `api/client` must not import zustand; API DTOs must not import store; keep routers thin (logic in `services` / `jobs`).
+- Shared helpers once: peaks, `missing_file`, graph `_link`, recipe `_resolve`, `persist_generation`.

@@ -15,6 +15,7 @@ Value-preserving differences from the blueprint subgraph:
     clips; default strength ~0.55 mixes restored detail with the source for realism.
 """
 
+from .graph_util import link as _link
 from .params import EnhanceFullParams
 
 STAGE_BY_NODE = {
@@ -27,10 +28,6 @@ STAGE_BY_NODE = {
 }
 FINAL_OUTPUT_NODE = "13"
 SAMPLER_NODES = ("9",)
-
-
-def _link(node_id: str, slot: int = 0) -> list:
-    return [node_id, slot]
 
 
 def build_enhance_prompt(p: EnhanceFullParams) -> dict:

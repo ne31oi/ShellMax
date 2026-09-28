@@ -1,20 +1,18 @@
 import { PencilLine, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { CameraPreset, LightPreset } from "../../api/types";
-import { useForm } from "../../store/form";
+import type { CinematicTechniquePreset } from "../../api/types";
+import { selectedCinematicTechniqueIds, useForm } from "../../store/form";
 import { useLibrary } from "../../store/library";
-import { Button, Dialog, Select, Tip } from "../ui";
+import { Button, Dialog, Tip } from "../ui";
+import { CinematicTechniqueSelectors } from "./CinematicTechniqueSelectors";
 
-const FALLBACK_CAMERA: CameraPreset[] = [
-  { id: "auto", label: "Авто", hint: "Камера по тексту или по смыслу" },
-];
-const FALLBACK_LIGHT: LightPreset[] = [
-  { id: "auto", label: "Авто", hint: "Свет по тексту или по подаче" },
+const FALLBACK_TECHNIQUES: CinematicTechniquePreset[] = [
+  { id: "auto", label: "Авто", category: "Авто", hint: "Ассистент выберет приём по смыслу сцены" },
 ];
 
 type Mode = "compose" | "edit";
 
-/** Modal before assistant compose/edit: expert camera + light (+ instruction for edit). */
+/** Modal before assistant compose/edit: expert camera, light and cinematography (+ instruction for edit). */
 export function PromptAssistDialog({
   mode,
   open,
@@ -28,10 +26,9 @@ export function PromptAssistDialog({
   onCompose: () => void;
   onEdit: (instruction: string) => void;
 }) {
-  const cameras = useLibrary((s) => s.meta?.camera ?? FALLBACK_CAMERA);
-  const lights = useLibrary((s) => s.meta?.light ?? FALLBACK_LIGHT);
-  const camera = useForm((s) => s.camera);
-  const light = useForm((s) => s.light);
+  const techniques = useLibrary((s) => s.meta?.cinematic_technique ?? FALLBACK_TECHNIQUES);
+  const cinematicTechniques = useForm((s) => s.cinematicTechniques);
+  const cinematicTechnique = useForm((s) => s.cinematicTechnique);
   const set = useForm((s) => s.set);
   const [instruction, setInstruction] = useState("");
 
@@ -39,11 +36,23 @@ export function PromptAssistDialog({
     if (open) setInstruction("");
   }, [open, mode]);
 
-  const cam = cameras.find((p) => p.id === camera) ?? cameras[0];
-  const lit = lights.find((p) => p.id === light) ?? lights[0];
+  useEffect(() => {
+    if (!open) return;
+    const state = useForm.getState();
+    const legacy = techniques.find((item) => item.id === state.cinematicTechnique);
+    const migrated = legacy && legacy.id !== "auto" && Object.keys(state.cinematicTechniques).length === 0;
+    set({
+      camera: "auto",
+      light: "auto",
+      ...(legacy ? { cinematicTechnique: "auto" } : {}),
+      ...(migrated
+        ? { cinematicTechniques: { [legacy.category]: legacy.id } } : {}),
+    });
+  }, [open, techniques, set]);
+
   const title = mode === "edit" ? "Поправить промпт" : "Составить промпт";
-  const expertOnly = camera !== "auto" || light !== "auto";
-  // Edit: text instruction and/or expert camera/light alone is enough to run.
+  const expertOnly = selectedCinematicTechniqueIds({ cinematicTechniques, cinematicTechnique }).length > 0;
+  // Edit: text instruction and/or a selected technique is enough to run.
   const canSubmit = mode === "compose" || !!instruction.trim() || expertOnly;
 
   const submit = () => {
@@ -54,10 +63,7 @@ export function PromptAssistDialog({
     }
     let text = instruction.trim();
     if (!text && expertOnly) {
-      const bits: string[] = [];
-      if (camera !== "auto") bits.push("камеру в detailed_description");
-      if (light !== "auto") bits.push("свет в visual_style");
-      text = `Перепиши только ${bits.join(" и ")} строго по экспертному выбору; остальной текст, структуру полей и теги референсов не меняй.`;
+      text = "Примени выбранные кинотехники в соответствующих разделах промпта; остальной текст, структуру полей и теги референсов не меняй.";
     }
     if (!text) return;
     onOpenChange(false);
@@ -65,7 +71,7 @@ export function PromptAssistDialog({
   };
 
   return (
-    <Dialog open={open && mode !== null} onOpenChange={onOpenChange} title={title}>
+    <Dialog open={open && mode !== null} onOpenChange={onOpenChange} title={title} extraWide>
       <div className="space-y-4 p-5">
         {mode === "edit" && (
           <div>
@@ -85,7 +91,7 @@ export function PromptAssistDialog({
               className="w-full resize-none rounded-lg border border-line bg-raised p-2.5 text-[13px] outline-none placeholder:text-faint focus:border-accent/60"
             />
             <p className="mt-1.5 text-[11px] text-faint">
-              Можно только сменить камеру или свет ниже — без текста. Остальное и теги референсов останутся как есть.
+              Можно выбрать приёмы ниже без текста. Остальное и теги референсов останутся как есть.
             </p>
           </div>
         )}
@@ -96,36 +102,16 @@ export function PromptAssistDialog({
           </p>
         )}
 
-        <div>
-          <Select
-            label="Камера (эксперт)"
-            value={camera}
-            defaultValue="auto"
-            onChange={(v) => set({ camera: v })}
-            options={cameras.map((p) => ({
-              value: p.id,
-              label: p.emotion ? `${p.label} — ${p.emotion}` : p.label,
-            }))}
-          />
-          {cam?.hint && <p className="mt-1.5 text-[11px] text-muted">{cam.hint}</p>}
-          <p className="mt-1 text-[11px] text-faint">
-            Выбор сильнее текста в описании. «Авто» — сначала явный запрос в тексте, иначе вывод по смыслу.
-          </p>
-        </div>
-
-        <div>
-          <Select
-            label="Свет (эксперт)"
-            value={light}
-            defaultValue="auto"
-            onChange={(v) => set({ light: v })}
-            options={lights.map((p) => ({ value: p.id, label: p.label }))}
-          />
-          {lit?.hint && <p className="mt-1.5 text-[11px] text-muted">{lit.hint}</p>}
-          <p className="mt-1 text-[11px] text-faint">
-            Геометрия ключа в visual_style. «Авто» — по тексту или по подаче (Кино / Клип).
-          </p>
-        </div>
+        <CinematicTechniqueSelectors
+          techniques={techniques}
+          value={cinematicTechniques}
+          onChange={(category, id) => {
+            const next = category ? { ...cinematicTechniques } : {};
+            if (category && id) next[category] = id;
+            else if (category) delete next[category];
+            set({ cinematicTechniques: next, cinematicTechnique: "auto", camera: "auto", light: "auto" });
+          }}
+        />
 
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>

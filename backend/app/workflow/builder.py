@@ -13,6 +13,7 @@ workflows/reference.api.json. Differences from the original, all value-preservin
   - reference videos load by path (VHS_LoadVideoPath) instead of from the input dir.
 """
 
+from .graph_util import link as _link
 from .params import FRAME_EXPRESSION, FPS, FullParams, LoraSpec
 
 # stage names reported to the UI while a node executes
@@ -29,10 +30,6 @@ STAGE_BY_NODE = {
 DRAFT_OUTPUT_NODE = "135"
 FINAL_OUTPUT_NODE = "141"
 SAMPLER_NODES = ("108", "128", "106")
-
-
-def _link(node_id: str, slot: int = 0) -> list:
-    return [node_id, slot]
 
 
 def _video_combine(images: list, audio: list, prefix: str, crf: int, save_output: bool) -> dict:

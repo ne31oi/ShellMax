@@ -13,19 +13,22 @@ from ..comfy.client import ComfyClient, PromptRejected
 from ..comfy.supervisor import EngineSupervisor
 from ..db.models import Generation, MediaAsset, Upload, select, session, utcnow
 from ..hub import hub
-from ..media import library
-from ..workflow.builder import build_prompt
-from ..workflow.builder_enhance import build_enhance_prompt
-from ..workflow.builder_face import build_face_prompt
-from ..workflow.builder_interpolate import build_interpolate_prompt
-from ..workflow.builder_nvfp4_fast import build_nvfp4_fast_prompt
-from ..workflow.builder_nvfp4 import build_nvfp4_prompt
-from ..workflow.params import EnhanceFullParams, FaceFullParams, FullParams, InterpolateFullParams
+from ..workflow.params import FaceFullParams, FullParams
+from .errors import describe_rejection, humanize_error
+from .persist import push_generation, register_asset
 from .pipelines import PIPELINES, Pipeline
+from .registry import asset_title_for, get_handler, pipeline_for
 
 log = logging.getLogger("shellmax.jobs")
 
 READY_STATES = ("ready", "external")
+
+# Re-export for callers/tests that historically imported from queue.
+__all__ = [
+    "JobManager", "Running", "READY_STATES",
+    "apply_history_status", "humanize_error", "describe_rejection",
+    "push_generation", "register_asset",
+]
 
 
 @dataclass
@@ -55,18 +58,6 @@ class Running:
         for (stage, t0), (_, t1) in zip(marks, marks[1:]):
             out[stage] = round(out.get(stage, 0.0) + (t1 - t0), 2)
         return out
-
-
-def humanize_error(exc_type: str, message: str, node_type: str = "") -> tuple[str, str]:
-    low = f"{exc_type} {message}".lower()
-    if ("out of memory" in low or "outofmemory" in low or "allocation on device" in low
-            or "mha_graph.execute" in low):
-        return ("oom",
-                "Не хватило видеопамяти. Снизьте качество или длительность, либо включите «Экономию VRAM».")
-    if "filenotfound" in low or "файл не найден" in low or "путь к файлу" in low:
-        return "missing_file", message.replace("ShellMax: ", "")
-    where = f" ({node_type})" if node_type else ""
-    return "generic", f"Ошибка движка{where}: {message.strip() or exc_type}"
 
 
 def apply_history_status(r: Running, hist: dict) -> bool:
@@ -248,7 +239,7 @@ class JobManager:
         return None
 
     async def _run(self, g: Generation) -> None:
-        r = self.running = Running(gen_id=g.id, pipe=PIPELINES.get(g.kind, PIPELINES["generate"]), kind=g.kind)
+        r = self.running = Running(gen_id=g.id, pipe=pipeline_for(g.kind), kind=g.kind)
         r.stage_marks.append(("prepare", r.started_at))
         with session() as s:
             row = s.get(Generation, g.id)
@@ -265,24 +256,14 @@ class JobManager:
             await self._finish(g.id, "cancelled")
             return
 
-        if g.kind == "face":
+        handler = get_handler(g.kind)
+        if handler.upload == "face":
             full = await self._upload_face_refs(FaceFullParams(**g.full_params))
-            prompt = build_face_prompt(full)
-        elif g.kind == "enhance":
-            full = EnhanceFullParams(**g.full_params)
-            prompt = build_enhance_prompt(full)
-        elif g.kind == "interpolate":
-            full = InterpolateFullParams(**g.full_params)
-            prompt = build_interpolate_prompt(full)
-        elif g.kind == "generate_nvfp4_fast":
+        elif handler.upload == "refs":
             full = await self._upload_refs(FullParams(**g.full_params), g.ui_params)
-            prompt = build_nvfp4_fast_prompt(full)
-        elif g.kind == "generate_nvfp4":
-            full = await self._upload_refs(FullParams(**g.full_params), g.ui_params)
-            prompt = build_nvfp4_prompt(full)
         else:
-            full = await self._upload_refs(FullParams(**g.full_params), g.ui_params)
-            prompt = build_prompt(full)
+            full = handler.params_cls(**g.full_params)
+        prompt = handler.build(full)
         with session() as s:
             row = s.get(Generation, g.id)
             row.full_params = full.model_dump()
@@ -293,7 +274,7 @@ class JobManager:
             await self.before_submit()
         # SeedVR2 needs a clean slate: MiniMax weights left from the previous job
         # otherwise trigger OOM / cryptic cuDNN MHA failures in KSampler.
-        if g.kind == "enhance":
+        if handler.free_before:
             await self._free_for_enhance()
         r.cold = self.cold_next or self.engine.pid != self._warm_pid
         try:
@@ -313,7 +294,7 @@ class JobManager:
 
     async def _resume(self, g: Generation) -> None:
         # Reattach by persisted prompt id; never rebuild or resubmit a graph after a restart.
-        r = self.running = Running(gen_id=g.id, pipe=PIPELINES.get(g.kind, PIPELINES["generate"]),
+        r = self.running = Running(gen_id=g.id, pipe=pipeline_for(g.kind),
                                    kind=g.kind, prompt_id=g.comfy_prompt_id, stage=g.stage,
                                    progress=g.progress, draft_asset_id=g.draft_asset_id,
                                    final_asset_id=g.output_asset_id, cold=True)
@@ -518,21 +499,9 @@ class JobManager:
             await self.client.download_output(info, dest)
         with session() as s:
             g = s.get(Generation, r.gen_id)
-            if g.kind == "face":
-                src_asset = s.get(MediaAsset, g.source_asset_id) if g.source_asset_id else None
-                base = src_asset.name if src_asset else f"Клип {g.source_asset_id}"
-                title = f"{base} · {'трекинг' if is_draft else 'лицо'}"
-            elif g.kind == "enhance":
-                src_asset = s.get(MediaAsset, g.source_asset_id) if g.source_asset_id else None
-                base = src_asset.name if src_asset else f"Клип {g.source_asset_id}"
-                title = f"{base} · детализация"
-            elif g.kind == "interpolate":
-                src_asset = s.get(MediaAsset, g.source_asset_id) if g.source_asset_id else None
-                base = src_asset.name if src_asset else f"Клип {g.source_asset_id}"
-                mult = (g.ui_params or {}).get("multiplier") or (g.full_params or {}).get("recipe", {}).get("multiplier") or 2
-                title = f"{base} · ×{mult}"
-            else:
-                title = asset_title((g.ui_params or {}).get("prompt", ""), r.gen_id)
+            src_asset = s.get(MediaAsset, g.source_asset_id) if g.source_asset_id else None
+            source_name = src_asset.name if src_asset else None
+            title = asset_title_for(g, is_draft, source_name)
         asset_id = await register_asset(dest, generation_id=r.gen_id, source="draft" if is_draft else "generated",
                                         name=title)
         if is_draft:
@@ -591,59 +560,3 @@ class JobManager:
                 and status.get("status_str") == "error"
             ):
                 r.error = ("generic", "Движок завершил задачу с ошибкой")
-
-
-def asset_title(prompt: str, gen_id: int) -> str:
-    """Short human name for a clip: the summary of a structured prompt, else its first meaningful line."""
-    import re
-
-    raw = prompt.splitlines()
-    heads = [i for i, l in enumerate(raw) if l.strip().lower() == "summary:"]
-    if heads:  # official 6-field format: the summary describes the shot, subject lines only define refs
-        raw = raw[heads[0] + 1:]
-    clean = lambda l: re.sub(r"\s+", " ", re.sub(r"\[[^\]]*\]|<[^>]+>", "", l)).strip(" :.-,")  # noqa: E731
-    lines = [clean(l) for l in raw]
-    text = next((l for l in lines if len(l) > 3 and not l.lower().startswith("subject_definitions")), "")
-    if heads:
-        text = re.sub(r"^(a|an|the)\s+", "", text, flags=re.I)
-        text = text[:1].upper() + text[1:]
-    return (text[:48] + "…") if len(text) > 48 else (text or f"Генерация {gen_id}")
-
-
-def describe_rejection(e: PromptRejected) -> str:
-    parts = [str(e)]
-    for node_id, err in (e.details.get("node_errors") or {}).items():
-        for item in err.get("errors", []):
-            parts.append(f"{err.get('class_type', node_id)}: {item.get('details') or item.get('message')}")
-    return "Движок отклонил задачу: " + "; ".join(parts)
-
-
-async def register_asset(path: Path, generation_id: int | None, source: str, project_id: int | None = None,
-                         name: str | None = None) -> int:
-    kind = library.kind_of(path.name) or "video"
-    meta = await library.probe(path)
-    thumb = await library.thumbnail(path, settings.THUMBS_DIR / f"{path.stem}.jpg", kind)
-    with session() as s:
-        if project_id is None and generation_id is not None:
-            project_id = s.get(Generation, generation_id).project_id
-        asset = MediaAsset(project_id=project_id or 1, kind=kind, name=name or path.stem, path=str(path),
-                           duration=meta.duration, width=meta.width, height=meta.height, fps=meta.fps,
-                           has_audio=meta.has_audio, source=source, generation_id=generation_id,
-                           thumb=str(thumb) if thumb else None)
-        s.add(asset)
-        s.commit()
-        s.refresh(asset)
-        await hub.broadcast({"type": "asset", "asset": asset.model_dump()})
-        return asset.id
-
-
-async def push_generation(g: Generation, step: dict | None = None) -> None:
-    """`step` is live-only (not stored): progress of the node running right now."""
-    await hub.broadcast({"type": "generation", "generation": {**g.model_dump(), "step": step}})
-    # Keep storyboard plan status in sync when this gen belongs to a plan.
-    if (g.info or {}).get("plan_id"):
-        try:
-            from ..plans import sync_plan_from_generation
-            sync_plan_from_generation(g)
-        except Exception:  # noqa: BLE001
-            log.exception("plan sync failed for gen %s", g.id)

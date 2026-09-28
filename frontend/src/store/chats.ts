@@ -4,7 +4,7 @@ import type { Chat, ChatAttachment, ChatInfo } from "../api/types";
 import { frameCount } from "../lib/format";
 import { toModelPrompt } from "../lib/refs";
 import { useAssistant } from "./assistant";
-import { useForm } from "./form";
+import { selectedCinematicTechniqueIds, useForm } from "./form";
 
 /** Ideas chats (studio assistant-chats-store), kept on the server so they survive reloads. */
 interface ChatsState {
@@ -60,8 +60,9 @@ export const useChats = create<ChatsState>((set, get) => ({
       draft: toModelPrompt(f.prompt, f.refs),
       duration: frameCount(f.duration) / 24,
       look: f.look,
-      camera: f.camera,
-      light: f.light,
+      camera: "auto",
+      light: "auto",
+      cinematic_techniques: selectedCinematicTechniqueIds(f),
     });
     // the server stored both messages (or only the user's one if the answer failed)
     const id = chat.id;

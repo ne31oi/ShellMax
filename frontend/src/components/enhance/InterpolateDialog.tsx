@@ -1,11 +1,18 @@
 import { Gauge } from "lucide-react";
 import { useEffect, useState } from "react";
-import { api, ApiError, urls } from "../../api/client";
-import type { InterpolateDefaults, Estimate } from "../../api/types";
-import { estimateBasis, fileName, fmtEstimate, fmtSeconds } from "../../lib/format";
+import { api } from "../../api/client";
+import type { Estimate, InterpolateDefaults } from "../../api/types";
+import { fileName } from "../../lib/format";
 import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
-import { Button, Dialog, ErrorMessage, SectionTitle, Select, Spinner } from "../ui";
+import {
+  AssetPreviewCard,
+  JobFooter,
+  JobLoading,
+  ModelEstimateLine,
+  runAssetJob,
+} from "../jobs/PostProcessShell";
+import { Dialog, ErrorMessage, SectionTitle, Select } from "../ui";
 
 /**
  * Native ComfyUI frame interpolation (RIFE / FILM): raise FPS without changing resolution.
@@ -61,35 +68,24 @@ function InterpolateForm({
     api.interpolateEstimate(assetId, multiplier, model).then(setEstimate).catch(() => setEstimate(null));
   }, [assetId, multiplier, model, defaults]);
 
-  const submit = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      const g = await api.interpolate({
-        source_asset_id: assetId,
-        model,
-        multiplier,
-      });
-      useLibrary.getState().upsertGeneration(g);
-      useUI.getState().selectGen(g.id);
-      onDone();
-    } catch (e) {
-      if (e instanceof ApiError && typeof e.detail === "object" && e.detail && (e.detail as { kind?: string }).kind === "missing_file") {
-        useUI.getState().toast(e.message, "bad");
-      }
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (!defaults) {
-    return (
-      <div className="flex h-48 items-center justify-center gap-2 text-muted">
-        {error ? <ErrorMessage text={error} /> : <><Spinner /> Готовлю клип…</>}
-      </div>
+  const submit = () =>
+    runAssetJob(
+      () =>
+        api.interpolate({
+          source_asset_id: assetId,
+          model,
+          multiplier,
+        }),
+      {
+        upsert: (g) => useLibrary.getState().upsertGeneration(g),
+        select: (id) => useUI.getState().selectGen(id),
+        onDone,
+        setBusy,
+        setError,
+      },
     );
-  }
+
+  if (!defaults) return <JobLoading error={error} />;
 
   const modelOptions = (defaults.model_presets ?? []).map((p) => ({
     value: p.id,
@@ -99,7 +95,6 @@ function InterpolateForm({
     value: String(p.multiplier),
     label: `${p.label} — ${p.hint}`,
   }));
-  const modelLabel = defaults.model_path ? fileName(defaults.model_path) : "модель не найдена";
   const fps = defaults.source_fps || defaults.asset.fps || 24;
   const duration = defaults.asset.duration ?? defaults.frames / fps;
   const outFps = Math.round(fps * multiplier);
@@ -111,21 +106,12 @@ function InterpolateForm({
         сложном движении. Звук сохраняется.
       </p>
 
-      <div className="flex items-center gap-3 rounded-xl border border-line bg-raised/40 p-2.5">
-        {defaults.asset.thumb && (
-          <img src={urls.assetThumb(defaults.asset.id)} alt="" className="h-12 w-20 rounded object-cover" />
-        )}
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px]">{defaults.asset.name}</p>
-          <p className="text-[11px] text-faint tabular-nums">
-            {defaults.frames} кадров · {fmtSeconds(duration)}
-            {defaults.asset.width && defaults.asset.height
-              ? ` · ${defaults.asset.width}×${defaults.asset.height}`
-              : ""}
-            {` · ${Math.round(fps)} → ${outFps} к/с`}
-          </p>
-        </div>
-      </div>
+      <AssetPreviewCard
+        asset={defaults.asset}
+        frames={defaults.frames}
+        durationSec={duration}
+        extra={` · ${Math.round(fps)} → ${outFps} к/с`}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
@@ -148,26 +134,20 @@ function InterpolateForm({
         </div>
       </div>
 
-      <p className="text-[11px] text-faint">
-        Модель: {modelLabel}
-        {estimate ? (
-          <>
-            {" · "}
-            <span title={estimateBasis(estimate)}>{fmtEstimate(estimate.seconds)}</span>
-          </>
-        ) : null}
-      </p>
-
+      <ModelEstimateLine
+        modelLabel={defaults.model_path ? fileName(defaults.model_path) : "модель не найдена"}
+        estimate={estimate}
+      />
       {error && <ErrorMessage text={error} />}
 
-      <div className="flex justify-end gap-2 border-t border-line pt-4">
-        <Button variant="ghost" onClick={onDone} disabled={busy}>
-          Отмена
-        </Button>
-        <Button variant="primary" size="lg" onClick={submit} disabled={busy} title={estimateBasis(estimate)}>
-          {busy ? <Spinner /> : <Gauge size={15} />} Интерполировать
-        </Button>
-      </div>
+      <JobFooter
+        onCancel={onDone}
+        onSubmit={submit}
+        busy={busy}
+        estimate={estimate}
+        label="Интерполировать"
+        icon={<Gauge size={15} />}
+      />
     </div>
   );
 }

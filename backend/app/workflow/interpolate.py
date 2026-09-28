@@ -4,6 +4,7 @@ from pathlib import Path
 
 from .. import settings
 from .params import InterpolateFullParams, InterpolateRecipe, InterpolateUIParams
+from .paths import resolve_model
 
 
 def model_presets() -> list[dict]:
@@ -14,28 +15,22 @@ def multiplier_presets() -> list[dict]:
     return settings.defaults()["interpolate_multiplier_presets"]
 
 
-def _resolve(rel: str) -> str:
-    if Path(rel).is_absolute():
-        return rel
-    return str((settings.legacy_models_dir() / rel).resolve())
-
-
 def _pick_model(preset: str) -> str:
     d = settings.defaults()["interpolate"]
     if preset == "film":
-        path = _resolve(d["film"])
+        path = resolve_model(d["film"])
         if Path(path).is_file():
             return path
         for alt in d.get("film_fallbacks", []):
-            p = _resolve(alt)
+            p = resolve_model(alt)
             if Path(p).is_file():
                 return p
         return path
-    path = _resolve(d["model"])
+    path = resolve_model(d["model"])
     if Path(path).is_file():
         return path
     for alt in d.get("model_fallbacks", []):
-        p = _resolve(alt)
+        p = resolve_model(alt)
         if Path(p).is_file():
             return p
     return path

@@ -16,10 +16,25 @@ from .llm.registry import CHOICES, FILES
 from .llm.service import AssistantBusy, AssistantService
 from .media import library
 from .workflow.camera import user_camera_directive
+from .workflow.cinematography import (CAMERA_CATEGORIES, LIGHT_CATEGORY,
+                                      resolve_cinematic_technique_ids,
+                                      selected_cinematic_techniques,
+                                      user_cinematic_technique_directive)
 from .workflow.light import user_light_directive
 
 router = APIRouter(prefix="/api/assistant")
 TMP = settings.DATA_DIR / "assistant_tmp"
+
+
+def _expert_directives(camera: str, light: str, techniques: list[str]) -> str:
+    categories = {item["category"] for item in selected_cinematic_techniques(techniques)}
+    parts = []
+    if camera != "auto" or not categories & CAMERA_CATEGORIES:
+        parts.append(user_camera_directive(camera))
+    if light != "auto" or LIGHT_CATEGORY not in categories:
+        parts.append(user_light_directive(light))
+    parts.append(user_cinematic_technique_directive(techniques))
+    return "\n\n".join(parts)
 
 
 def _svc(request: Request) -> AssistantService:
@@ -111,6 +126,8 @@ class ComposeIn(BaseModel):
     look: str = "cinema"
     camera: str = "auto"
     light: str = "auto"
+    cinematic_technique: str = "auto"
+    cinematic_techniques: list[str] = []
 
 
 @router.post("/compose")
@@ -129,14 +146,19 @@ def compose(body: ComposeIn, request: Request):
             infos.append(prompt.RefInfo(kind=up.kind, name=up.orig_name, with_audio=ref.with_audio))
             if up.kind == "image":
                 images.append(Path(up.path))
-    system = prompt.compose_system(infos, body.duration, body.look, body.camera, body.light)
+    techniques = resolve_cinematic_technique_ids(body.cinematic_techniques, body.cinematic_technique,
+                                                  body.camera, body.light)
+    system = prompt.compose_system(infos, body.duration, body.look, body.camera, body.light,
+                                   cinematic_techniques=techniques)
     # the huge spec comes first; restate at the end that the action is the user's, not the photo's
     user = (f"Описание пользователя (ГЛАВНОЕ — действие видео берётся только отсюда):\n{body.text.strip()}\n\n"
-            f"{user_camera_directive(body.camera)}\n\n"
-            f"{user_light_directive(body.light)}\n\n"
+            f"{_expert_directives(body.camera, body.light, techniques)}\n\n"
             "Преобразуй его в промпт. summary и detailed_description описывают именно это действие; "
             "позу, жесты и предметы с картинок не переносить.")
-    return _sse(svc.stream(system, user, images), scrub_style_slogans=True)
+    return _sse(
+        _checked_prompt_edit(svc, system, user, images, "", "", techniques),
+        scrub_style_slogans=True,
+    )
 
 
 # ---------------------------------------------------------------- edit a finished prompt in plain words
@@ -154,7 +176,62 @@ class EditIn(BaseModel):
     look: str = "cinema"
     camera: str = "auto"
     light: str = "auto"
+    cinematic_technique: str = "auto"
+    cinematic_techniques: list[str] = []
     face: FaceIn | None = None  # set when editing a face refine prompt
+
+
+async def _checked_prompt_edit(svc, system: str, user: str, images: list[Path],
+                               source: str, instruction: str,
+                               cinematic_technique: str | list[str] = "auto"):
+    first_done = None
+    async for event in svc.stream(system, user, images):
+        if "done" in event:
+            first_done = event
+        else:
+            yield event
+
+    # Let the first stream finish so AssistantService releases its single active slot before retrying.
+    if first_done is None or first_done.get("cancelled"):
+        if first_done is not None:
+            yield first_done
+        return
+    candidate = first_done.get("prompt", "")
+    issues = prompt.shot_size_edit_issues(source, instruction, candidate)
+    issues.extend(prompt.lighting_edit_issues(instruction, candidate))
+    issues.extend(prompt.cinematic_technique_edit_issues(cinematic_technique, candidate))
+    if not issues:
+        yield first_done
+        return
+
+    # Ask for one focused repair pass when a requested framing or lighting detail was omitted.
+    yield {"stage": "repairing"}
+    yield {"replace": ""}
+    repair = (
+        f"{user}\n\nПроверка запроса не пройдена: {', '.join(issues)}\n"
+        "Исправь перечисленные несоответствия во всём промпте. Примени запрошенные характеристики "
+        "к каждому кадру, если пользователь не указал отдельные кадры. Сохрани число кадров, "
+        "неизменённые параметры и порядок полей. Верни полный промпт в требуемом формате."
+    )
+    second_done = None
+    async for event in svc.stream(system, repair, images):
+        if "done" in event:
+            second_done = event
+        else:
+            yield event
+
+    if second_done is None or second_done.get("cancelled"):
+        if second_done is not None:
+            yield second_done
+        return
+    repaired = second_done.get("prompt", "")
+    remaining = prompt.shot_size_edit_issues(source, instruction, repaired)
+    remaining.extend(prompt.lighting_edit_issues(instruction, repaired))
+    remaining.extend(prompt.cinematic_technique_edit_issues(cinematic_technique, repaired))
+    if remaining:
+        yield {"error": "Не удалось применить правку согласованно. Исходный промпт сохранён; уточните запрос и повторите."}
+    else:
+        yield second_done
 
 
 @router.post("/edit")
@@ -162,7 +239,9 @@ def edit(body: EditIn, request: Request):
     svc = _svc(request)
     if not body.prompt.strip():
         raise HTTPException(422, "Нет промпта для правки")
-    expert_ok = body.face is None and (body.camera != "auto" or body.light != "auto")
+    techniques = resolve_cinematic_technique_ids(body.cinematic_techniques, body.cinematic_technique,
+                                                  body.camera, body.light)
+    expert_ok = body.face is None and (body.camera != "auto" or body.light != "auto" or bool(techniques))
     if not body.instruction.strip() and not expert_ok:
         raise HTTPException(422, "Напишите, что изменить")
     if (busy := _precheck(svc)) is not None:
@@ -184,10 +263,11 @@ def edit(body: EditIn, request: Request):
                 if up.kind == "image":
                     images.append(Path(up.path))
     system = prompt.edit_system(infos, body.duration, face=body.face is not None, look=body.look,
-                                camera=body.camera, light=body.light)
+                                camera=body.camera, light=body.light,
+                                cinematic_techniques=techniques)
     extras = ""
     if body.face is None:
-        extras = f"\n\n{user_camera_directive(body.camera)}\n\n{user_light_directive(body.light)}"
+        extras = f"\n\n{_expert_directives(body.camera, body.light, techniques)}"
     instruction = body.instruction.strip()
     if not instruction and body.face is None:
         bits = []
@@ -195,6 +275,8 @@ def edit(body: EditIn, request: Request):
             bits.append("камеру в detailed_description")
         if body.light != "auto":
             bits.append("свет в visual_style")
+        if techniques:
+            bits.append("выбранные кинотехники в соответствующих разделах")
         joined = " и ".join(bits) if bits else "экспертные настройки"
         instruction = (
             f"Перепиши только {joined} строго по экспертному выбору; "
@@ -202,9 +284,13 @@ def edit(body: EditIn, request: Request):
         )
     user = (f"Текущий промпт:\n```text\n{body.prompt.strip()}\n```\n\n"
             f"Что изменить (слова пользователя):\n{instruction}{extras}"
-            f"{prompt.shot_size_edit_directive(instruction)}\n\n"
+            f"{prompt.shot_size_edit_directive(instruction)}"
+            f"{prompt.lighting_edit_directive(instruction)}\n\n"
             "Верни полный исправленный промпт.")
-    return _sse(svc.stream(system, user, images), scrub_style_slogans=True)
+
+    return _sse(_checked_prompt_edit(svc, system, user, images, body.prompt, instruction,
+                                    techniques),
+                scrub_style_slogans=True)
 
 
 # ---------------------------------------------------------------- face refine prompt
@@ -350,6 +436,8 @@ class ChatIn(BaseModel):
     look: str = "cinema"
     camera: str = "auto"
     light: str = "auto"
+    cinematic_technique: str = "auto"
+    cinematic_techniques: list[str] = []
 
 
 @router.post("/chats/{cid}/send")
@@ -388,7 +476,10 @@ def send(cid: str, body: ChatIn, request: Request):
         images.append(ATTACH_DIR / msg["attachment"]["id"])
         history[-1]["content"] += (f"\n\n[Вложение чата: {msg['attachment']['name']} — прикреплено для описания/анализа, "
                                    "НЕ референс генерации, не называй его <Picture N>]")
-    system = prompt.chat_system(infos, body.duration, body.draft, fresh, body.look, body.camera, body.light)
+    techniques = resolve_cinematic_technique_ids(body.cinematic_techniques, body.cinematic_technique,
+                                                  body.camera, body.light)
+    system = prompt.chat_system(infos, body.duration, body.draft, fresh, body.look, body.camera, body.light,
+                                cinematic_techniques=techniques)
 
     async def run():
         svc.chat_id = cid

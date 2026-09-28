@@ -3,6 +3,7 @@
 Graph: workflows/ShellMax_Interpolate.json (golden).
 """
 
+from .graph_util import link as _link
 from .params import InterpolateFullParams
 
 STAGE_BY_NODE = {
@@ -12,10 +13,6 @@ STAGE_BY_NODE = {
 }
 FINAL_OUTPUT_NODE = "4"
 SAMPLER_NODES: tuple[str, ...] = ()
-
-
-def _link(node_id: str, slot: int = 0) -> list:
-    return [node_id, slot]
 
 
 def build_interpolate_prompt(p: InterpolateFullParams) -> dict:

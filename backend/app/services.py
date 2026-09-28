@@ -17,6 +17,38 @@ from .workflow import enhance, face, interpolate, presets
 from .workflow.params import EnhanceUIParams, EngineProfile, FaceUIParams, InterpolateUIParams, LoraSpec, ResolvedRef, UIParams
 
 
+def persist_generation(g: Generation, prefix: str) -> Generation:
+    """Commit Generation then stamp filename_prefix with the assigned id (double-commit)."""
+    with session() as s:
+        s.add(g)
+        s.commit()
+        s.refresh(g)
+        g.full_params = {**g.full_params, "filename_prefix": f"{prefix}{g.id:05d}"}
+        s.add(g)
+        s.commit()
+        s.refresh(g)
+    return g
+
+
+def remove_asset_files(asset: MediaAsset) -> None:
+    """Delete media + thumb files for an asset (DB row is the caller's job)."""
+    for p in (asset.path, asset.thumb):
+        if p:
+            Path(p).unlink(missing_ok=True)
+
+
+async def peaks_cached(path: Path, cache_key: str, duration: float | None) -> dict:
+    """Waveform peaks with JSON cache under thumbs dir."""
+    cache = settings.THUMBS_DIR / f"peaks_{cache_key}.json"
+    if cache.exists():
+        return json.loads(cache.read_text(encoding="utf-8"))
+    out = {"peaks": await library.peaks(path), "duration": duration}
+    if out["peaks"]:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text(json.dumps(out), encoding="utf-8")
+    return out
+
+
 # ---------------------------------------------------------------- bootstrap
 def bootstrap() -> None:
     """First run: default project and an engine profile auto-filled from the shared models dir."""
@@ -269,14 +301,7 @@ def create_generations(ui: UIParams, project_id: int, *, info: dict | None = Non
         g = Generation(project_id=project_id, kind=kind, ui_params=ui.model_dump(), full_params=full.model_dump(),
                        seed=seed, profile_name=row.name, work_units=units,
                          estimate_s=estimate_seconds(units, kind), info=info)
-        with session() as s:
-            s.add(g)
-            s.commit()
-            s.refresh(g)
-            g.full_params = {**g.full_params, "filename_prefix": f"ShellMax/gen{g.id:05d}"}
-            s.add(g)
-            s.commit()
-        created.append(g)
+        created.append(persist_generation(g, "ShellMax/gen"))
     return created
 
 
@@ -348,14 +373,7 @@ def create_face_refine(ui: FaceUIParams, project_id: int) -> Generation:
     g = Generation(project_id=project_id, kind="face", source_asset_id=asset.id, ui_params=ui.model_dump(),
                    full_params=full.model_dump(), seed=seed, profile_name=row.name, work_units=units,
                    estimate_s=estimate_seconds(units, "face"))
-    with session() as s:
-        s.add(g)
-        s.commit()
-        s.refresh(g)
-        g.full_params = {**g.full_params, "filename_prefix": f"ShellMax/face{g.id:05d}"}
-        s.add(g)
-        s.commit()
-    return g
+    return persist_generation(g, "ShellMax/face")
 
 
 def enhance_defaults(asset_id: int) -> dict:
@@ -409,14 +427,7 @@ def create_enhance(ui: EnhanceUIParams, project_id: int) -> Generation:
                    ui_params=ui.model_dump(), full_params=full.model_dump(), seed=seed,
                    profile_name="SeedVR2", work_units=units,
                    estimate_s=estimate_seconds(units, "enhance"))
-    with session() as s:
-        s.add(g)
-        s.commit()
-        s.refresh(g)
-        g.full_params = {**g.full_params, "filename_prefix": f"ShellMax/enhance{g.id:05d}"}
-        s.add(g)
-        s.commit()
-    return g
+    return persist_generation(g, "ShellMax/enhance")
 
 
 def interpolate_defaults(asset_id: int) -> dict:
@@ -463,11 +474,42 @@ def create_interpolate(ui: InterpolateUIParams, project_id: int) -> Generation:
                    ui_params=ui.model_dump(), full_params=full.model_dump(), seed=0,
                    profile_name=label, work_units=units,
                    estimate_s=estimate_seconds(units, "interpolate"))
-    with session() as s:
-        s.add(g)
-        s.commit()
-        s.refresh(g)
-        g.full_params = {**g.full_params, "filename_prefix": f"ShellMax/interp{g.id:05d}"}
-        s.add(g)
-        s.commit()
-    return g
+    return persist_generation(g, "ShellMax/interp")
+
+
+# ---------------------------------------------------------------- retry (no kind if/elif in routers)
+def _recreate_face(g: Generation, *, same_seed: bool, variants: int) -> list[Generation]:
+    out: list[Generation] = []
+    for i in range(variants):
+        seed = g.seed if same_seed and i == 0 else presets.new_seed()
+        out.append(create_face_refine(FaceUIParams(**{**g.ui_params, "seed": seed}), g.project_id))
+    return out
+
+
+def _recreate_enhance(g: Generation, *, same_seed: bool, variants: int) -> list[Generation]:
+    out: list[Generation] = []
+    for i in range(variants):
+        seed = g.seed if same_seed and i == 0 else presets.new_seed()
+        out.append(create_enhance(EnhanceUIParams(**{**g.ui_params, "seed": seed}), g.project_id))
+    return out
+
+
+def _recreate_interpolate(g: Generation, *, same_seed: bool, variants: int) -> list[Generation]:
+    return [create_interpolate(InterpolateUIParams(**g.ui_params), g.project_id) for _ in range(variants)]
+
+
+# Post-process kinds: dedicated create_*. Generate / NVFP4 fall through to create_generations.
+_RECREATE = {
+    "face": _recreate_face,
+    "enhance": _recreate_enhance,
+    "interpolate": _recreate_interpolate,
+}
+
+
+def recreate_generations(g: Generation, *, same_seed: bool = False, variants: int = 1) -> list[Generation]:
+    """Spawn new jobs from an existing generation (retry)."""
+    fn = _RECREATE.get(g.kind)
+    if fn:
+        return fn(g, same_seed=same_seed, variants=variants)
+    ui = UIParams(**{**g.ui_params, "seed": g.seed if same_seed else None, "variants": variants})
+    return create_generations(ui, g.project_id)

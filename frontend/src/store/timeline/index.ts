@@ -1,0 +1,51 @@
+/** Public timeline module — import from `store/timeline`. */
+export type {
+  Clip,
+  ClipHit,
+  Command,
+  Plan,
+  PlanRef,
+  PlanStatus,
+  PlanStyle,
+  TimelineDoc,
+  TimelineMarkers,
+  Track,
+} from "../../types/timeline";
+
+export {
+  MIN_CLIP,
+  MIN_PLAN,
+  audioClipsAtTime,
+  audioTracks,
+  clampPlanResize,
+  clipAtTime,
+  clipDuration,
+  clipSilent,
+  clonePlanFresh,
+  copyPlanToClipboard,
+  effectiveVolume,
+  emptyDoc,
+  emptyPlan,
+  findClip,
+  findClipTrack,
+  findPlan,
+  hasSequenceContent,
+  markerClipPlacement,
+  nearestBeat,
+  peekPlanClipboard,
+  planTracks,
+  planVisualAtTime,
+  rangesOverlap,
+  resolvePlanPlacement,
+  sequenceVisualAtTime,
+  snapEnabled,
+  snapTime,
+  timelineBeats,
+  totalDuration,
+  uid,
+  videoTrack,
+  type SequenceVisual,
+} from "./queries";
+
+export { commands } from "./commands";
+export { flushTimelinePersist, openPlanInSidebar, useTimeline } from "./store";

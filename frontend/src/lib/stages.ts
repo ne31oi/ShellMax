@@ -6,38 +6,23 @@ export interface StageDef {
   short: string;
 }
 
+/** Shared stage list for generate and NVFP4 variants (same pipeline shape). */
+export const GENERATE_STAGES: StageDef[] = [
+  { id: "load", label: "Загрузка моделей", short: "Загрузка" },
+  { id: "encode", label: "Разбор промпта и референсов", short: "Промпт" },
+  { id: "pass1", label: "Проход 1 — черновое видео", short: "Проход 1" },
+  { id: "draft", label: "Сборка черновика", short: "Черновик" },
+  { id: "upscale", label: "Апскейл", short: "Апскейл" },
+  { id: "pass2", label: "Проход 2", short: "Проход 2" },
+  { id: "final", label: "Финальный проход — детали и звук", short: "Финал" },
+  { id: "decode", label: "Сборка видео", short: "Сборка" },
+];
+
 /** Pipeline stages per job kind, in execution order (mirrors backend jobs/pipelines.py). */
 export const STAGES_BY_KIND: Record<JobKind, StageDef[]> = {
-  generate: [
-    { id: "load", label: "Загрузка моделей", short: "Загрузка" },
-    { id: "encode", label: "Разбор промпта и референсов", short: "Промпт" },
-    { id: "pass1", label: "Проход 1 — черновое видео", short: "Проход 1" },
-    { id: "draft", label: "Сборка черновика", short: "Черновик" },
-    { id: "upscale", label: "Апскейл", short: "Апскейл" },
-    { id: "pass2", label: "Проход 2", short: "Проход 2" },
-    { id: "final", label: "Финальный проход — детали и звук", short: "Финал" },
-    { id: "decode", label: "Сборка видео", short: "Сборка" },
-  ],
-  generate_nvfp4: [
-    { id: "load", label: "Загрузка моделей", short: "Загрузка" },
-    { id: "encode", label: "Разбор промпта и референсов", short: "Промпт" },
-    { id: "pass1", label: "Проход 1 — черновое видео", short: "Проход 1" },
-    { id: "draft", label: "Сборка черновика", short: "Черновик" },
-    { id: "upscale", label: "Апскейл", short: "Апскейл" },
-    { id: "pass2", label: "Проход 2", short: "Проход 2" },
-    { id: "final", label: "Финальный проход — детали и звук", short: "Финал" },
-    { id: "decode", label: "Сборка видео", short: "Сборка" },
-  ],
-  generate_nvfp4_fast: [
-    { id: "load", label: "Загрузка моделей", short: "Загрузка" },
-    { id: "encode", label: "Разбор промпта и референсов", short: "Промпт" },
-    { id: "pass1", label: "Проход 1 — черновое видео", short: "Проход 1" },
-    { id: "draft", label: "Сборка черновика", short: "Черновик" },
-    { id: "upscale", label: "Апскейл", short: "Апскейл" },
-    { id: "pass2", label: "Проход 2", short: "Проход 2" },
-    { id: "final", label: "Финальный проход — детали и звук", short: "Финал" },
-    { id: "decode", label: "Сборка видео", short: "Сборка" },
-  ],
+  generate: GENERATE_STAGES,
+  generate_nvfp4: GENERATE_STAGES,
+  generate_nvfp4_fast: GENERATE_STAGES,
   face: [
     { id: "load", label: "Загрузка моделей", short: "Загрузка" },
     { id: "track", label: "Поиск и трекинг лица", short: "Трекинг" },

@@ -120,13 +120,13 @@ def test_profile_expansion_carries_final_model():
 @pytest.mark.parametrize("kind,size", [("generate", (1440, 832)), ("generate_nvfp4", (1440, 832)),
                                        ("generate_nvfp4_fast", (1440, 832))])
 def test_estimate_uses_selected_pipeline(monkeypatch, kind, size):
-    from app import api
+    from app import engine_api
     from test_presets import profile
 
     def selected(profile_id):
         assert profile_id == 8
         return None, profile(pipeline=kind)
 
-    monkeypatch.setattr(api.services, "get_profile", selected)
-    monkeypatch.setattr(api, "estimate_time", lambda units, job: (units, job))
-    assert api.estimate("16:9 (Widescreen)", "standard", 2, 8) == (size[0] * size[1] * 56, kind)
+    monkeypatch.setattr(engine_api.services, "get_profile", selected)
+    monkeypatch.setattr(engine_api, "estimate_time", lambda units, job: (units, job))
+    assert engine_api.estimate("16:9 (Widescreen)", "standard", 2, 8) == (size[0] * size[1] * 56, kind)

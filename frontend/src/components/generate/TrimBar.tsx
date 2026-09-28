@@ -2,7 +2,7 @@ import { useRef } from "react";
 
 const MIN_LEN = 0.5; // backend refuses shorter fragments
 
-export function fmtTime(t: number): string {
+function fmtTime(t: number): string {
   const m = Math.floor(t / 60);
   const s = t - m * 60;
   return `${m}:${s.toFixed(2).padStart(5, "0")}`;

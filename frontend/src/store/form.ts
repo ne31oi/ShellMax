@@ -86,6 +86,10 @@ interface FormState {
   look: string;
   camera: string;
   light: string;
+  /** One selected technique per production-bible category. */
+  cinematicTechniques: Record<string, string>;
+  /** Former single-choice value, read only to migrate older saved UI state. */
+  cinematicTechnique: string;
   styles: StyleChoice[];
   seedLocked: boolean;
   seed: number | null; // seed used when locked (last generation's seed)
@@ -115,9 +119,14 @@ interface FormState {
 
 const LIMITS = { image: 9, video: 3, audio: 3 } as const;
 const STICKY: (keyof FormState)[] = [
-  "refs", "prompt", "aspect", "duration", "quality", "look", "camera", "light", "styles",
+  "refs", "prompt", "aspect", "duration", "quality", "look", "cinematicTechniques", "styles",
   "seedLocked", "seed", "variants", "profileId", "promptHistory", "recentRefs",
 ];
+
+export function selectedCinematicTechniqueIds(state: Pick<FormState, "cinematicTechniques" | "cinematicTechnique">): string[] {
+  const selected = Object.values(state.cinematicTechniques).filter((id) => id && id !== "auto");
+  return selected.length ? selected : state.cinematicTechnique !== "auto" ? [state.cinematicTechnique] : [];
+}
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -139,7 +148,9 @@ export const useForm = create<FormState>((set, get) => ({
   quality: "standard",
   look: "cinema",
   camera: "auto",
-  light: "auto",
+    light: "auto",
+    cinematicTechniques: {},
+    cinematicTechnique: "auto",
   styles: [],
   seedLocked: false,
   seed: null,
@@ -163,6 +174,10 @@ export const useForm = create<FormState>((set, get) => ({
     set({
       ...defaults,
       ...saved,
+      camera: "auto",
+      light: "auto",
+      cinematicTechniques: saved.cinematicTechniques && typeof saved.cinematicTechniques === "object"
+        ? saved.cinematicTechniques : {},
       recentRefs,
       hydrated: true,
       promptRevision: get().promptRevision + 1,
@@ -268,7 +283,7 @@ export const useForm = create<FormState>((set, get) => ({
       duration: p.duration ?? s.duration,
       quality: p.quality ?? s.quality,
       look: p.look ?? get().look,
-      light: p.light ?? get().light,
+      light: "auto",
       styles: (p.styles ?? []).map((st) => ({ style_id: st.style_id, strength: st.strength ?? 1 })),
       seed: g.seed,
       recentRefs: pushRecent(s.recentRefs, refs.map((r) => r.upload)),

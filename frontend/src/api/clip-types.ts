@@ -1,5 +1,5 @@
 import type { Generation } from "./types";
-import type { Plan, Track, TimelineDoc } from "../store/timeline";
+import type { Plan, Track, TimelineDoc } from "../types/timeline";
 
 export interface Passport {
   concept: string; hero: string; costume: string; locations: string; palette: string;

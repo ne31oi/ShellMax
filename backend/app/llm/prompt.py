@@ -10,6 +10,7 @@ Reference honesty rules and the fenced output contract: Minimax Studio V6
 workflows/MiniMax_H3_FaceRefine_Best.json.
 """
 
+import re
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -149,8 +150,14 @@ CINEMA_CRAFT = """=== РЕАЛИЗМ И КИНОШНОСТЬ ===
 
 
 def compose_system(refs: list[RefInfo], duration: float, look: str | None = None,
-                   camera: str | None = "auto", light: str | None = "auto") -> str:
+                   camera: str | None = "auto", light: str | None = "auto",
+                   cinematic_technique: str | None = "auto",
+                   cinematic_techniques: list[str] | None = None) -> str:
     from ..workflow.camera import assistant_camera_block
+    from ..workflow.cinematography import (CAMERA_CATEGORIES, LIGHT_CATEGORY,
+                                           assistant_cinematography_block,
+                                           resolve_cinematic_technique_ids,
+                                           selected_cinematic_techniques)
     from ..workflow.light import assistant_light_block
     from ..workflow.look import assistant_look_hint
 
@@ -160,8 +167,11 @@ def compose_system(refs: list[RefInfo], duration: float, look: str | None = None
                   else "Для такой длины обычно достаточно одного-двух кадров (shots).")
     look_line = assistant_look_hint(look)
     look_block = f"\n=== ПОДАЧА ===\n{look_line}\n" if look_line else ""
-    camera_block = assistant_camera_block(camera)
-    light_block = assistant_light_block(light)
+    selected_ids = resolve_cinematic_technique_ids(cinematic_techniques, cinematic_technique, camera, light)
+    categories = {item["category"] for item in selected_cinematic_techniques(selected_ids)}
+    camera_block = assistant_camera_block(camera) if camera != "auto" or not categories & CAMERA_CATEGORIES else ""
+    light_block = assistant_light_block(light) if light != "auto" or LIGHT_CATEGORY not in categories else ""
+    cinematography_block = assistant_cinematography_block(selected_ids)
     return f"""Ты превращаешь описание пользователя в промпт для видео-модели MiniMax H3 (видео + синхронный звук).
 Пользователь пишет обычными словами, на любом языке, и может ставить метки референсов (<Picture N>, <Video N>, <Audio N>).
 Сохрани его замысел полностью: кто, что делает, где, какие реплики. То, что он не уточнил (камера, свет, физика,
@@ -175,6 +185,7 @@ def compose_system(refs: list[RefInfo], duration: float, look: str | None = None
 {look_block}
 {camera_block}
 {light_block}
+{cinematography_block}
 
 === КЛИП ===
 Длительность: ~{seconds} с. Таймкоды кадров ([Shot 2] At 00:03.000) должны укладываться в неё, последняя склейка ≤ длительность − 2 с.
@@ -239,16 +250,21 @@ EDIT_RULES = """Ты ПРАВИШЬ готовый промпт MiniMax H3 по 
   героя, кроме явно запрошенных пользователем изменений. Действие и постановку сохраняй. При правке только камеры
   или света не меняй внешность и личность персонажа.
 - КРУПНОСТЬ / framing / shot size (крупный план, средний, общий, ECU/CU/MCU/MS/WS, close-up, wide, medium…):
-  это НЕ «оставить как было». Обязательно согласованно перепиши ВСЕ места, где закодирована крупность:
-  (1) «Shot size: …» в блоке CAMERA / SHOT,
-  (2) стартовую фразу каждого [Shot N] в detailed_description (включая клише вроде
-  «at chest-to-head level frames», «head-and-shoulders», «waist-up», «full body», «face filling the frame»),
-  (3) Distance / Lens в CAMERA.
-  «chest-to-head» / «head-and-shoulders» — это КРОП кадра (MCU), а не высота камеры; при другой крупности
-  эти слова ЗАПРЕЩЕНЫ. Высоту пиши отдельно (eye-level / ~1.6 m), кроп — словами новой крупности
-  (ECU: face fills frame; CU: face+neck; MCU: chest-to-head; MS: waist-up; WS: full body / environment dominant).
-  Нельзя писать «wide … at chest-to-head level» — это противоречие. Прежнюю крупность нельзя оставлять нигде.
-  Движение камеры (static / push / orbit…) меняй только если об этом тоже просят.
+  это запрос на КАДРИРОВАНИЕ всего кадра. В этом формате нет отдельного поля CAMERA / SHOT: не добавляй новые поля.
+  Если пользователь не назвал конкретные кадры или не попросил чередование, одна указанная крупность относится
+  ко ВСЕМ [Shot N] во всём промпте и остаётся одинаковой от первого кадра до последнего. Не превращай её в
+  переход «сначала крупный, потом общий» или наоборот.
+  Согласованно перепиши summary и detailed_description: первую фразу каждого [Shot N], дистанцию, оптику,
+  положение героя в кадре, глубину резкости, фокусный якорь и траекторию камеры там, где они противоречат
+  новой крупности. Например, общий план требует полного тела с запасом по краям и читаемого окружения;
+  камера всё время держится на дистанции, позволяющей сохранить этот кадр. Не описывай движение камеры через
+  лицо, наезд до глаз/татуировки или финальный крупный план внутри общего плана. Движение и действие героя
+  сохраняй, если они совместимы с новым кадрированием; при конфликте адаптируй геометрию движения, а не
+  кадрирование.
+  Не оставляй несовместимые указания вроде close-up, medium close-up, head-and-shoulders, chest-to-head,
+  waist-up или face filling the frame в любом из кадров общего плана. Не пиши противоречивые сочетания
+  вроде «wide shot at chest-to-head level». Если пользователь явно задаёт крупности для отдельных кадров,
+  примени их к указанным кадрам, не меняя остальные.
 - Если правка по смыслу затрагивает другие поля (например, «ночь вместо дня» → свет в detailed_description и звук в
   overall_soundscape), обнови их минимально, чтобы промпт остался согласованным.
 - Новые детали пиши так же конкретно, как требует спецификация (действия цепочкой, камера, физика, свет, звук).
@@ -266,26 +282,251 @@ _SHOT_SIZE_HINT = (
 )
 
 
+def _framing_target(instruction: str) -> str | None:
+    low = instruction.casefold().replace("ё", "е")
+    if _preserves_framing(low):
+        return None
+    if (any(k in low for k in ("общи", "дальний план", "wide shot", "long shot", "full body", "full-body"))
+            or re.search(r"\bws\b", low)):
+        return "wide"
+    if (any(k in low for k in ("средний план", "по пояс", "medium shot", "medium framing"))
+            or re.search(r"\bms\b", low)):
+        return "medium"
+    if (any(k in low for k in ("крупный план", "крупным планом", "портретный план", "close-up", "close up", "closeup"))
+            or re.search(r"\b(?:cu|mcu|ecu)\b", low)):
+        return "close"
+    return None
+
+
+def _preserves_framing(low: str) -> bool:
+    preservation_phrases = (
+        "сохрани общий план", "общий план не меняй", "общий план не изменяй",
+        "сохрани крупность", "оставь крупность", "не меняй крупность", "не изменяй крупность",
+        "keep the wide shot", "keep wide", "preserve the framing", "keep the framing",
+        "retain the framing", "keep current framing", "same framing",
+    )
+    change_phrases = (
+        "поменяй план", "поменя план", "измени план", "сделай план", "поменяй крупность",
+        "измени крупность", "сделай крупнее", "сделай шире", "переведи план", "перекадрируй",
+        "change the framing", "change framing", "change shot size", "switch to wide",
+        "change to wide", "make it wide", "make it a wide", "reframe", "go wide", "widen the shot",
+    )
+    return any(phrase in low for phrase in preservation_phrases) and not any(
+        phrase in low for phrase in change_phrases
+    )
+
+
+def _shot_scoped_edit(instruction: str) -> bool:
+    low = instruction.casefold().replace("ё", "е")
+    return bool(re.search(
+        r"(?:\bshot\s*\d+\b|\bкадр\s*\d+\b|\b[1-9]-й\s+кадр\b|\bперв(?:ый|ого)\s+кадр\b|\bвтор(?:ой|ого)\s+кадр\b)",
+        low,
+    ))
+
+
 def shot_size_edit_directive(instruction: str) -> str:
     """Extra user-message mandate when the edit asks to change framing / крупность."""
     low = instruction.casefold()
     if not any(k in low for k in _SHOT_SIZE_HINT):
         return ""
+    target = _framing_target(instruction)
+    if target is None and _preserves_framing(low):
+        return ""
+    scope = ("Примени крупность только к явно названным кадрам; остальные кадры не меняй."
+             if _shot_scoped_edit(instruction) else
+             "Если пользователь не назвал отдельные кадры, примени эту крупность ко ВСЕМ кадрам: один и тот же план от начала до конца.")
+    wide = (
+        "Для общего плана: в каждом [Shot N] покажи героя полностью, с запасом по краям, и оставь окружение читаемым. "
+        "Камера всё время остаётся достаточно далеко; она не пересекает лицо, не приближается к глазам/татуировкам "
+        "и не заканчивает крупным планом. Перепиши summary и весь detailed_description так, чтобы движение, фокус, "
+        "оптика и композиция не тянули кадр обратно в портрет."
+        if target == "wide" else ""
+    )
     return (
-        "\n\nКРУПНОСТЬ (shot size) — ПРИНУДИТЕЛЬНО ИЗМЕНИТЬ ПО ПРОСЬБЕ ВЫШЕ:\n"
-        "Согласованно перепиши (1) Shot size в CAMERA, (2) ВСЮ стартовую фразу каждого [Shot N] "
-        "(не только первое слово — весь кроп), (3) Distance и Lens equivalent.\n"
-        "УДАЛИ из [Shot N] любые хвосты прежней крупности: «chest-to-head level», «head-and-shoulders», "
-        "«waist-up», «face filling», «medium close-up», если они не совпадают с новой крупностью.\n"
-        "«chest-to-head» = кроп MCU, НЕ высота камеры. Для wide/WS пиши full body / environment dominant + "
-        "дистанцию в метрах; для ECU/CU — face fills / face+shoulders. Запрещено: «wide … chest-to-head».\n"
-        "Path/speed камеры не трогай, если об этом не просили."
+        "\n\nКРУПНОСТЬ — ОБЯЗАТЕЛЬНАЯ ПРАВКА ПО ЗАПРОСУ ПОЛЬЗОВАТЕЛЯ:\n"
+        f"{scope}\n"
+        "В схеме промпта есть summary и detailed_description, отдельного CAMERA / SHOT поля нет — не выдумывай его. "
+        "Перепиши крупность в summary, в первой фразе КАЖДОГО нужного [Shot N] и во всех зависимых от неё "
+        "описаниях дистанции, оптики, кадрирования, фокуса и движения камеры. Не оставляй старую крупность "
+        "в середине кадра и не создавай переход между крупностями, если пользователь этого не просил. "
+        f"{wide}\n"
+        "Проверь перед ответом: число кадров сохранено; каждый кадр соответствует запрошенному плану; "
+        "ни одно действие камеры или фокусный якорь не противоречит ему. Верни тот же набор полей и полный промпт."
     )
 
 
+def shot_size_edit_issues(source: str, instruction: str, candidate: str) -> list[str]:
+    """Reject a framing edit that leaves explicit, contradictory shot sizes in the prompt."""
+    target = _framing_target(instruction)
+    if target is None or _shot_scoped_edit(instruction):
+        return []
+
+    def section(text: str, name: str, next_name: str) -> str:
+        match = re.search(rf"(?ims)^\s*{re.escape(name)}\s*:\s*(.*?)(?=^\s*{re.escape(next_name)}\s*:|\Z)", text)
+        return match.group(1).strip() if match else ""
+
+    source_detail = section(source, "detailed_description", "overall_soundscape")
+    detail = section(candidate, "detailed_description", "overall_soundscape")
+    summary = section(candidate, "summary", "retention_analysis").casefold()
+    source_shots = re.findall(r"(?m)^\s*\[Shot\s+\d+\]", source_detail)
+    shots = re.split(r"(?m)^\s*\[Shot\s+\d+\]\s*", detail)[1:]
+    issues: list[str] = []
+    if not detail or len(shots) != len(source_shots):
+        return ["Сохрани число кадров и секцию detailed_description."]
+
+    if target == "wide":
+        broad = re.compile(r"\b(?:wide shot|long shot|full[- ]body|full[- ]length|environment[- ]dominant|full figure)\b", re.I)
+        incompatible = re.compile(
+            r"\b(?:extreme close[- ]up|close[- ]up|medium close[- ]up|medium shot|head[- ]and[- ]shoulders|"
+            r"chest[- ]to[- ]head|waist[- ]up|face filling the frame|face fills the frame|tight portrait)\b", re.I,
+        )
+        camera_detail = re.compile(
+            r"\b(?:camera|lens|focus|framing|composition|view|shot)\b[^.\n]{0,120}\b(?:across (?:(?:the )?(?:his|her|subject's) )?face|"
+            r"push(?:es|ing)?[- ]in (?:to|toward|towards) (?:the |his |her )?(?:face|eyes|eye|tattoo)|"
+            r"zoom(?:s|ing)?[- ]in (?:to|on) (?:the |his |her )?(?:face|eyes|eye|tattoo)|"
+            r"focus(?:es|ed|ing)? (?:on|to) (?:the |his |her )?(?:eyes|eye|face|neck tattoo|tattoo)|"
+            r"focused on (?:the |his |her )?(?:eyes|eye|face|neck tattoo|tattoo))\b", re.I,
+        )
+        if not broad.search(summary[:80]):
+            issues.append("Summary не начинает клип с общего плана.")
+        if incompatible.search(summary) or camera_detail.search(summary):
+            issues.append("В summary остался переход или фокус, который тянет кадр к крупности.")
+        for index, shot in enumerate(shots, 1):
+            lead = shot[:350]
+            if not broad.search(lead):
+                issues.append(f"Кадр {index} не начинается с явного общего плана.")
+            if incompatible.search(shot):
+                issues.append(f"В кадре {index} осталась несовместимая крупность.")
+            if camera_detail.search(shot):
+                issues.append(f"Камера или фокус в кадре {index} снова тянут композицию к лицу/детали.")
+    return issues
+
+
+def lighting_edit_directive(instruction: str) -> str:
+    low = instruction.casefold().replace("ё", "е")
+    if not _lighting_change_requested(low):
+        return ""
+    return (
+        "\n\nLIGHTING EDIT: Apply the requested lighting change consistently to the summary and every [Shot N] "
+        "unless the user names specific shots. Update any dependent lighting descriptions in subject_definitions, "
+        "detailed_description, and visual_style; remove lighting statements that contradict the requested result. "
+        "Preserve camera position, movement, framing, subject action, and identity unless the user asks to change them."
+    )
+
+
+def _lighting_change_requested(low: str) -> bool:
+    light_terms = ("свет", "освещ", "lighting", "light", "illumination", "shadow")
+    change_verbs = (
+        "измени", "изменить", "поменя", "сделай", "сделать", "замени", "заменить",
+        "поставь", "усиль", "освети", "затемни", "смягчи", "убери", "change", "make",
+        "replace", "set", "brighten", "darken", "soften", "harden", "relight",
+    )
+    if not any(term in low for term in light_terms):
+        return False
+    if any(phrase in low for phrase in ("сохрани свет", "свет не меняй", "не меняй свет",
+                                         "сохрани освещение", "keep the light", "don't change the light",
+                                         "preserve the lighting", "keep the lighting")):
+        return False
+    for term in light_terms:
+        start = 0
+        while (index := low.find(term, start)) >= 0:
+            nearby = low[max(0, index - 45):index + len(term) + 45]
+            if any(verb in nearby for verb in change_verbs):
+                return True
+            start = index + len(term)
+    return False
+
+
+def lighting_edit_issues(instruction: str, candidate: str) -> list[str]:
+    """Check explicit lighting qualities/directions requested by the user."""
+    low = instruction.casefold().replace("ё", "е")
+    if not _lighting_change_requested(low):
+        return []
+    text = candidate.casefold()
+    groups = (
+        (("жестк", "hard light", "hard key", "harsh light", "harsh key"), ("hard", "harsh")),
+        (("мягк", "soft light", "soft lighting", "diffused", "diffuse"), ("soft", "diffuse")),
+        (("боков", "side light", "side lighting", "sidelight"), ("side",)),
+        (("справа", "right of camera", "camera-right", "from the right"), ("right",)),
+        (("слева", "left of camera", "camera-left", "from the left"), ("left",)),
+        (("сверху", "верхн", "overhead", "top light", "from above"), ("overhead", "above", "top")),
+        (("снизу", "нижн", "underlight", "from below", "below"), ("below", "under")),
+        (("глубок", "deep shadow", "strong shadow", "high contrast"), ("shadow", "contrast")),
+        (("тепл", "warm light", "warm lighting"), ("warm",)),
+        (("холодн", "cool light", "cool lighting"), ("cool",)),
+    )
+    missing = []
+    for requested, alternatives in groups:
+        if any(term in low for term in requested) and not any(term in text for term in alternatives):
+            missing.append(requested[0])
+    if missing:
+        return ["В освещении не отражены заданные характеристики: " + ", ".join(missing) + "."]
+    return []
+
+
+def cinematic_technique_edit_issues(technique: str | list[str] | None, candidate: str) -> list[str]:
+    """Check that every selected category survived an assistant prompt edit."""
+    from ..workflow.cinematography import selected_cinematic_techniques
+
+    selected_items = selected_cinematic_techniques(technique)
+    if not selected_items:
+        return []
+
+    markers_by_source_id = {
+        "2.2": ("locked-off", "locked off", "static camera", "fixed camera"),
+        "2.3": ("dolly in", "dolly forward", "dolly toward"),
+        "2.4": ("dolly out", "pull out", "pulls back"),
+        "2.6": ("zoom in", "slow zoom", "optical zoom"),
+        "2.8": ("pan", "panning"),
+        "2.9": ("tilt", "tilting"),
+        "2.17": ("orbit", "arc around", "arc move"),
+        "2.19": ("dolly zoom", "vertigo effect"),
+        "3.4": ("wide shot", "long shot"),
+        "3.5": ("full-body", "full body", "head-to-toe"),
+        "3.7": ("medium shot", "waist-up"),
+        "3.8": ("medium close-up", "medium close up", "chest-up"),
+        "3.9": ("close-up", "close up", "tight shot"),
+        "3.10": ("extreme close-up", "extreme close up", "detail shot"),
+        "4.2": ("low angle", "low-angle"),
+        "4.3": ("high angle", "high-angle"),
+        "4.4": ("overhead", "bird's-eye", "top-down"),
+        "4.6": ("dutch angle", "dutch-angle", "tilted horizon"),
+        "6.7": ("frame within a frame", "frame within the frame", "doorway frames", "architectural opening"),
+        "6.8": ("negative space", "open space beside", "empty space beside"),
+        "6.9": ("foreground interest", "foreground object", "foreground edge", "occluding foreground"),
+        "6.10": ("layered depth", "foreground and background", "subject plane", "parallax"),
+        "7.10": ("hard light", "hard key", "hard directional light"),
+        "7.11": ("soft light", "soft key", "diffused light"),
+        "7.12": ("side light", "side lighting", "side-lit"),
+        "7.20": ("practical light", "practical lamp", "visible practical"),
+        "7.21": ("window light", "light from the window", "window as a light source"),
+        "8.2": ("deep focus", "deep depth of field", "foreground and background remain in focus"),
+        "8.3": ("rack focus", "focus shifts", "shifts focus", "focus pull", "pulls focus"),
+        "13.3": ("match on action", "cut on the movement", "cut on action", "cut on the subject", "continues across the cut"),
+    }
+    lower = candidate.lower()
+    issues = []
+    for selected in selected_items:
+        aliases = markers_by_source_id.get(selected["source_id"], ())
+        title = selected["label"].casefold()
+        aliases = (*aliases, title, *(part.strip().casefold() for part in re.split(r"[/()]", title) if len(part.strip()) > 3))
+        if not any(marker and marker in lower for marker in aliases):
+            issues.append(
+                f"В промпте не отражена выбранная кинотехника «{selected['label']}» "
+                f"из категории «{selected['category']}»."
+            )
+    return issues
+
+
 def edit_system(refs: list[RefInfo], duration: float, face: bool = False, look: str | None = None,
-                camera: str | None = "auto", light: str | None = "auto") -> str:
+                camera: str | None = "auto", light: str | None = "auto",
+                cinematic_technique: str | None = "auto",
+                cinematic_techniques: list[str] | None = None) -> str:
     from ..workflow.camera import assistant_camera_block
+    from ..workflow.cinematography import (CAMERA_CATEGORIES, LIGHT_CATEGORY,
+                                           assistant_cinematography_block,
+                                           resolve_cinematic_technique_ids,
+                                           selected_cinematic_techniques)
     from ..workflow.light import assistant_light_block
     from ..workflow.look import assistant_look_hint
 
@@ -296,19 +537,24 @@ def edit_system(refs: list[RefInfo], duration: float, face: bool = False, look: 
                    "кадрирование и движения — как в исходном видео.")
         camera_block = ""
         light_block = ""
+        cinematography_block = ""
     else:
         seconds = max(2.5, round(duration, 1))
         look_line = assistant_look_hint(look)
         look_bit = f"\nПодача: {look_line}" if look_line else ""
         context = (f"Длительность клипа ~{seconds} с (таймкоды кадров должны укладываться в неё).{look_bit}\n\n"
                    f"=== РЕФЕРЕНСЫ ===\n{_refs_block(refs)}")
-        camera_block = f"\n{assistant_camera_block(camera)}\n"
-        light_block = f"\n{assistant_light_block(light)}\n"
+        selected_ids = resolve_cinematic_technique_ids(cinematic_techniques, cinematic_technique, camera, light)
+        categories = {item["category"] for item in selected_cinematic_techniques(selected_ids)}
+        camera_block = f"\n{assistant_camera_block(camera)}\n" if camera != "auto" or not categories & CAMERA_CATEGORIES else ""
+        light_block = f"\n{assistant_light_block(light)}\n" if light != "auto" or LIGHT_CATEGORY not in categories else ""
+        cinematography_block = f"\n{assistant_cinematography_block(selected_ids)}\n"
     return f"""{EDIT_RULES}
 
 {context}
 {camera_block}
 {light_block}
+{cinematography_block}
 {CINEMA_CRAFT if not face else ""}
 
 {SPEC_BLOCK}
@@ -319,13 +565,19 @@ def edit_system(refs: list[RefInfo], duration: float, face: bool = False, look: 
 
 
 def chat_system(refs: list[RefInfo], duration: float, draft: str, fresh: bool, look: str | None = None,
-                camera: str | None = "auto", light: str | None = "auto") -> str:
+                camera: str | None = "auto", light: str | None = "auto",
+                cinematic_technique: str | None = "auto",
+                cinematic_techniques: list[str] | None = None) -> str:
     """Ideas chat (studio assistant-stream.ts buildSystemMessage, adapted to this spec and output contract).
 
     fresh: a new chat (studio правка 166) - the generation panel's refs and draft are NOT shown, so a new
     conversation does not pick up another session's topic.
     """
     from ..workflow.camera import assistant_camera_block
+    from ..workflow.cinematography import (CAMERA_CATEGORIES, LIGHT_CATEGORY,
+                                           assistant_cinematography_block,
+                                           resolve_cinematic_technique_ids,
+                                           selected_cinematic_techniques)
     from ..workflow.light import assistant_light_block
     from ..workflow.look import assistant_look_hint
 
@@ -337,8 +589,12 @@ def chat_system(refs: list[RefInfo], duration: float, draft: str, fresh: bool, l
                        f"ТОЛЬКО если пользователь прямо на него ссылается):\n{draft.strip() or '(пусто)'}")
     look_line = assistant_look_hint(look)
     look_block = f"\nПодача панели генерации: {look_line}\n" if look_line and not fresh else ""
-    camera_block = f"\n{assistant_camera_block(camera)}\n" if not fresh else ""
-    light_block = f"\n{assistant_light_block(light)}\n" if not fresh else ""
+    selected_ids = resolve_cinematic_technique_ids(cinematic_techniques, cinematic_technique, camera, light)
+    categories = {item["category"] for item in selected_cinematic_techniques(selected_ids)}
+    camera_block = f"\n{assistant_camera_block(camera)}\n" if not fresh and (camera != "auto" or not categories & CAMERA_CATEGORIES) else ""
+    light_block = f"\n{assistant_light_block(light)}\n" if not fresh and (light != "auto" or LIGHT_CATEGORY not in categories) else ""
+    # Craft knowledge is global; only the generation panel's selected override is hidden in a fresh chat.
+    cinematography_block = f"\n{assistant_cinematography_block([] if fresh else selected_ids)}\n"
     return f"""Ты — ассистент видео-студии на модели MiniMax H3 (видео + синхронный звук). Помогаешь придумывать идеи
 сцен и превращать их в промпты. Общайся по-русски.
 
@@ -348,6 +604,7 @@ def chat_system(refs: list[RefInfo], duration: float, draft: str, fresh: bool, l
 {look_block}
 {camera_block}
 {light_block}
+{cinematography_block}
 === КОНТЕКСТ СЕССИИ ===
 Длительность клипа: ~{seconds} с (таймкоды кадров должны укладываться в неё, последняя склейка ≤ длительность − 2 с).
 {"На короткой длительности предлагай один shot." if seconds <= 4 else ""}

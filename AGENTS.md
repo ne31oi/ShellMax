@@ -6,11 +6,14 @@ ShellMax — локальное веб-приложение (FastAPI + React), �
 | Тип задачи (`Generation.kind`) | Воркфлоу | Сборщик графа | Тест сверки |
 |---|---|---|---|
 | `generate` — генерация видео | `workflows/MiniMax_H3_Singularity_DualSampling_The_AI_Brief_EN.json` | `workflow/builder.py` | `tests/test_builder.py` |
+| `generate_nvfp4` — NVFP4-вариант генерации | `workflows/ShellMax_NVFP4_DualSampling.json` | `workflow/builder_nvfp4.py` (обёртка над `builder`) | `tests/test_builder_nvfp4.py` |
+| `generate_nvfp4_fast` — быстрый NVFP4 | `workflows/ShellMax_NVFP4_DualSampling_5.json` | `workflow/builder_nvfp4_fast.py` | `tests/test_builder_nvfp4.py` |
 | `face` — улучшение лица на готовом клипе | `workflows/MiniMax_H3_FaceRefine_Best.json` | `workflow/builder_face.py` | `tests/test_builder_face.py` |
 | `enhance` — детализация / апскейл (SeedVR2) | `workflows/ShellMax_SeedVR2_Enhance.json` | `workflow/builder_enhance.py` | `tests/test_builder_enhance.py` |
+| `interpolate` — интерполяция кадров (RIFE) | `workflows/ShellMax_Interpolate.json` | `workflow/builder_interpolate.py` | `tests/test_builder_interpolate.py` |
 
-- **Сейчас:** готовы этапы 0–2 (движок, бэкенд, студия генерации), улучшение лица и детализация SeedVR2.
-- **Следующее:** этап 3 — NLE v1 (дорожки, обрезка, экспорт через ffmpeg).
+- **Сейчас:** студия генерации (в т.ч. NVFP4), улучшение лица, SeedVR2, интерполяция, NLE v1 (дорожки / планы / экспорт).
+- **Следующее:** углубление NLE и полировка UX монтажа.
 
 Пользовательская документация — `README.md`. Язык интерфейса и общения с пользователем — русский.
 
@@ -22,7 +25,7 @@ ShellMax — локальное веб-приложение (FastAPI + React), �
    - Каждый сборщик (`builder.py`, `builder_face.py`) строит API-граф с **теми же ID нод**, что в своём исходном JSON.
    - Допустимые отличия только сохраняющие значения, они перечислены в docstring сборщика.
    - Тесты сверки (`test_builder*.py`) проверяют каждую связь и каждое значение с исходным JSON и обязаны проходить.
-   - Новый тип задачи = новый воркфлоу в `workflows/`, свой сборщик и свой тест сверки, `Pipeline` в `jobs/pipelines.py`, этапы в `frontend/src/lib/stages.ts`.
+   - Новый тип задачи = новый воркфлоу в `workflows/`, свой сборщик и свой тест сверки, запись в **kind registry** (`jobs/registry.py`), `Pipeline` в `jobs/pipelines.py`, этапы в `frontend/src/lib/stages.ts`. Не копировать `create_*` / if-elif по kind.
    - Намеренное изменение семантики — только по явной просьбе пользователя: тогда меняются тест и `config/defaults.json`, а в ответе пользователю объясняется, что и почему изменилось.
 2. **Значения по умолчанию = значения воркфлоу.**
    - Они живут в `config/defaults.json` (модели, LoRA, пресет «Стандарт» = 0.5 МП × 1.5) и в `ExpertParams` (`params.py`).
@@ -31,7 +34,7 @@ ShellMax — локальное веб-приложение (FastAPI + React), �
    - Основная установка пользователя `F:\ComfyUI_LTX\...` — только источник моделей (read-only). Её нельзя изменять или останавливать: её ComfyUI работает на порту 8188.
    - Модели никогда не копируются: только абсолютные пути и `extra_model_paths.yaml`.
 4. **UX: минимум настроек на экране.** Пользователь явно этого требует.
-   - Панель генерации: референсы, промпт, 4 чипа (формат, длительность, качество, стиль), кнопка. Новые ручки туда не добавлять.
+   - Панель генерации: референсы, промпт, 5 чипов (формат, длительность, качество, подача/look, стиль), кнопка. Новые ручки туда не добавлять.
    - Новый параметр размещай по частоте изменения:
      - каждую генерацию — панель;
      - часто — чип;
@@ -66,16 +69,27 @@ ShellMax — локальное веб-приложение (FastAPI + React), �
 | `backend/app/workflow/builder.py` | `FullParams` → API-граф; `STAGE_BY_NODE`, выходные ноды черновика (135) и финала (141) |
 | `backend/app/workflow/builder_face.py` | `FaceFullParams` → граф улучшения лица; превью трекинга (26), отчёт трекера (28), финал (23) |
 | `backend/app/workflow/builder_enhance.py` | `EnhanceFullParams` → граф SeedVR2; финал (13) |
+| `backend/app/workflow/builder_interpolate.py` | `InterpolateFullParams` → граф RIFE; финал |
+| `backend/app/workflow/builder_nvfp4.py` / `_fast` | Обёртки над `builder.build_prompt` для NVFP4-воркфлоу |
 | `backend/app/workflow/face.py` | Улучшение лица: рецепт по умолчанию, шаблон промпта крупного плана, сетка кадров 17k+5, автодетекция лица для рамки `<Picture 2>` (YuNet → haar) |
 | `backend/app/workflow/look.py` | Подача (cinema/social/…): подсказки в `visual_style` и ассистенту |
 | `backend/app/workflow/camera.py` | Приёмы камеры HSE→H3 + Shot Bible: геометрия, NEGATIVE, one-motion; приоритет эксперт > текст > вывод |
 | `backend/app/workflow/light.py` | Экспертный свет (геометрия ключа): каталог, директивы ассистенту, `apply_light` → `visual_style` |
 | `backend/app/workflow/enhance.py` | SeedVR2: рецепт, пресеты масштаба/цвета, work units |
+| `backend/app/workflow/interpolate.py` | RIFE: рецепт, multiplier, work units |
 | `backend/app/jobs/pipelines.py` | Для каждого типа задачи: этапы с весами, нода → этап, выходные ноды, нода отчёта |
-| `backend/app/jobs/queue.py` | Очередь (одна задача за раз), WS-события ComfyUI → этапы, шаги, прогресс; сохранение черновика и финала; `humanize_error` |
+| `backend/app/jobs/registry.py` | Kind registry: build / expand / title / upload_refs — единая точка вместо if/elif |
+| `backend/app/jobs/errors.py` | `humanize_error` / `describe_rejection` — человеческие ошибки очереди |
+| `backend/app/jobs/persist.py` | `register_asset` / `push_generation` — сохранение медиа и live-пуш |
+| `backend/app/jobs/queue.py` | Очередь (одна задача за раз), WS-события ComfyUI → этапы, шаги, прогресс; сохранение черновика и финала |
 | `backend/app/comfy/supervisor.py` | Процесс движка: лог в `data/engine.log`, PID в `data/engine.pid`, повторный подхват после рестарта бэкенда |
 | `backend/app/comfy/client.py` | REST и WS клиента ComfyUI |
-| `backend/app/api.py` | Все HTTP-роуты `/api/*` и WS `/api/ws` |
+| `backend/app/api.py` | Агрегатор `/api` + WS; подключает engine/library/generations/projects |
+| `backend/app/engine_api.py` | Meta, quality, engine, profiles, styles, fs |
+| `backend/app/library_api.py` | Uploads и assets |
+| `backend/app/generations_api.py` | Generations + face/enhance/interpolate |
+| `backend/app/projects_api.py` | Projects, timeline, export, plans, beats |
+| `backend/app/api_common.py` | `state` / `not_found` для роутеров |
 | `backend/app/services.py` | Бутстрап (проект и профиль при первом запуске), загрузки, создание генераций |
 | `backend/app/llm/` | Ассистент: `registry` (модели/URL как в студии), `downloader`, `runner` (llama-server :8090), `prompt` (системные промпты compose/face), `service` (арбитраж VRAM, стрим) |
 | `backend/app/assistant_api.py` | `/api/assistant/*`: status, models, download, settings, compose (SSE), edit (SSE, правка готового промпта словами), face-prompt (SSE), chats (CRUD) + `chats/{id}/send` (SSE, чат идей; ответ сохраняет сервер), attachments (картинки только для чата), stop, unload |
@@ -97,10 +111,23 @@ ComfyUI WS (executing / progress / executed / execution_*) → queue._on_ws
   → Generation (stage, progress) + live-поле step → hub → /api/ws → frontend lib/live.ts → store/library
 ```
 
-**Этапы синхронизированы в трёх местах.** Меняй вместе:
-- `STAGE_BY_NODE` в сборщике (`builder.py` / `builder_face.py`);
+**Этапы синхронизированы в четырёх местах.** Меняй вместе:
+- `STAGE_BY_NODE` в сборщике (`builder*.py`);
 - `jobs/pipelines.py` (список и веса этапов для типа задачи);
-- `frontend/src/lib/stages.ts` (`STAGES_BY_KIND`).
+- `jobs/registry.py` (kind → build / expand / title / …);
+- `frontend/src/lib/stages.ts` (`STAGES_BY_KIND`; варианты generate ссылаются на один массив, не дублируют список).
+
+## Анти-долг / архитектура
+
+Нарушать нельзя — иначе копипаста и god-файлы возвращаются:
+
+1. **Новый `Generation.kind`** = workflow + builder + тест сверки + запись в `jobs/registry.py` + `PIPELINES` + `stages.ts`. Не добавлять четвёртый `create_*` и не размножать if/elif в `queue` / retry.
+2. **Новый post-process UI** (лицо / апскейл / интерполяция / …) = расширение `PostProcessDialogShell` / `useAssetJobForm`, не новый диалог с копипастой lifecycle.
+3. **Этапы generate-вариантов** (`generate_nvfp4*`) — только ссылка на общий `GENERATE_STAGES`, не копия массива.
+4. **Scratch запрещён в репо:** `_patch_*`, одноразовые аудиты в `docs/`, временные скрипты рядом с `app/` — без явной просьбы пользователя не коммитить и не оставлять.
+5. **God-модули:** при правке `TimelineStrip` / `Viewer` / `store/timeline` сначала вынести затронутый кусок в соседний файл; не наращивать монолит. Целевой размер модуля после extract — порядка сотен строк, не тысяч.
+6. **Слои:** `api/client` не импортирует zustand; API DTO не тянут типы из store; domain-логика не живёт в HTTP-хендлерах (роуты тонкие, логика в `services` / `jobs`).
+7. **Общие хелперы** (peaks, `missing_file`, `_link`, `_resolve`, `persist_generation`) — одна реализация; второй копии не заводить.
 
 ## Команды
 

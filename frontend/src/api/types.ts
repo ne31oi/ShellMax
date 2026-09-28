@@ -329,6 +329,14 @@ export interface LightPreset {
   hint: string;
 }
 
+export interface CinematicTechniquePreset {
+  id: string;
+  label: string;
+  category: string;
+  hint: string;
+  source_id?: string;
+}
+
 export interface QualityPresetValues {
   label: string;
   megapixels: number;
@@ -348,6 +356,7 @@ export interface Meta {
   look: LookPreset[];
   camera?: CameraPreset[];
   light?: LightPreset[];
+  cinematic_technique?: CinematicTechniquePreset[];
   duration: { min: number; max: number; optimal: [number, number] };
   max_refs: Record<RefKind, number>;
   defaults: { aspect: string; duration: number; quality: string; look?: string; camera?: string; light?: string; prompt_template: string };
@@ -451,7 +460,8 @@ export interface Estimate {
 }
 
 export type AssistantEvent =
-  | { stage: "loading" | "writing" }
+  | { stage: "loading" | "writing" | "repairing" }
   | { delta: string }
+  | { replace: string }
   | { done: true; prompt: string; cancelled: boolean }
   | { error: string };

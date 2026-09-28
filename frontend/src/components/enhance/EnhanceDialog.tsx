@@ -1,11 +1,18 @@
 import { Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
-import { api, ApiError, urls } from "../../api/client";
+import { api } from "../../api/client";
 import type { EnhanceDefaults, Estimate } from "../../api/types";
-import { estimateBasis, fileName, fmtEstimate, fmtSeconds } from "../../lib/format";
+import { fileName } from "../../lib/format";
 import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
-import { Button, Dialog, ErrorMessage, SectionTitle, Select, Spinner } from "../ui";
+import {
+  AssetPreviewCard,
+  JobFooter,
+  JobLoading,
+  ModelEstimateLine,
+  runAssetJob,
+} from "../jobs/PostProcessShell";
+import { Dialog, ErrorMessage, SectionTitle, Select } from "../ui";
 
 /**
  * SeedVR2 post-enhance on a finished clip: restore detail (and optional upscale).
@@ -64,37 +71,26 @@ function EnhanceForm({
     api.enhanceEstimate(assetId, scale).then(setEstimate).catch(() => setEstimate(null));
   }, [assetId, scale, defaults]);
 
-  const submit = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      const g = await api.enhance({
-        source_asset_id: assetId,
-        scale,
-        strength,
-        color_correction: color as "lab" | "wavelet" | "adain" | "none",
-        seed: fromGen?.seed ?? null,
-      });
-      useLibrary.getState().upsertGeneration(g);
-      useUI.getState().selectGen(g.id);
-      onDone();
-    } catch (e) {
-      if (e instanceof ApiError && typeof e.detail === "object" && e.detail && (e.detail as { kind?: string }).kind === "missing_file") {
-        useUI.getState().toast(e.message, "bad");
-      }
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (!defaults) {
-    return (
-      <div className="flex h-48 items-center justify-center gap-2 text-muted">
-        {error ? <ErrorMessage text={error} /> : <><Spinner /> Готовлю клип…</>}
-      </div>
+  const submit = () =>
+    runAssetJob(
+      () =>
+        api.enhance({
+          source_asset_id: assetId,
+          scale,
+          strength,
+          color_correction: color as "lab" | "wavelet" | "adain" | "none",
+          seed: fromGen?.seed ?? null,
+        }),
+      {
+        upsert: (g) => useLibrary.getState().upsertGeneration(g),
+        select: (id) => useUI.getState().selectGen(id),
+        onDone,
+        setBusy,
+        setError,
+      },
     );
-  }
+
+  if (!defaults) return <JobLoading error={error} />;
 
   const scaleOptions = (defaults.scale_presets ?? []).map((p) => ({
     value: String(p.scale),
@@ -108,7 +104,6 @@ function EnhanceForm({
     value: p.id,
     label: `${p.label} — ${p.hint}`,
   }));
-  const modelLabel = defaults.unet ? fileName(defaults.unet) : "модель не найдена";
   const fps = defaults.asset.fps || 24;
   const duration = defaults.asset.duration ?? defaults.frames / fps;
 
@@ -119,20 +114,7 @@ function EnhanceForm({
         (подмешивание исходника), чтобы не пережечь уже резкий клип MiniMax. Звук сохраняется.
       </p>
 
-      <div className="flex items-center gap-3 rounded-xl border border-line bg-raised/40 p-2.5">
-        {defaults.asset.thumb && (
-          <img src={urls.assetThumb(defaults.asset.id)} alt="" className="h-12 w-20 rounded object-cover" />
-        )}
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px]">{defaults.asset.name}</p>
-          <p className="text-[11px] text-faint tabular-nums">
-            {defaults.frames} кадров · {fmtSeconds(duration)}
-            {defaults.asset.width && defaults.asset.height
-              ? ` · ${defaults.asset.width}×${defaults.asset.height}`
-              : ""}
-          </p>
-        </div>
-      </div>
+      <AssetPreviewCard asset={defaults.asset} frames={defaults.frames} durationSec={duration} />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
@@ -165,26 +147,17 @@ function EnhanceForm({
         />
       </div>
 
-      <p className="text-[11px] text-faint">
-        Модель: {modelLabel}
-        {estimate ? (
-          <>
-            {" · "}
-            <span title={estimateBasis(estimate)}>{fmtEstimate(estimate.seconds)}</span>
-          </>
-        ) : null}
-      </p>
-
+      <ModelEstimateLine modelLabel={defaults.unet ? fileName(defaults.unet) : "модель не найдена"} estimate={estimate} />
       {error && <ErrorMessage text={error} />}
 
-      <div className="flex justify-end gap-2 border-t border-line pt-4">
-        <Button variant="ghost" onClick={onDone} disabled={busy}>
-          Отмена
-        </Button>
-        <Button variant="primary" size="lg" onClick={submit} disabled={busy} title={estimateBasis(estimate)}>
-          {busy ? <Spinner /> : <Sparkles size={15} />} Детализировать
-        </Button>
-      </div>
+      <JobFooter
+        onCancel={onDone}
+        onSubmit={submit}
+        busy={busy}
+        estimate={estimate}
+        label="Детализировать"
+        icon={<Sparkles size={15} />}
+      />
     </div>
   );
 }

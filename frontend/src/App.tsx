@@ -19,14 +19,14 @@ import { TimelineStrip } from "./components/timeline/TimelineStrip";
 import { PlanInspector } from "./components/timeline/PlanInspector";
 import { IconButton, Kbd, Spinner, TipProvider } from "./components/ui";
 import { Viewer } from "./components/viewer/Viewer";
-import { api } from "./api/client";
+import { api, setApiProjectId } from "./api/client";
 import { useHotkeys } from "./lib/hotkeys";
 import { connectLive } from "./lib/live";
+import { ensurePlanFormSync, unbindPlanForm } from "./lib/planForm";
 import { useAssistant } from "./store/assistant";
 import { useForm, flushFormPersist } from "./store/form";
 import { defaultProfile, useLibrary } from "./store/library";
 import { type TimelineDoc, flushTimelinePersist, useTimeline } from "./store/timeline";
-import { unbindPlanForm } from "./lib/planForm";
 import { useUI } from "./store/ui";
 
 export default function App() {
@@ -38,6 +38,7 @@ export default function App() {
   const toggleBin = useUI((s) => s.toggleBin);
   const togglePanel = useUI((s) => s.togglePanel);
   const openSettings = useUI((s) => s.openSettings);
+  const projectId = useUI((s) => s.projectId);
   const selectedPlanId = useTimeline((s) => s.selectedPlanId);
   const showPlanPanel = workspace === "edit" && !!selectedPlanId;
 
@@ -46,6 +47,14 @@ export default function App() {
   const [timelineH, , adjustTimelineH] = usePanelSize("timeline.edit", 380, 140, 640);
 
   useHotkeys();
+
+  useEffect(() => {
+    ensurePlanFormSync();
+  }, []);
+
+  useEffect(() => {
+    setApiProjectId(projectId);
+  }, [projectId]);
 
   useEffect(() => {
     const stop = connectLive();

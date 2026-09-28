@@ -195,12 +195,14 @@ export function Dialog({
   title,
   children,
   wide,
+  extraWide,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   title: ReactNode;
   children: ReactNode;
   wide?: boolean;
+  extraWide?: boolean;
 }) {
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
@@ -209,7 +211,8 @@ export function Dialog({
         <DialogPrimitive.Content
           className={clsx(
             "fixed left-1/2 top-1/2 z-50 flex max-h-[88vh] w-[92vw] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-line bg-panel shadow-2xl outline-none",
-            wide ? "max-w-4xl" : "max-w-lg",
+            extraWide && "max-h-[94vh] w-[96vw]",
+            extraWide ? "max-w-6xl" : wide ? "max-w-4xl" : "max-w-lg",
           )}
         >
           <div className="flex items-center justify-between border-b border-line px-5 py-3">

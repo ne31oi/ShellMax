@@ -10,6 +10,7 @@ all value-preserving:
   - node 8 (optional separate vocal stem) is disabled in the original and not built.
 """
 
+from .graph_util import link as _link
 from .params import FPS, FaceFullParams
 
 STAGE_BY_NODE = {
@@ -25,10 +26,6 @@ TRACK_PREVIEW_NODE = "26"
 TRACK_REPORT_NODE = "28"
 FINAL_OUTPUT_NODE = "23"
 SAMPLER_NODES = ("18",)
-
-
-def _link(node_id: str, slot: int = 0) -> list:
-    return [node_id, slot]
 
 
 def build_face_prompt(p: FaceFullParams) -> dict:

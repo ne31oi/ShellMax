@@ -29,8 +29,18 @@ import type {
   UIParams,
   Upload,
 } from "./types";
-import { useUI } from "../store/ui";
 import type { ClipProject, ClipListItem, ClipEdit, ClipOperation, ClipJob, PlanProposal, AssemblyProposal } from "./clip-types";
+
+/** Bound by App when the active project changes — keeps HTTP layer free of zustand. */
+let _projectId = 1;
+
+export function setApiProjectId(id: number): void {
+  _projectId = id;
+}
+
+export function getApiProjectId(): number {
+  return _projectId;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -84,7 +94,7 @@ const q = (params: Record<string, string | number>) =>
 
 /** Active project for REST calls that scope media/jobs. */
 function pid(explicit?: number): number {
-  return explicit ?? useUI.getState().projectId;
+  return explicit ?? _projectId;
 }
 
 export const api = {

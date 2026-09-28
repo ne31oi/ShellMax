@@ -1,0 +1,13 @@
+---
+description: NLE/viewer modules — extract before growing TimelineStrip, Viewer, or timeline store
+globs: frontend/src/components/timeline/**,frontend/src/components/viewer/**,frontend/src/store/timeline*
+alwaysApply: false
+---
+
+# NLE / viewer modules
+
+- Prefer small files under `components/timeline/`, `components/viewer/`, `store/timeline/`.
+- Before adding logic to `TimelineStrip`, `Viewer`, or the timeline store facade: extract the touched concern (TrackRow, Player, commands, queries, …).
+- Timeline mutations only via `commands.*` / `run` (undo/redo). Do not write `doc` directly from UI.
+- Keep `PlanBatchBar` in its own module — do not couple strip ↔ PlanInspector through exports.
+- Behavior and hotkeys stay unchanged during extract refactors.

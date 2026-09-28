@@ -8,7 +8,7 @@ export type AssistantTarget = "compose" | "edit" | "face" | "chat";
 
 interface AssistantJob {
   target: AssistantTarget;
-  stage: "loading" | "writing";
+  stage: "loading" | "writing" | "repairing";
   text: string; // raw reply so far (shown live)
 }
 
@@ -63,6 +63,7 @@ export const useAssistant = create<AssistantState>((set, get) => ({
         (e) => {
           if ("stage" in e) set((s) => ({ job: s.job && { ...s.job, stage: e.stage } }));
           else if ("delta" in e) set((s) => ({ job: s.job && { ...s.job, stage: "writing", text: s.job.text + e.delta } }));
+          else if ("replace" in e) set((s) => ({ job: s.job && { ...s.job, stage: "writing", text: e.replace } }));
           else if ("error" in e) {
             if (e.error === "model_missing") set({ setupOpen: true });
             else useUI.getState().toast(e.error, "bad");
