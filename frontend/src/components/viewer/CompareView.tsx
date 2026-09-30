@@ -1,17 +1,19 @@
 import { Pause, Play, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { urls } from "../../api/client";
-import type { MediaAsset } from "../../api/types";
 import { on } from "../../lib/bus";
 import { useUI } from "../../store/ui";
 import { Button, IconButton } from "../ui";
 
 export function CompareView({ a, b, labelA, labelB, onClose, closeLabel = "Закрыть сравнение" }: {
-  a: MediaAsset; b: MediaAsset; labelA: string; labelB: string; onClose?: () => void; closeLabel?: string;
+  a: { id: number }; b: { id: number }; labelA: string; labelB: string; onClose?: () => void; closeLabel?: string;
 }) {
   const va = useRef<HTMLVideoElement>(null);
   const vb = useRef<HTMLVideoElement>(null);
   const [split, setSplit] = useState(0.5);
+  const [layout, setLayout] = useState<"wipe" | "side">("wipe");
+  const [time, setTime] = useState(0);
+  const [duration, setDuration] = useState(0);
   const [playing, setPlaying] = useState(true);
   const playingRef = useRef(true);
   const box = useRef<HTMLDivElement>(null);
@@ -63,6 +65,7 @@ export function CompareView({ a, b, labelA, labelB, onClose, closeLabel = "За�
     synced.current = false;
     lastMirror.current = -1;
     setPlaying(true);
+    setTime(0);
     playingRef.current = true;
     let raf = 0;
     let alive = true;
@@ -111,14 +114,16 @@ export function CompareView({ a, b, labelA, labelB, onClose, closeLabel = "За�
     <div className="flex h-full flex-col">
       <div
         ref={box}
-        className="relative m-3 flex-1 cursor-ew-resize overflow-hidden rounded-md bg-black"
+        className={`relative m-3 flex-1 overflow-hidden rounded-md bg-black ${layout === "wipe" ? "cursor-ew-resize" : "cursor-pointer"}`}
         onMouseMove={(e) => {
+          if (layout !== "wipe") return;
           if (e.buttons !== 1) return;
           scrubbing.current = true;
           const r = box.current!.getBoundingClientRect();
           setSplit(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)));
         }}
         onMouseDown={(e) => {
+          if (layout !== "wipe") return;
           scrubbing.current = false;
           const r = box.current!.getBoundingClientRect();
           setSplit(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)));
@@ -139,8 +144,10 @@ export function CompareView({ a, b, labelA, labelB, onClose, closeLabel = "За�
           loop
           playsInline
           preload="auto"
-          className="absolute inset-0 h-full w-full object-contain"
+          className={layout === "wipe" ? "absolute inset-0 h-full w-full object-contain" : "absolute inset-y-0 left-0 h-full w-1/2 object-contain"}
           onLoadedData={trySync}
+          onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
+          onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
           onPlay={() => setPlaying(true)}
           onPause={() => {
             setPlaying(false);
@@ -155,11 +162,12 @@ export function CompareView({ a, b, labelA, labelB, onClose, closeLabel = "За�
           muted
           playsInline
           preload="auto"
-          className="pointer-events-none absolute inset-0 h-full w-full object-contain"
-          style={{ clipPath: `inset(0 0 0 ${split * 100}%)` }}
+          className={layout === "wipe" ? "pointer-events-none absolute inset-0 h-full w-full object-contain" : "pointer-events-none absolute inset-y-0 right-0 h-full w-1/2 object-contain"}
+          style={layout === "wipe" ? { clipPath: `inset(0 0 0 ${split * 100}%)` } : undefined}
           onLoadedData={trySync}
         />
-        <div className="pointer-events-none absolute inset-y-0 w-0.5 bg-white/80" style={{ left: `${split * 100}%` }} />
+        {layout === "wipe" && <div className="pointer-events-none absolute inset-y-0 w-0.5 bg-white/80" style={{ left: `${split * 100}%` }} />}
+        {layout === "side" && <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-white/40" />}
         <span className="pointer-events-none absolute left-3 top-3 rounded bg-black/70 px-1.5 text-xs">{labelA}</span>
         <span className="pointer-events-none absolute right-3 top-3 rounded bg-black/70 px-1.5 text-xs">{labelB}</span>
         {!playing && (
@@ -170,11 +178,14 @@ export function CompareView({ a, b, labelA, labelB, onClose, closeLabel = "За�
           </span>
         )}
       </div>
-      <div className="flex items-center justify-center gap-2 pb-2 text-xs text-muted">
+      <div className="flex flex-wrap items-center justify-center gap-2 px-3 pb-2 text-xs text-muted">
         <IconButton label={playing ? "Пауза (Пробел)" : "Пуск (Пробел)"} onClick={togglePlay}>
           {playing ? <Pause size={16} /> : <Play size={16} />}
         </IconButton>
-        <span>Тяните по кадру — шторка · клик / Пробел — пуск и пауза</span>
+        <Button size="sm" variant={layout === "wipe" ? "primary" : "ghost"} onClick={() => setLayout("wipe")}>Шторка</Button>
+        <Button size="sm" variant={layout === "side" ? "primary" : "ghost"} onClick={() => setLayout("side")}>Рядом</Button>
+        <input type="range" aria-label="Позиция сравнения" className="min-w-24 flex-1" min={0} max={duration || 1} step={0.01} value={Math.min(time, duration || 1)} onChange={(e) => { if (va.current) { va.current.currentTime = Number(e.target.value); setTime(Number(e.target.value)); mirror(true); } }} />
+        <span className="tabular-nums">{time.toFixed(1)} / {duration.toFixed(1)} с</span>
         <Button size="sm" variant="ghost" onClick={onClose ?? (() => useUI.getState().compare(null))}>
           <X size={12} /> {closeLabel}
         </Button>

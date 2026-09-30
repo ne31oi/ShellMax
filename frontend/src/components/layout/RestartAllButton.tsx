@@ -1,4 +1,4 @@
-import { Power } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useRestartAll } from "../../lib/restart";
 import { IconButton } from "../ui";
 
@@ -8,7 +8,7 @@ export function RestartAllButton() {
   return (
     <>
       <IconButton label="Перезапустить всё" disabled={restarting} onClick={restartAll}>
-        <Power size={16} />
+        <RefreshCw size={16} className={restarting ? "animate-spin" : undefined} />
       </IconButton>
       {overlay}
     </>

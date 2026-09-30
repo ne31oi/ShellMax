@@ -47,6 +47,9 @@ class Upload(SQLModel, table=True):
     id: str = Field(primary_key=True)
     kind: str  # image | video | audio
     orig_name: str
+    name: str = ""
+    category: str = "other"  # character | location | object | style | other
+    description: str = ""
     path: str
     duration: float | None = None
     width: int | None = None
@@ -170,6 +173,9 @@ _ADDED_COLUMNS = [
     ("generation", "info", "JSON"),
     ("upload", "source_id", "VARCHAR"),
     ("upload", "edit", "JSON"),
+    ("upload", "name", "VARCHAR DEFAULT '' NOT NULL"),
+    ("upload", "category", "VARCHAR DEFAULT 'other' NOT NULL"),
+    ("upload", "description", "VARCHAR DEFAULT '' NOT NULL"),
 ]
 
 

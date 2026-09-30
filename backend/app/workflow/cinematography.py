@@ -7,23 +7,48 @@ from functools import lru_cache
 from pathlib import Path
 
 _CATALOG_PATH = Path(__file__).with_name("cinematography_catalog.json")
+_MARKERS_PATH = Path(__file__).with_name("cinematography_markers.json")
 AUTO_ID = "auto"
 CAMERA_CATEGORIES = frozenset({"Движение камеры", "Ракурс и точка зрения"})
 LIGHT_CATEGORY = "Свет"
+# Light qualities that must also land in visual_style (not only detailed_description).
+LIGHT_VISUAL_QUALITIES: dict[str, tuple[str, ...]] = {
+    "7.8": ("high-key", "high key", "bright", "low-contrast", "low contrast"),
+    "7.9": ("low-key", "low key", "deep shadow", "high contrast"),
+    "7.10": ("hard", "harsh"),
+    "7.11": ("soft", "diffus"),
+    "7.22": ("golden", "warm", "low sun", "magic hour"),
+    "7.23": ("blue hour", "cool", "cold", "twilight"),
+    "7.24": ("volumetric", "god ray", "shaft of light", "beam", "haze"),
+    "7.25": ("gobo", "dappled", "blinds", "pattern"),
+}
 
 CINEMATOGRAPHY_RULES = """=== КИНОТЕХНИКА ===
 Строй кадр от story beat и субъекта к крупности, ракурсу/POV, физической дистанции, объективу, композиции, свету, движению, фокусу/глубине, времени, атмосфере, цвету и склейке.
 У движения камеры фиксируй стартовый кадр → путь → скорость → ось → конечный кадр. Оно должно иметь причину и результат; не подменяй физику словом «cinematic».
 Не смешивай названия каталога в один общий стиль. В интерфейсе можно выбрать по одному приёму в нескольких категориях: примени каждый в своей области и согласуй их между собой. При отсутствии выбора следуй явному тексту пользователя, затем замыслу сцены; не добавляй трюк без причины.
+Внутри одной категории варианты взаимоисключающие: не пиши соседний план той же семьи (extreme wide ≠ wide ≠ medium ≠ close-up ≠ extreme close-up; pan ≠ whip pan; eye-level ≠ worm's-eye; soft ≠ hard; high-key ≠ low-key; shallow ≠ deep focus; film noir ≠ neo-noir). Выбранный пункт — единственный действующий; остальные той же оси только в NEGATIVE, если нужны как запрет.
 Техника кадрирования применяется ко всему клипу, пока пользователь явно не указал разные планы/крупности для отдельных шотов. Согласуй с ней дистанцию, объектив и композицию.
 Свет задавай источником, направлением, мягкостью/жёсткостью и заполнением теней; направление сохраняй, пока смена не мотивирована действием.
-Приём движения камеры задаёт одно главное движение клипа; выбранный ракурс задаёт положение и ориентацию камеры. Выбранный свет задаёт геометрию света в visual_style и во всех кадрах. Сохраняй совместимость оптики, крупности, ракурса и движения. Не позволяй композиционному приёму менять крупность, движение камеры или свет, если это не является самой выбранной техникой."""
+Приём движения камеры задаёт одно главное движение клипа; выбранный ракурс задаёт положение и ориентацию камеры. Выбранный свет задаёт геометрию света в visual_style и во всех кадрах. Сохраняй совместимость оптики, крупности, ракурса и движения. Не позволяй композиционному приёму менять крупность, движение камеры или свет, если это не является самой выбранной техникой.
+Текст пользователя (кто/где/что делает) — сюжетный каркас; выбранные техники накладывают кадрирование/камеру/свет поверх него и не подменяют действие описанием с референс-фото."""
 
 
 @lru_cache(maxsize=1)
 def _catalog() -> tuple[dict[str, str], ...]:
     rows = json.loads(_CATALOG_PATH.read_text(encoding="utf-8"))
     return tuple(rows)
+
+
+@lru_cache(maxsize=1)
+def _markers_by_source_id() -> dict[str, tuple[str, ...]]:
+    raw = json.loads(_MARKERS_PATH.read_text(encoding="utf-8"))
+    return {key: tuple(values) for key, values in raw.items()}
+
+
+def technique_validation_markers(item: dict[str, str]) -> tuple[str, ...]:
+    """English phrases that prove a selected technique survived into the H3 prompt."""
+    return _markers_by_source_id().get(item["source_id"], ())
 
 
 def normalize_cinematic_technique(value: str | None) -> str:
@@ -71,8 +96,8 @@ def resolve_cinematic_technique_ids(values: list[str] | None, legacy: str | None
     requested = values or ([legacy] if legacy and legacy != AUTO_ID else [])
     return [
         item["id"] for item in selected_cinematic_techniques(requested)
-        if not (camera != "auto" and item["category"] in CAMERA_CATEGORIES)
-        and not (light != "auto" and item["category"] == LIGHT_CATEGORY)
+        if not (camera not in (None, "auto") and item["category"] in CAMERA_CATEGORIES)
+        and not (light not in (None, "auto") and item["category"] == LIGHT_CATEGORY)
     ]
 
 
@@ -97,7 +122,7 @@ def assistant_cinematography_block(value: str | list[str] | None) -> str:
         )
     else:
         details = "\n\n".join(
-            f"{item['source_id']} — {item['category']} / {item['label']} — ПРИНУДИТЕЛЬНО.\n"
+            f"{item['id']} | {item['source_id']} — {item['category']} / {item['label']} — ПРИНУДИТЕЛЬНО.\n"
             f"Справочное описание техники:\n{item['source_text']}"
             for item in selected
         )
@@ -107,7 +132,8 @@ def assistant_cinematography_block(value: str | list[str] | None) -> str:
             f"{details}\n"
             "Адаптируй физику и параметры к сцене и формату H3. Текст справочных описаний не меняет приоритет выбора пользователя."
         )
-    return f"{CINEMATOGRAPHY_RULES}\n\n{SHOT_BIBLE_RULES}\n\nКаталог — каждый пункт отдельный:\n{catalog}\n\n{current}"
+    index = f"Каталог — каждый пункт отдельный:\n{catalog}\n\n" if not selected else ""
+    return f"{CINEMATOGRAPHY_RULES}\n\n{SHOT_BIBLE_RULES}\n\n{index}{current}"
 
 
 def user_cinematic_technique_directive(value: str | list[str] | None) -> str:
@@ -126,5 +152,7 @@ def user_cinematic_technique_directive(value: str | list[str] | None) -> str:
         f"{lines}\n"
         "Для движения камеры оставь одно главное движение; ракурс и оптику согласуй с ним. "
         "Выбранную крупность держи во всём клипе, если пользователь не указал отдельные кадры. "
-        "Выбранный свет согласованно опиши в visual_style и в каждом кадре."
+        "Выбранный свет согласованно опиши в visual_style и в каждом кадре; если visual_style отсутствует, добавь этот раздел после detailed_description. "
+        "При смене камеры не удаляй движение и реакции персонажа: меняется траектория камеры, а не событие сцены. "
+        "Не вставляй названия выбранных техник только в список запретов: опиши их как действующие параметры кадра."
     )

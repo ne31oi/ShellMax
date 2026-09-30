@@ -212,7 +212,7 @@ export function Dialog({
           className={clsx(
             "fixed left-1/2 top-1/2 z-50 flex max-h-[88vh] w-[92vw] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-line bg-panel shadow-2xl outline-none",
             extraWide && "max-h-[94vh] w-[96vw]",
-            extraWide ? "max-w-6xl" : wide ? "max-w-4xl" : "max-w-lg",
+            extraWide ? "max-w-7xl" : wide ? "max-w-4xl" : "max-w-lg",
           )}
         >
           <div className="flex items-center justify-between border-b border-line px-5 py-3">

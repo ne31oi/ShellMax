@@ -1,0 +1,1290 @@
+{
+  "t2_2": {
+    "id": "t2_2",
+    "support": "tripod",
+    "path": "hold",
+    "tags": [
+      "static"
+    ]
+  },
+  "t2_3": {
+    "id": "t2_3",
+    "support": "dolly",
+    "path": "linear",
+    "end_z_delta": -1.6,
+    "tags": [
+      "dolly"
+    ]
+  },
+  "t2_4": {
+    "id": "t2_4",
+    "support": "dolly",
+    "path": "linear",
+    "end_z_delta": 2.0,
+    "tags": [
+      "dolly"
+    ]
+  },
+  "t2_5": {
+    "id": "t2_5",
+    "support": "dolly",
+    "path": "linear",
+    "end_z_delta": -1.2,
+    "tags": [
+      "push"
+    ]
+  },
+  "t2_6": {
+    "id": "t2_6",
+    "support": "tripod",
+    "path": "hold",
+    "end_fov_scale": 0.55,
+    "tags": [
+      "zoom"
+    ]
+  },
+  "t2_7": {
+    "id": "t2_7",
+    "support": "tripod",
+    "path": "whip",
+    "end_fov_scale": 0.35,
+    "tags": [
+      "zoom",
+      "crash"
+    ]
+  },
+  "t2_8": {
+    "id": "t2_8",
+    "support": "tripod",
+    "path": "linear",
+    "pan_yaw": 35,
+    "tags": [
+      "pan"
+    ]
+  },
+  "t2_9": {
+    "id": "t2_9",
+    "support": "tripod",
+    "path": "linear",
+    "tilt_pitch": 18,
+    "tags": [
+      "tilt"
+    ]
+  },
+  "t2_10": {
+    "id": "t2_10",
+    "support": "crane",
+    "path": "linear",
+    "end_y_delta": 1.2,
+    "tags": [
+      "pedestal"
+    ]
+  },
+  "t2_11": {
+    "id": "t2_11",
+    "support": "crane",
+    "path": "crane",
+    "end_y_delta": 2.4,
+    "end_z_delta": 1.5,
+    "tags": [
+      "crane"
+    ]
+  },
+  "t2_12": {
+    "id": "t2_12",
+    "support": "dolly",
+    "path": "linear",
+    "end_x_delta": 2.4,
+    "mannequinAction": "walk",
+    "tags": [
+      "track"
+    ]
+  },
+  "t2_13": {
+    "id": "t2_13",
+    "support": "steadicam",
+    "path": "follow",
+    "end_z_delta": -0.4,
+    "mannequinAction": "walk",
+    "tags": [
+      "follow"
+    ]
+  },
+  "t2_14": {
+    "id": "t2_14",
+    "support": "steadicam",
+    "path": "follow",
+    "end_x_delta": 1.6,
+    "end_z_delta": -0.6,
+    "mannequinAction": "walk",
+    "tags": [
+      "steadicam"
+    ]
+  },
+  "t2_15": {
+    "id": "t2_15",
+    "support": "gimbal",
+    "path": "linear",
+    "end_x_delta": 1.8,
+    "mannequinAction": "walk",
+    "tags": [
+      "gimbal"
+    ]
+  },
+  "t2_16": {
+    "id": "t2_16",
+    "support": "handheld",
+    "path": "linear",
+    "end_z_delta": -0.8,
+    "tags": [
+      "handheld"
+    ]
+  },
+  "t2_17": {
+    "id": "t2_17",
+    "support": "orbit",
+    "path": "orbit",
+    "tags": [
+      "orbit"
+    ]
+  },
+  "t2_18": {
+    "id": "t2_18",
+    "support": "drone",
+    "path": "crane",
+    "end_y_delta": 4.0,
+    "end_z_delta": 3.0,
+    "tags": [
+      "aerial"
+    ]
+  },
+  "t2_19": {
+    "id": "t2_19",
+    "support": "dolly",
+    "path": "linear",
+    "end_z_delta": 2.2,
+    "subjectSizeLock": true,
+    "tags": [
+      "dollyZoom"
+    ]
+  },
+  "t2_20": {
+    "id": "t2_20",
+    "support": "tripod",
+    "path": "whip",
+    "pan_yaw": 90,
+    "tags": [
+      "whip"
+    ]
+  },
+  "t3_1": {
+    "id": "t3_1",
+    "framing": "extremeWide",
+    "tags": [
+      "framing:extremeWide",
+      "wideFrame"
+    ]
+  },
+  "t3_2": {
+    "id": "t3_2",
+    "framing": "establishing",
+    "tags": [
+      "framing:establishing",
+      "wideFrame"
+    ]
+  },
+  "t3_3": {
+    "id": "t3_3",
+    "framing": "master",
+    "tags": [
+      "framing:master",
+      "wideFrame"
+    ]
+  },
+  "t3_4": {
+    "id": "t3_4",
+    "framing": "wide",
+    "tags": [
+      "framing:wide",
+      "wideFrame"
+    ]
+  },
+  "t3_5": {
+    "id": "t3_5",
+    "framing": "full",
+    "tags": [
+      "framing:full",
+      "wideFrame"
+    ]
+  },
+  "t3_6": {
+    "id": "t3_6",
+    "framing": "cowboy",
+    "tags": [
+      "framing:cowboy"
+    ]
+  },
+  "t3_7": {
+    "id": "t3_7",
+    "framing": "medium",
+    "tags": [
+      "framing:medium"
+    ]
+  },
+  "t3_8": {
+    "id": "t3_8",
+    "framing": "mcu",
+    "tags": [
+      "framing:mcu"
+    ]
+  },
+  "t3_9": {
+    "id": "t3_9",
+    "framing": "cu",
+    "tags": [
+      "framing:cu"
+    ]
+  },
+  "t3_10": {
+    "id": "t3_10",
+    "framing": "ecu",
+    "tags": [
+      "framing:ecu",
+      "tightFrame"
+    ]
+  },
+  "t3_11": {
+    "id": "t3_11",
+    "framing": "insert",
+    "tags": [
+      "framing:insert",
+      "macro",
+      "tightFrame"
+    ],
+    "macroProp": true
+  },
+  "t3_12": {
+    "id": "t3_12",
+    "framing": "cutaway",
+    "tags": [
+      "framing:cutaway"
+    ],
+    "doorway": true
+  },
+  "t3_13": {
+    "id": "t3_13",
+    "framing": "reaction",
+    "tags": [
+      "framing:reaction"
+    ]
+  },
+  "t3_14": {
+    "id": "t3_14",
+    "framing": "twoShot",
+    "tags": [
+      "framing:twoShot"
+    ],
+    "secondMannequin": true
+  },
+  "t3_15": {
+    "id": "t3_15",
+    "framing": "ots",
+    "tags": [
+      "framing:ots"
+    ],
+    "secondMannequin": true
+  },
+  "t4_1": {
+    "id": "t4_1",
+    "tags": [
+      "eyeLevel"
+    ]
+  },
+  "t4_2": {
+    "id": "t4_2",
+    "cam_y": 0.55,
+    "look_y": 1.45,
+    "tags": [
+      "lowAngle"
+    ]
+  },
+  "t4_3": {
+    "id": "t4_3",
+    "cam_y": 2.6,
+    "look_y": 1.35,
+    "tags": [
+      "highAngle"
+    ]
+  },
+  "t4_4": {
+    "id": "t4_4",
+    "cam_y": 6.5,
+    "cam_z": 0.2,
+    "look_y": 0.1,
+    "fov": 55,
+    "tags": [
+      "birdsEye"
+    ]
+  },
+  "t4_5": {
+    "id": "t4_5",
+    "cam_y": 0.12,
+    "look_y": 1.2,
+    "tags": [
+      "wormsEye"
+    ]
+  },
+  "t4_6": {
+    "id": "t4_6",
+    "roll": 18,
+    "tags": [
+      "dutch"
+    ]
+  },
+  "t4_7": {
+    "id": "t4_7",
+    "tags": [
+      "pov"
+    ]
+  },
+  "t4_8": {
+    "id": "t4_8",
+    "cam_x": 2.4,
+    "cam_z": 0.2,
+    "look_x": 0,
+    "tags": [
+      "profile"
+    ]
+  },
+  "t4_9": {
+    "id": "t4_9",
+    "cam_x": 1.4,
+    "cam_z": 2.6,
+    "tags": [
+      "threeQuarter"
+    ]
+  },
+  "t4_10": {
+    "id": "t4_10",
+    "cam_z": -3.2,
+    "look_z": 0,
+    "secondMannequin": true,
+    "tags": [
+      "reverse"
+    ]
+  },
+  "t5_2": {
+    "id": "t5_2",
+    "focalMm": 14,
+    "tags": [
+      "wideLens"
+    ]
+  },
+  "t5_3": {
+    "id": "t5_3",
+    "focalMm": 24,
+    "tags": [
+      "wideLens"
+    ]
+  },
+  "t5_4": {
+    "id": "t5_4",
+    "focalMm": 35,
+    "tags": []
+  },
+  "t5_5": {
+    "id": "t5_5",
+    "focalMm": 50,
+    "tags": []
+  },
+  "t5_6": {
+    "id": "t5_6",
+    "focalMm": 85,
+    "tags": [
+      "tightLens"
+    ]
+  },
+  "t5_7": {
+    "id": "t5_7",
+    "focalMm": 135,
+    "tags": [
+      "tele",
+      "tightLens"
+    ]
+  },
+  "t5_8": {
+    "id": "t5_8",
+    "focalMm": 200,
+    "tags": [
+      "tele",
+      "tightLens"
+    ]
+  },
+  "t5_9": {
+    "id": "t5_9",
+    "focalMm": 40,
+    "anamorphic": 0.7,
+    "tags": [
+      "anamorphic"
+    ]
+  },
+  "t5_10": {
+    "id": "t5_10",
+    "focalMm": 50,
+    "anamorphic": 0,
+    "tags": [
+      "spherical"
+    ]
+  },
+  "t5_11": {
+    "id": "t5_11",
+    "focalMm": 10,
+    "fisheye": 0.85,
+    "tags": [
+      "fisheye",
+      "wideLens"
+    ]
+  },
+  "t5_12": {
+    "id": "t5_12",
+    "focalMm": 85,
+    "macroProp": true,
+    "tags": [
+      "macro",
+      "tightFrame",
+      "softFraming:insert"
+    ]
+  },
+  "t5_13": {
+    "id": "t5_13",
+    "focalMm": 50,
+    "splitDiopter": true,
+    "dofStrength": 0.7,
+    "tags": [
+      "splitDiopter"
+    ]
+  },
+  "t6_1": {
+    "id": "t6_1",
+    "composition": "thirds",
+    "tags": [
+      "comp:thirds"
+    ]
+  },
+  "t6_2": {
+    "id": "t6_2",
+    "composition": "center",
+    "tags": [
+      "comp:center"
+    ]
+  },
+  "t6_3": {
+    "id": "t6_3",
+    "composition": "symmetry",
+    "tags": [
+      "comp:symmetry"
+    ]
+  },
+  "t6_4": {
+    "id": "t6_4",
+    "composition": "asymmetry",
+    "tags": [
+      "comp:asymmetry"
+    ]
+  },
+  "t6_5": {
+    "id": "t6_5",
+    "composition": "leading",
+    "tags": [
+      "comp:leading"
+    ]
+  },
+  "t6_6": {
+    "id": "t6_6",
+    "composition": "vanishing",
+    "tags": [
+      "comp:vanishing"
+    ],
+    "doorway": true
+  },
+  "t6_7": {
+    "id": "t6_7",
+    "composition": "frameInFrame",
+    "tags": [
+      "comp:frameInFrame"
+    ],
+    "doorway": true
+  },
+  "t6_8": {
+    "id": "t6_8",
+    "composition": "negative",
+    "tags": [
+      "comp:negative"
+    ]
+  },
+  "t6_9": {
+    "id": "t6_9",
+    "composition": "foreground",
+    "tags": [
+      "comp:foreground"
+    ],
+    "macroProp": true
+  },
+  "t6_10": {
+    "id": "t6_10",
+    "composition": "layered",
+    "tags": [
+      "comp:layered"
+    ],
+    "macroProp": true
+  },
+  "t6_11": {
+    "id": "t6_11",
+    "composition": "weight",
+    "tags": [
+      "comp:weight"
+    ]
+  },
+  "t6_12": {
+    "id": "t6_12",
+    "composition": "figureGround",
+    "tags": [
+      "comp:figureGround"
+    ]
+  },
+  "t6_13": {
+    "id": "t6_13",
+    "composition": "tonal",
+    "tags": [
+      "comp:tonal"
+    ]
+  },
+  "t6_14": {
+    "id": "t6_14",
+    "composition": "leadRoom",
+    "tags": [
+      "comp:leadRoom"
+    ]
+  },
+  "t6_15": {
+    "id": "t6_15",
+    "composition": "shortSiding",
+    "tags": [
+      "comp:shortSiding"
+    ]
+  },
+  "t6_16": {
+    "id": "t6_16",
+    "composition": "dirty",
+    "tags": [
+      "comp:dirty"
+    ],
+    "macroProp": true,
+    "secondMannequin": true
+  },
+  "t6_17": {
+    "id": "t6_17",
+    "composition": "clean",
+    "tags": [
+      "comp:clean"
+    ]
+  },
+  "t7_2": {
+    "id": "t7_2",
+    "keyIntensity": 2.2,
+    "fillIntensity": 0.25,
+    "tags": [
+      "key"
+    ]
+  },
+  "t7_3": {
+    "id": "t7_3",
+    "fillIntensity": 1.1,
+    "tags": [
+      "fill"
+    ]
+  },
+  "t7_4": {
+    "id": "t7_4",
+    "rimIntensity": 1.6,
+    "rimAzimuth": 180,
+    "tags": [
+      "back"
+    ]
+  },
+  "t7_5": {
+    "id": "t7_5",
+    "rimIntensity": 1.8,
+    "rimAzimuth": 150,
+    "tags": [
+      "rim"
+    ]
+  },
+  "t7_6": {
+    "id": "t7_6",
+    "rimIntensity": 1.4,
+    "rimAzimuth": 210,
+    "tags": [
+      "kicker"
+    ]
+  },
+  "t7_7": {
+    "id": "t7_7",
+    "eyeLight": 0.8,
+    "tags": [
+      "eye"
+    ]
+  },
+  "t7_8": {
+    "id": "t7_8",
+    "keyIntensity": 2.4,
+    "fillIntensity": 1.4,
+    "ambient": 0.55,
+    "tags": [
+      "highKey"
+    ]
+  },
+  "t7_9": {
+    "id": "t7_9",
+    "keyIntensity": 1.6,
+    "fillIntensity": 0.05,
+    "ambient": 0.05,
+    "tags": [
+      "lowKey"
+    ]
+  },
+  "t7_10": {
+    "id": "t7_10",
+    "keySoftness": 0.05,
+    "tags": [
+      "hard"
+    ]
+  },
+  "t7_11": {
+    "id": "t7_11",
+    "keySoftness": 0.9,
+    "tags": [
+      "soft"
+    ]
+  },
+  "t7_12": {
+    "id": "t7_12",
+    "keyAzimuth": 90,
+    "fillIntensity": 0.15,
+    "tags": [
+      "side"
+    ]
+  },
+  "t7_13": {
+    "id": "t7_13",
+    "keyElevation": 80,
+    "keyAzimuth": 0,
+    "tags": [
+      "top"
+    ]
+  },
+  "t7_14": {
+    "id": "t7_14",
+    "underlight": 1.2,
+    "keyIntensity": 0.4,
+    "tags": [
+      "under"
+    ]
+  },
+  "t7_15": {
+    "id": "t7_15",
+    "keyAzimuth": 45,
+    "fillIntensity": 0.2,
+    "keySoftness": 0.45,
+    "tags": [
+      "rembrandt"
+    ]
+  },
+  "t7_16": {
+    "id": "t7_16",
+    "keyAzimuth": 90,
+    "fillIntensity": 0.0,
+    "tags": [
+      "split"
+    ]
+  },
+  "t7_17": {
+    "id": "t7_17",
+    "keyAzimuth": -55,
+    "fillIntensity": 0.25,
+    "tags": [
+      "short"
+    ]
+  },
+  "t7_18": {
+    "id": "t7_18",
+    "keyAzimuth": 35,
+    "fillIntensity": 0.35,
+    "tags": [
+      "broad"
+    ]
+  },
+  "t7_19": {
+    "id": "t7_19",
+    "window": true,
+    "keyAzimuth": -40,
+    "keyColor": "#fff2d6",
+    "tags": [
+      "motivated"
+    ]
+  },
+  "t7_20": {
+    "id": "t7_20",
+    "practical": true,
+    "keyColor": "#ffb45a",
+    "keyIntensity": 1.4,
+    "tags": [
+      "practical"
+    ]
+  },
+  "t7_21": {
+    "id": "t7_21",
+    "window": true,
+    "keyAzimuth": -70,
+    "keySoftness": 0.75,
+    "keyColor": "#e8f0ff",
+    "doorway": true,
+    "tags": [
+      "window"
+    ]
+  },
+  "t7_22": {
+    "id": "t7_22",
+    "keyColor": "#ffb078",
+    "keyElevation": 12,
+    "tempBias": 0.4,
+    "tags": [
+      "golden"
+    ]
+  },
+  "t7_23": {
+    "id": "t7_23",
+    "keyColor": "#7aa7ff",
+    "ambient": 0.2,
+    "tempBias": -0.45,
+    "tags": [
+      "blueHour"
+    ]
+  },
+  "t7_24": {
+    "id": "t7_24",
+    "volumetric": true,
+    "fogDensity": 0.035,
+    "tags": [
+      "volumetric"
+    ]
+  },
+  "t7_25": {
+    "id": "t7_25",
+    "gobo": true,
+    "keySoftness": 0.2,
+    "tags": [
+      "gobo"
+    ]
+  },
+  "t8_1": {
+    "id": "t8_1",
+    "dofStrength": 0.95,
+    "focusDistance": 1.6,
+    "tags": [
+      "shallow"
+    ]
+  },
+  "t8_2": {
+    "id": "t8_2",
+    "dofStrength": 0.08,
+    "focusDistance": 4.0,
+    "tags": [
+      "deep"
+    ]
+  },
+  "t8_3": {
+    "id": "t8_3",
+    "dofStrength": 0.9,
+    "focusDistance": 1.4,
+    "focusEnd": 4.5,
+    "macroProp": true,
+    "tags": [
+      "rack"
+    ]
+  },
+  "t9_1": {
+    "id": "t9_1",
+    "grade": "natural",
+    "tags": [
+      "grade:natural"
+    ]
+  },
+  "t9_2": {
+    "id": "t9_2",
+    "grade": "warm",
+    "tags": [
+      "grade:warm"
+    ]
+  },
+  "t9_3": {
+    "id": "t9_3",
+    "grade": "cool",
+    "tags": [
+      "grade:cool"
+    ]
+  },
+  "t9_4": {
+    "id": "t9_4",
+    "grade": "tealOrange",
+    "tags": [
+      "grade:tealOrange"
+    ]
+  },
+  "t9_5": {
+    "id": "t9_5",
+    "grade": "desat",
+    "tags": [
+      "grade:desat"
+    ]
+  },
+  "t9_6": {
+    "id": "t9_6",
+    "grade": "hypersat",
+    "tags": [
+      "grade:hypersat"
+    ]
+  },
+  "t9_7": {
+    "id": "t9_7",
+    "grade": "mono",
+    "tags": [
+      "grade:mono"
+    ]
+  },
+  "t9_8": {
+    "id": "t9_8",
+    "grade": "bleach",
+    "tags": [
+      "grade:bleach"
+    ]
+  },
+  "t9_9": {
+    "id": "t9_9",
+    "grade": "palette",
+    "tags": [
+      "grade:palette"
+    ]
+  },
+  "t10_1": {
+    "id": "t10_1",
+    "timeScale": 0.35,
+    "mannequinAction": "walk",
+    "tags": [
+      "slow"
+    ]
+  },
+  "t10_2": {
+    "id": "t10_2",
+    "timeScale": 2.4,
+    "mannequinAction": "walk",
+    "tags": [
+      "fast"
+    ]
+  },
+  "t10_3": {
+    "id": "t10_3",
+    "timeScale": 0.4,
+    "timeScaleEnd": 2.2,
+    "mannequinAction": "walk",
+    "tags": [
+      "ramp"
+    ]
+  },
+  "t10_4": {
+    "id": "t10_4",
+    "freezeAt": 0.45,
+    "mannequinAction": "react",
+    "tags": [
+      "freeze"
+    ]
+  },
+  "t10_5": {
+    "id": "t10_5",
+    "timeScale": 6.0,
+    "mannequinAction": "walk",
+    "precip": "dust",
+    "tags": [
+      "timelapse"
+    ]
+  },
+  "t10_6": {
+    "id": "t10_6",
+    "motionBlur": 0.85,
+    "mannequinAction": "walk",
+    "tags": [
+      "mblur"
+    ]
+  },
+  "t10_7": {
+    "id": "t10_7",
+    "motionBlur": 0.95,
+    "timeScale": 0.7,
+    "mannequinAction": "turn",
+    "tags": [
+      "lowShutter"
+    ]
+  },
+  "t10_8": {
+    "id": "t10_8",
+    "support": "steadicam",
+    "path": "follow",
+    "end_x_delta": 2.0,
+    "mannequinAction": "walk",
+    "tags": [
+      "oner"
+    ]
+  },
+  "t11_1": {
+    "id": "t11_1",
+    "flare": 0.85,
+    "tags": [
+      "flare"
+    ]
+  },
+  "t11_2": {
+    "id": "t11_2",
+    "halation": 0.75,
+    "tags": [
+      "halation"
+    ]
+  },
+  "t11_3": {
+    "id": "t11_3",
+    "grain": 0.7,
+    "tags": [
+      "grain"
+    ]
+  },
+  "t11_4": {
+    "id": "t11_4",
+    "bokehBoost": 0.9,
+    "dofStrength": 0.85,
+    "tags": [
+      "bokeh"
+    ]
+  },
+  "t11_5": {
+    "id": "t11_5",
+    "doubleExposure": 0.65,
+    "tags": [
+      "double"
+    ]
+  },
+  "t11_6": {
+    "id": "t11_6",
+    "lightLeak": 0.8,
+    "tags": [
+      "leak"
+    ]
+  },
+  "t11_7": {
+    "id": "t11_7",
+    "chromatic": 0.7,
+    "tags": [
+      "ca"
+    ]
+  },
+  "t11_8": {
+    "id": "t11_8",
+    "forcedPerspective": true,
+    "secondMannequin": true,
+    "tags": [
+      "forced"
+    ]
+  },
+  "t12_1": {
+    "id": "t12_1",
+    "precip": "haze",
+    "fogDensity": 0.025,
+    "tags": [
+      "haze"
+    ]
+  },
+  "t12_2": {
+    "id": "t12_2",
+    "precip": "fog",
+    "fogDensity": 0.06,
+    "tags": [
+      "fog"
+    ]
+  },
+  "t12_3": {
+    "id": "t12_3",
+    "precip": "mist",
+    "fogDensity": 0.035,
+    "tags": [
+      "mist"
+    ]
+  },
+  "t12_4": {
+    "id": "t12_4",
+    "precip": "smoke",
+    "fogDensity": 0.05,
+    "tags": [
+      "smoke"
+    ]
+  },
+  "t12_5": {
+    "id": "t12_5",
+    "precip": "dust",
+    "fogDensity": 0.02,
+    "tags": [
+      "dust"
+    ]
+  },
+  "t12_6": {
+    "id": "t12_6",
+    "precip": "rain",
+    "fogDensity": 0.015,
+    "tags": [
+      "rain"
+    ]
+  },
+  "t12_7": {
+    "id": "t12_7",
+    "wetDown": true,
+    "precip": "rain",
+    "fogDensity": 0.02,
+    "tags": [
+      "wet"
+    ]
+  },
+  "t12_8": {
+    "id": "t12_8",
+    "precip": "snow",
+    "fogDensity": 0.02,
+    "tags": [
+      "snow"
+    ]
+  },
+  "t12_9": {
+    "id": "t12_9",
+    "precip": "embers",
+    "fogDensity": 0.01,
+    "tags": [
+      "embers"
+    ]
+  },
+  "t13_1": {
+    "id": "t13_1",
+    "edit": "match",
+    "tags": [
+      "edit:match"
+    ],
+    "secondMannequin": true
+  },
+  "t13_2": {
+    "id": "t13_2",
+    "edit": "graphic",
+    "tags": [
+      "edit:graphic"
+    ],
+    "secondMannequin": true
+  },
+  "t13_3": {
+    "id": "t13_3",
+    "edit": "action",
+    "tags": [
+      "edit:action"
+    ],
+    "secondMannequin": true
+  },
+  "t13_4": {
+    "id": "t13_4",
+    "edit": "jump",
+    "tags": [
+      "edit:jump"
+    ]
+  },
+  "t13_5": {
+    "id": "t13_5",
+    "edit": "smash",
+    "tags": [
+      "edit:smash"
+    ]
+  },
+  "t13_6": {
+    "id": "t13_6",
+    "edit": "dissolve",
+    "tags": [
+      "edit:dissolve"
+    ]
+  },
+  "t13_7": {
+    "id": "t13_7",
+    "edit": "fade",
+    "tags": [
+      "edit:fade"
+    ]
+  },
+  "t13_8": {
+    "id": "t13_8",
+    "edit": "cross",
+    "tags": [
+      "edit:cross"
+    ],
+    "secondMannequin": true
+  },
+  "t13_9": {
+    "id": "t13_9",
+    "edit": "axial",
+    "tags": [
+      "edit:axial"
+    ]
+  },
+  "t13_10": {
+    "id": "t13_10",
+    "edit": "invisible",
+    "tags": [
+      "edit:invisible"
+    ]
+  },
+  "t13_11": {
+    "id": "t13_11",
+    "edit": "jl",
+    "tags": [
+      "edit:jl"
+    ],
+    "audioCue": "jcut"
+  },
+  "t13_12": {
+    "id": "t13_12",
+    "edit": "quick",
+    "tags": [
+      "edit:quick"
+    ]
+  },
+  "t14_1": {
+    "id": "t14_1",
+    "genreBase": true,
+    "grade": "mono",
+    "keyAzimuth": 90,
+    "fillIntensity": 0.05,
+    "ambient": 0.04,
+    "keySoftness": 0.1,
+    "composition": "asymmetry",
+    "tags": [
+      "genre",
+      "noir"
+    ]
+  },
+  "t14_2": {
+    "id": "t14_2",
+    "genreBase": true,
+    "grade": "tealOrange",
+    "keyAzimuth": 60,
+    "fillIntensity": 0.15,
+    "rimIntensity": 1.2,
+    "ambient": 0.08,
+    "fogDensity": 0.02,
+    "tags": [
+      "genre",
+      "neoNoir"
+    ]
+  },
+  "t14_3": {
+    "id": "t14_3",
+    "genreBase": true,
+    "grade": "desat",
+    "roll": 22,
+    "keyAzimuth": 100,
+    "fillIntensity": 0.0,
+    "keySoftness": 0.05,
+    "composition": "asymmetry",
+    "tags": [
+      "genre",
+      "expressionism"
+    ]
+  },
+  "t14_4": {
+    "id": "t14_4",
+    "genreBase": true,
+    "grade": "hypersat",
+    "keyColor": "#ff4d6d",
+    "fillIntensity": 0.3,
+    "rimIntensity": 1.0,
+    "composition": "thirds",
+    "tags": [
+      "genre",
+      "giallo"
+    ]
+  },
+  "t14_5": {
+    "id": "t14_5",
+    "genreBase": true,
+    "support": "handheld",
+    "path": "linear",
+    "end_z_delta": -0.5,
+    "grade": "desat",
+    "grain": 0.55,
+    "chromatic": 0.35,
+    "tags": [
+      "genre",
+      "found"
+    ]
+  },
+  "t14_6": {
+    "id": "t14_6",
+    "genreBase": true,
+    "support": "handheld",
+    "grade": "natural",
+    "grain": 0.25,
+    "window": true,
+    "keySoftness": 0.6,
+    "tags": [
+      "genre",
+      "verite"
+    ]
+  },
+  "t14_7": {
+    "id": "t14_7",
+    "genreBase": true,
+    "grade": "tealOrange",
+    "anamorphic": 0.55,
+    "flare": 0.4,
+    "keyIntensity": 2.0,
+    "fillIntensity": 0.5,
+    "rimIntensity": 0.8,
+    "tags": [
+      "genre",
+      "blockbuster"
+    ]
+  },
+  "t14_8": {
+    "id": "t14_8",
+    "genreBase": true,
+    "grade": "desat",
+    "composition": "negative",
+    "dofStrength": 0.7,
+    "keySoftness": 0.8,
+    "fillIntensity": 0.35,
+    "tags": [
+      "genre",
+      "arthouse"
+    ]
+  },
+  "t14_9": {
+    "id": "t14_9",
+    "genreBase": true,
+    "grade": "palette",
+    "composition": "thirds",
+    "dofStrength": 0.55,
+    "keySoftness": 0.7,
+    "keyAzimuth": 40,
+    "tags": [
+      "genre",
+      "photo"
+    ]
+  }
+}

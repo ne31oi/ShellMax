@@ -126,6 +126,7 @@ export const api = {
   engine: () => get<EngineState>("/api/engine"),
   engineAction: (action: "start" | "stop" | "restart") => post<EngineState>(`/api/engine/${action}`),
   restartAll: () => post<{ ok: boolean }>("/api/system/restart"),
+  shutdownAll: () => post<{ ok: boolean }>("/api/system/shutdown"),
   engineOptions: () => get<{ sampler: string[]; scheduler: string[]; live: boolean }>("/api/engine/options"),
   engineLog: () => get<{ lines: string[] }>("/api/engine/log"),
 
@@ -181,7 +182,11 @@ export const api = {
   },
   /** Unique refs used in generations / plans (Import tab). */
   listUsedUploads: () => get<Upload[]>("/api/uploads?used=true"),
+  listUploads: () => get<Upload[]>("/api/uploads?used=false"),
   uploadInfo: (id: string) => get<Upload>(`/api/uploads/${id}`),
+  updateReference: (id: string, body: { name: string; category: Upload["category"]; description: string }) =>
+    request<Upload>("PATCH", `/api/uploads/${id}/reference`, body),
+  referenceUsage: (id: string) => get<{ project_id: number; project: string; kind: string; label: string }[]>(`/api/uploads/${id}/usage`),
   chats: () => get<ChatInfo[]>("/api/assistant/chats"),
   chat: (id: string) => get<Chat>(`/api/assistant/chats/${id}`),
   createChat: () => post<Chat>("/api/assistant/chats"),

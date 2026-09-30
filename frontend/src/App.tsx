@@ -11,6 +11,7 @@ import { GeneratePanel } from "./components/generate/GeneratePanel";
 import { EngineStatus } from "./components/layout/EngineStatus";
 import { ProjectSwitcher } from "./components/layout/ProjectSwitcher";
 import { RestartAllButton } from "./components/layout/RestartAllButton";
+import { ShutdownAllButton } from "./components/layout/ShutdownAllButton";
 import { Resizer, usePanelSize } from "./components/layout/Resizer";
 import { Toasts } from "./components/layout/Toasts";
 import { MediaBin } from "./components/library/MediaBin";
@@ -160,6 +161,7 @@ export default function App() {
           <span className="flex-1" />
           <EngineStatus />
           <RestartAllButton />
+          <ShutdownAllButton />
           <IconButton label="Настройки" onClick={() => openSettings("engine")}>
             <Settings size={16} />
           </IconButton>

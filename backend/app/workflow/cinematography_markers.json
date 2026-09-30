@@ -1,0 +1,1004 @@
+{
+  "2.2": [
+    "locked-off",
+    "locked off",
+    "static camera",
+    "fixed camera",
+    "camera remains still",
+    "stationary camera",
+    "static / locked-off",
+    "static / locked off",
+    "static"
+  ],
+  "2.3": [
+    "dolly in",
+    "dolly forward",
+    "dolly toward",
+    "dollies in",
+    "dollies toward",
+    "dolly-in"
+  ],
+  "2.4": [
+    "dolly out",
+    "pull out",
+    "pulls back",
+    "pulls out",
+    "dolly backward",
+    "dolly out / pull out",
+    "dolly-out",
+    "pull-out"
+  ],
+  "2.5": [
+    "push in",
+    "push-in",
+    "pushes in",
+    "pushing in"
+  ],
+  "2.6": [
+    "zoom in",
+    "slow zoom",
+    "optical zoom",
+    "zooms in",
+    "lens zooms",
+    "zoom in / slow zoom",
+    "zoom-in",
+    "slow-zoom"
+  ],
+  "2.7": [
+    "crash zoom",
+    "snap zoom",
+    "whip zoom",
+    "crash-zoom"
+  ],
+  "2.8": [
+    "pan",
+    "panning",
+    "pans left",
+    "pans right",
+    "horizontal pan"
+  ],
+  "2.9": [
+    "tilt",
+    "tilting",
+    "tilts up",
+    "tilts down",
+    "vertical tilt"
+  ],
+  "2.10": [
+    "pedestal",
+    "pedestal up",
+    "pedestal down",
+    "camera rises vertically",
+    "camera lowers vertically",
+    "pedestal up / down",
+    "pedestal-up",
+    "down"
+  ],
+  "2.11": [
+    "crane",
+    "jib",
+    "crane up",
+    "crane down",
+    "jib arm",
+    "crane / jib"
+  ],
+  "2.12": [
+    "tracking shot",
+    "tracks with",
+    "tracking alongside",
+    "lateral track",
+    "tracking-shot"
+  ],
+  "2.13": [
+    "follow shot",
+    "follows behind",
+    "following from behind",
+    "follows the subject",
+    "follow-shot"
+  ],
+  "2.14": [
+    "steadicam",
+    "steadi-cam",
+    "floating stabilized"
+  ],
+  "2.15": [
+    "gimbal",
+    "gimbal-stabilized",
+    "gimbal smooth"
+  ],
+  "2.16": [
+    "handheld",
+    "hand-held",
+    "handheld shake",
+    "hand-held camera"
+  ],
+  "2.17": [
+    "orbit",
+    "arc around",
+    "arc move",
+    "orbits around",
+    "circles around",
+    "orbit / arc",
+    "arc"
+  ],
+  "2.18": [
+    "aerial",
+    "drone",
+    "fpv",
+    "drone shot",
+    "aerial view",
+    "aerial / drone / fpv"
+  ],
+  "2.19": [
+    "dolly zoom",
+    "vertigo effect",
+    "zolly",
+    "dolly-zoom"
+  ],
+  "2.20": [
+    "whip pan",
+    "whip tilt",
+    "swish pan",
+    "whip pan / whip tilt",
+    "whip-pan",
+    "whip-tilt"
+  ],
+  "3.1": [
+    "extreme long shot",
+    "extreme wide",
+    "extreme wide shot",
+    "tiny figure in vast",
+    "extreme long shot / extreme wide",
+    "extreme-long-shot",
+    "extreme-wide"
+  ],
+  "3.2": [
+    "establishing shot",
+    "establishes the location",
+    "establishes where",
+    "establishing-shot"
+  ],
+  "3.3": [
+    "master shot",
+    "master coverage",
+    "scene geography",
+    "master-shot"
+  ],
+  "3.4": [
+    "wide shot",
+    "long shot",
+    "wide/long shot",
+    "wide / long shot",
+    "long-shot"
+  ],
+  "3.5": [
+    "full-body",
+    "full body",
+    "head-to-toe",
+    "head to toe",
+    "full figure"
+  ],
+  "3.6": [
+    "cowboy shot",
+    "medium-long",
+    "mid-thigh",
+    "above the knees",
+    "cowboy / medium-long",
+    "cowboy / medium long",
+    "cowboy",
+    "medium long"
+  ],
+  "3.7": [
+    "medium shot",
+    "waist-up",
+    "waist up",
+    "from the waist",
+    "medium-shot"
+  ],
+  "3.8": [
+    "medium close-up",
+    "medium close up",
+    "chest-up",
+    "head-and-shoulders",
+    "medium-close-up"
+  ],
+  "3.9": [
+    "close-up",
+    "close up",
+    "tight on the face",
+    "face-filling"
+  ],
+  "3.10": [
+    "extreme close-up",
+    "extreme close up",
+    "macro detail on",
+    "extreme-close-up",
+    "isolates a small"
+  ],
+  "3.11": [
+    "insert",
+    "insert shot",
+    "insert of"
+  ],
+  "3.12": [
+    "cutaway",
+    "cut away",
+    "cutaway to"
+  ],
+  "3.13": [
+    "reaction shot",
+    "reaction on",
+    "reacts in",
+    "reaction-shot"
+  ],
+  "3.14": [
+    "two-shot",
+    "two shot",
+    "both characters in frame"
+  ],
+  "3.15": [
+    "over-the-shoulder",
+    "over the shoulder",
+    "ots",
+    "over his shoulder",
+    "over her shoulder",
+    "over-the-shoulder (ots)",
+    "over the shoulder (ots)"
+  ],
+  "4.1": [
+    "eye level",
+    "eye-level",
+    "camera at eye height"
+  ],
+  "4.2": [
+    "low angle",
+    "low-angle",
+    "looking up at",
+    "camera looks up"
+  ],
+  "4.3": [
+    "high angle",
+    "high-angle",
+    "looking down on",
+    "camera looks down"
+  ],
+  "4.4": [
+    "overhead",
+    "bird's-eye",
+    "top-down",
+    "top down",
+    "straight down",
+    "bird's-eye / overhead top-down",
+    "bird's eye / overhead top down",
+    "bird's eye",
+    "overhead top-down",
+    "overhead top down",
+    "overhead-top-down"
+  ],
+  "4.5": [
+    "worm's-eye",
+    "worm's eye",
+    "worms-eye",
+    "ground level",
+    "ground-level",
+    "camera at ground",
+    "worm's-eye / ground level",
+    "worm's eye / ground level"
+  ],
+  "4.6": [
+    "dutch angle",
+    "dutch-angle",
+    "tilted horizon",
+    "canted angle"
+  ],
+  "4.7": [
+    "pov",
+    "point of view",
+    "first person",
+    "first-person",
+    "through their eyes",
+    "pov / first person"
+  ],
+  "4.8": [
+    "profile",
+    "side profile",
+    "in profile",
+    "profile view"
+  ],
+  "4.9": [
+    "three-quarter",
+    "three quarter",
+    "3/4 angle",
+    "three-quarter view"
+  ],
+  "4.10": [
+    "reverse angle",
+    "reverse shot",
+    "opposite angle",
+    "from the opposite direction",
+    "reverse-angle"
+  ],
+  "5.2": [
+    "14mm",
+    "ultra-wide",
+    "ultra wide",
+    "14 mm",
+    "14mm ultra-wide",
+    "14mm ultra wide",
+    "14mm-ultra-wide"
+  ],
+  "5.3": [
+    "24mm",
+    "24 mm",
+    "24mm wide",
+    "24mm-wide"
+  ],
+  "5.4": [
+    "35mm",
+    "35 mm",
+    "35mm moderate",
+    "35mm moderate wide",
+    "35mm-moderate-wide"
+  ],
+  "5.5": [
+    "50mm",
+    "50 mm",
+    "50mm normal",
+    "50mm-normal"
+  ],
+  "5.6": [
+    "85mm",
+    "85 mm",
+    "85mm portrait",
+    "portrait lens",
+    "85mm-portrait"
+  ],
+  "5.7": [
+    "135mm",
+    "200mm",
+    "135 mm",
+    "200 mm",
+    "telephoto lens",
+    "135mm / 200mm telephoto",
+    "200mm telephoto",
+    "200mm-telephoto"
+  ],
+  "5.8": [
+    "telephoto compression",
+    "compressed depth",
+    "background compression",
+    "stacked planes",
+    "telephoto-compression"
+  ],
+  "5.9": [
+    "anamorphic",
+    "oval bokeh",
+    "horizontal flare"
+  ],
+  "5.10": [
+    "spherical",
+    "spherical lens",
+    "non-anamorphic"
+  ],
+  "5.11": [
+    "fisheye",
+    "fish-eye",
+    "extreme barrel distortion"
+  ],
+  "5.12": [
+    "macro",
+    "macro lens",
+    "macro detail"
+  ],
+  "5.13": [
+    "split diopter",
+    "split-field",
+    "two planes sharp",
+    "split-diopter"
+  ],
+  "6.1": [
+    "rule of thirds",
+    "thirds grid",
+    "on a third",
+    "rule-of-thirds"
+  ],
+  "6.2": [
+    "centered composition",
+    "centered frame",
+    "dead center",
+    "center framed",
+    "centered-composition"
+  ],
+  "6.3": [
+    "symmetry",
+    "symmetrical composition",
+    "bilateral symmetry"
+  ],
+  "6.4": [
+    "asymmetry",
+    "asymmetric composition",
+    "uneven balance"
+  ],
+  "6.5": [
+    "leading lines",
+    "leading line",
+    "lines lead toward",
+    "leading-lines"
+  ],
+  "6.6": [
+    "vanishing point",
+    "one-point perspective",
+    "one point perspective",
+    "vanishing point / one-point perspective",
+    "vanishing point / one point perspective",
+    "vanishing-point",
+    "one-point-perspective"
+  ],
+  "6.7": [
+    "frame within a frame",
+    "frame within the frame",
+    "doorway frames",
+    "architectural opening",
+    "frame within frame",
+    "frame-within-frame"
+  ],
+  "6.8": [
+    "negative space",
+    "open space beside",
+    "empty space beside",
+    "negative-space"
+  ],
+  "6.9": [
+    "foreground interest",
+    "foreground object",
+    "foreground edge",
+    "occluding foreground",
+    "foreground-interest"
+  ],
+  "6.10": [
+    "layered depth",
+    "subject plane",
+    "parallax",
+    "foreground and background layers",
+    "layered-depth"
+  ],
+  "6.11": [
+    "visual weight",
+    "heavier side of the frame",
+    "weighted composition",
+    "visual-weight"
+  ],
+  "6.12": [
+    "figure-ground",
+    "figure ground",
+    "separates from the background"
+  ],
+  "6.13": [
+    "tonal contrast",
+    "brightest spot",
+    "darkest spot",
+    "tonal-contrast"
+  ],
+  "6.14": [
+    "look space",
+    "lead room",
+    "looking room",
+    "space ahead of",
+    "space in front of",
+    "look space / lead room",
+    "look-space",
+    "lead-room"
+  ],
+  "6.15": [
+    "short siding",
+    "short-sided",
+    "noseroom removed",
+    "face toward the near edge",
+    "short-siding"
+  ],
+  "6.16": [
+    "dirty frame",
+    "foreground obstruction",
+    "edge occlusion",
+    "dirty-frame"
+  ],
+  "6.17": [
+    "clean frame",
+    "unobstructed frame",
+    "clear frame edges",
+    "clean-frame"
+  ],
+  "7.2": [
+    "key light",
+    "key from",
+    "primary key",
+    "key-light"
+  ],
+  "7.3": [
+    "fill light",
+    "fill from",
+    "soft fill",
+    "fill-light"
+  ],
+  "7.4": [
+    "backlight",
+    "back light",
+    "backlit",
+    "from behind"
+  ],
+  "7.5": [
+    "rim light",
+    "rim-light",
+    "edge light",
+    "hair light rim"
+  ],
+  "7.6": [
+    "kicker",
+    "kicker light",
+    "kick light"
+  ],
+  "7.7": [
+    "eye light",
+    "catchlight",
+    "eye catchlight",
+    "eye-light"
+  ],
+  "7.8": [
+    "high-key",
+    "high key",
+    "bright low-contrast"
+  ],
+  "7.9": [
+    "low-key",
+    "low key",
+    "deep shadow dominant"
+  ],
+  "7.10": [
+    "hard light",
+    "hard key",
+    "hard directional light",
+    "harsh light",
+    "hard-light"
+  ],
+  "7.11": [
+    "soft light",
+    "soft key",
+    "diffused light",
+    "softbox",
+    "soft-light"
+  ],
+  "7.12": [
+    "side light",
+    "side lighting",
+    "side-lit",
+    "sidelight",
+    "side-light"
+  ],
+  "7.13": [
+    "top light",
+    "top-light",
+    "from directly above",
+    "overhead key"
+  ],
+  "7.14": [
+    "underlighting",
+    "under-light",
+    "light from below",
+    "from underneath"
+  ],
+  "7.15": [
+    "rembrandt lighting",
+    "rembrandt",
+    "triangle on the cheek",
+    "rembrandt-lighting"
+  ],
+  "7.16": [
+    "split lighting",
+    "split-lit",
+    "half the face in shadow",
+    "split-lighting"
+  ],
+  "7.17": [
+    "short lighting",
+    "short-lit",
+    "shadow side toward camera",
+    "short-lighting"
+  ],
+  "7.18": [
+    "broad lighting",
+    "broad-lit",
+    "lit side toward camera",
+    "broad-lighting"
+  ],
+  "7.19": [
+    "motivated lighting",
+    "motivated light",
+    "motivated by",
+    "motivated-lighting"
+  ],
+  "7.20": [
+    "practical light",
+    "practical lamp",
+    "visible practical",
+    "practical-light"
+  ],
+  "7.21": [
+    "window light",
+    "light from the window",
+    "window as a light source",
+    "window-light"
+  ],
+  "7.22": [
+    "golden hour",
+    "golden-hour",
+    "low warm sun",
+    "warm low sun",
+    "magic hour"
+  ],
+  "7.23": [
+    "blue hour",
+    "blue-hour",
+    "cold ambient after sunset",
+    "twilight blue"
+  ],
+  "7.24": [
+    "volumetric light",
+    "god rays",
+    "visible light beam",
+    "shaft of light",
+    "haze beam",
+    "volumetric-light"
+  ],
+  "7.25": [
+    "gobo",
+    "dappled light",
+    "blinds pattern",
+    "leaf pattern light",
+    "gobo / dappled light",
+    "dappled-light"
+  ],
+  "8.1": [
+    "shallow focus",
+    "shallow depth of field",
+    "shallow dof",
+    "narrow depth of field",
+    "shallow-focus"
+  ],
+  "8.2": [
+    "deep focus",
+    "deep depth of field",
+    "foreground and background remain in focus",
+    "deep-focus"
+  ],
+  "8.3": [
+    "rack focus",
+    "focus shifts",
+    "shifts focus",
+    "focus pull",
+    "pulls focus",
+    "rack-focus"
+  ],
+  "9.1": [
+    "natural grade",
+    "natural color grade",
+    "neutral grade",
+    "natural-grade"
+  ],
+  "9.2": [
+    "warm amber",
+    "amber grade",
+    "warm amber grade",
+    "warm-amber"
+  ],
+  "9.3": [
+    "cool blue",
+    "cool blue grade",
+    "cold blue grade",
+    "cool-blue"
+  ],
+  "9.4": [
+    "teal & orange",
+    "teal and orange",
+    "teal-orange",
+    "teal-&-orange"
+  ],
+  "9.5": [
+    "desaturation",
+    "desaturated",
+    "muted colors",
+    "low saturation"
+  ],
+  "9.6": [
+    "hyper-saturation",
+    "hypersaturated",
+    "over-saturated",
+    "vivid saturation",
+    "hyper saturation"
+  ],
+  "9.7": [
+    "monochrome",
+    "black and white",
+    "black-and-white",
+    "grayscale"
+  ],
+  "9.8": [
+    "bleach bypass",
+    "bleach-bypass",
+    "silver retention"
+  ],
+  "9.9": [
+    "palette",
+    "color palette",
+    "limited palette"
+  ],
+  "10.1": [
+    "slow motion",
+    "slow-motion",
+    "slowed footage",
+    "overcranked"
+  ],
+  "10.2": [
+    "fast motion",
+    "fast-motion",
+    "sped up",
+    "undercranked"
+  ],
+  "10.3": [
+    "speed ramp",
+    "speed-ramp",
+    "ramps from",
+    "speed ramps"
+  ],
+  "10.4": [
+    "freeze frame",
+    "freeze-frame",
+    "frozen frame",
+    "holds as a still"
+  ],
+  "10.5": [
+    "time-lapse",
+    "timelapse",
+    "time lapse"
+  ],
+  "10.6": [
+    "motion blur",
+    "motion-blur",
+    "blurred motion streaks"
+  ],
+  "10.7": [
+    "low shutter",
+    "low shutter angle",
+    "staccato shutter",
+    "choppy motion",
+    "low-shutter"
+  ],
+  "10.8": [
+    "long take",
+    "oner",
+    "single continuous take",
+    "unbroken take",
+    "long take / oner",
+    "long-take"
+  ],
+  "11.1": [
+    "lens flare",
+    "flare streak",
+    "anamorphic flare",
+    "lens-flare"
+  ],
+  "11.2": [
+    "halation",
+    "halated highlights",
+    "glowing highlight bloom"
+  ],
+  "11.3": [
+    "film grain",
+    "grain texture",
+    "visible grain",
+    "film-grain"
+  ],
+  "11.4": [
+    "bokeh",
+    "out-of-focus orbs",
+    "bokeh balls"
+  ],
+  "11.5": [
+    "double exposure",
+    "double-exposure",
+    "overlaid exposures"
+  ],
+  "11.6": [
+    "light leak",
+    "light-leak",
+    "leak of light"
+  ],
+  "11.7": [
+    "chromatic aberration",
+    "color fringing",
+    "rgb fringe",
+    "chromatic-aberration"
+  ],
+  "11.8": [
+    "forced perspective",
+    "forced-perspective",
+    "miniaturized scale trick"
+  ],
+  "12.1": [
+    "haze",
+    "hazed air",
+    "atmospheric haze"
+  ],
+  "12.2": [
+    "fog",
+    "foggy",
+    "fog drifts"
+  ],
+  "12.3": [
+    "mist",
+    "misty",
+    "light mist"
+  ],
+  "12.4": [
+    "smoke",
+    "smoke drifts",
+    "smoke fills"
+  ],
+  "12.5": [
+    "dust motes",
+    "dust particles",
+    "floating dust",
+    "dust-motes"
+  ],
+  "12.6": [
+    "rain",
+    "rainfall",
+    "falling rain"
+  ],
+  "12.7": [
+    "wet-down",
+    "wet down",
+    "wet streets",
+    "wet pavement"
+  ],
+  "12.8": [
+    "snow",
+    "snowfall",
+    "falling snow"
+  ],
+  "12.9": [
+    "sparks",
+    "embers",
+    "flying embers",
+    "spark trails",
+    "sparks / embers"
+  ],
+  "13.1": [
+    "match cut",
+    "match-cut",
+    "matched cut"
+  ],
+  "13.2": [
+    "graphic match",
+    "graphic-match",
+    "shape match cut"
+  ],
+  "13.3": [
+    "match on action",
+    "cut on the movement",
+    "cut on action",
+    "continues across the cut",
+    "match-on-action"
+  ],
+  "13.4": [
+    "jump cut",
+    "jump-cut",
+    "jumpy cut"
+  ],
+  "13.5": [
+    "smash cut",
+    "smash-cut",
+    "abrupt smash"
+  ],
+  "13.6": [
+    "dissolve",
+    "cross-dissolve",
+    "dissolves to"
+  ],
+  "13.7": [
+    "fade in",
+    "fade out",
+    "fade-in",
+    "fade-out",
+    "fades to black",
+    "fade in / out",
+    "out"
+  ],
+  "13.8": [
+    "cross-cutting",
+    "cross cutting",
+    "intercut",
+    "parallel cutting"
+  ],
+  "13.9": [
+    "axial cut",
+    "axial-cut",
+    "cut along the lens axis"
+  ],
+  "13.10": [
+    "invisible cut",
+    "invisible-cut",
+    "hidden cut"
+  ],
+  "13.11": [
+    "j-cut",
+    "l-cut",
+    "j cut",
+    "l cut",
+    "split edit",
+    "j-cut / l-cut",
+    "j cut / l cut"
+  ],
+  "13.12": [
+    "quick cuts",
+    "rapid cuts",
+    "fast cutting",
+    "quick-cuts"
+  ],
+  "14.1": [
+    "film noir",
+    "classic noir",
+    "film-noir"
+  ],
+  "14.2": [
+    "neo-noir",
+    "neo noir",
+    "neonoir"
+  ],
+  "14.3": [
+    "german expressionism",
+    "expressionist",
+    "distorted architecture shadows",
+    "german-expressionism"
+  ],
+  "14.4": [
+    "giallo",
+    "giallo color",
+    "giallo palette"
+  ],
+  "14.5": [
+    "found footage",
+    "found-footage",
+    "camcorder aesthetic",
+    "diegetic camera"
+  ],
+  "14.6": [
+    "cinema verite",
+    "verite",
+    "documentary style",
+    "observational documentary",
+    "responsive camera",
+    "cinéma vérité / documentary",
+    "cinema verite / documentary",
+    "cinema-verite",
+    "documentary"
+  ],
+  "14.7": [
+    "blockbuster gloss",
+    "blockbuster",
+    "glossy studio",
+    "high-gloss",
+    "blockbuster-gloss"
+  ],
+  "14.8": [
+    "arthouse",
+    "art-house",
+    "art house"
+  ],
+  "14.9": [
+    "photographic cinematography",
+    "photographic frame",
+    "still-photograph composition",
+    "frame as a photograph",
+    "photographic-cinematography"
+  ]
+}

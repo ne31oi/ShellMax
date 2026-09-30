@@ -2,7 +2,7 @@ import clsx from "clsx";
 import { Play, Power, RefreshCw, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../api/client";
-import { useRestartAll } from "../../lib/restart";
+import { useRestartAll, useShutdownAll } from "../../lib/restart";
 import { notifySettings } from "../../lib/notify";
 import { useLibrary } from "../../store/library";
 import { Button, ErrorMessage, SectionTitle, Switch } from "../ui";
@@ -12,7 +12,8 @@ export function SystemSettings() {
   const engine = useLibrary((s) => s.engine);
   const [lines, setLines] = useState<string[]>([]);
   const [notify, setNotify] = useState(notifySettings.get());
-  const { restarting, restartAll, overlay } = useRestartAll();
+  const { restarting, restartAll, overlay: restartOverlay } = useRestartAll();
+  const { shuttingDown, shutdownAll, overlay: shutdownOverlay } = useShutdownAll();
   const logBox = useRef<HTMLPreElement>(null);
 
   useEffect(() => {
@@ -90,12 +91,17 @@ export function SystemSettings() {
         <SectionTitle>ShellMax</SectionTitle>
         <div className="rounded-xl border border-line p-4">
           <p className="mb-3 text-xs leading-relaxed text-muted">
-            Полный перезапуск: API, ComfyUI и ассистент. Та же кнопка — в шапке рядом со статусом движка. После обновления
-            бэкенда или если всё «зависло». Модели загрузятся снова.
+            Полный перезапуск или выключение: API, ComfyUI и ассистент. Те же кнопки — в шапке рядом со статусом движка.
+            После обновления бэкенда или если всё «зависло» — перезапуск. Модели загрузятся снова.
           </p>
-          <Button size="sm" variant="danger" disabled={restarting} onClick={restartAll}>
-            <Power size={12} /> Перезапустить всё
-          </Button>
+          <div className="flex flex-wrap gap-1.5">
+            <Button size="sm" variant="danger" disabled={restarting || shuttingDown} onClick={restartAll}>
+              <RefreshCw size={12} /> Перезапустить всё
+            </Button>
+            <Button size="sm" variant="ghost" disabled={restarting || shuttingDown} onClick={shutdownAll}>
+              <Power size={12} /> Выключить всё
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -113,7 +119,8 @@ export function SystemSettings() {
         </div>
       </section>
 
-      {overlay}
+      {restartOverlay}
+      {shutdownOverlay}
     </div>
   );
 }

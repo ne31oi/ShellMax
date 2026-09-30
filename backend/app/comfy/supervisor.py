@@ -157,6 +157,9 @@ class EngineSupervisor:
     async def stop(self) -> None:
         async with self._lock:
             pid, self.pid = self.pid, None
+            # Fall back to the pid file: memory can be empty after a partial adopt/crash.
+            if not pid_alive(pid):
+                pid = read_pid()
             if pid_alive(pid):
                 await asyncio.to_thread(kill_tree, pid)
             PID_FILE.unlink(missing_ok=True)

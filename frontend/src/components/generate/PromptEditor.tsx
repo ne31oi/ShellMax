@@ -251,10 +251,6 @@ export function PromptEditor() {
   // a finished, structured prompt is fixed in plain words; a free description is converted
   const structured = /subject_definitions\s*:/i.test(prompt);
   const videoBusy = useLibrary((s) => Object.values(s.generations).some((g) => g.status === "running" || g.status === "queued"));
-  const liveBox = useRef<HTMLPreElement>(null);
-  useEffect(() => {
-    if (liveBox.current) liveBox.current.scrollTop = liveBox.current.scrollHeight;
-  }, [job?.text]);
 
   // plain words + reference tags -> a prompt written by the local assistant to the user's specification
   const [assistMode, setAssistMode] = useState<"compose" | "edit" | null>(null);
@@ -316,19 +312,19 @@ export function PromptEditor() {
       <div className="prompt-editor relative rounded-xl border border-line bg-raised focus-within:border-accent/60">
         <EditorContent editor={editor} />
         {composing && (
-          // the assistant's text appears live on top of the editor; it replaces the prompt when done
-          <div className="absolute inset-x-0 top-0 bottom-[37px] flex flex-col rounded-t-xl bg-raised">
-            <div className="flex items-center gap-2 px-3 pt-2.5 text-xs text-accent">
-              <Spinner size={12} />
+          // Status overlay only — draft tokens stay off-screen until the final prompt is applied.
+          <div className="absolute inset-x-0 top-0 bottom-[37px] flex flex-col items-center justify-center gap-2 rounded-t-xl bg-raised/95 px-4 text-center">
+            <Spinner size={16} />
+            <p className="text-xs text-accent">
               {job.stage === "loading"
                 ? "Загружаю ассистента… первый раз это может занять минуту"
                 : job.stage === "repairing"
-                  ? "Проверяю крупность во всём промпте…"
-                : job.target === "edit" ? "Вношу правки…" : "Пишу промпт по спецификации…"}
-            </div>
-            <pre ref={liveBox} className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap px-3 py-2 font-mono text-[11px] leading-relaxed text-muted">
-              {stripFence(job.text)}
-            </pre>
+                  ? "Довожу промпт под выбранные техники…"
+                  : job.target === "edit"
+                    ? "Вношу правки…"
+                    : "Пишу промпт по спецификации…"}
+            </p>
+            <p className="text-[11px] text-faint">В редактор попадёт только готовый вариант</p>
           </div>
         )}
         <div className="flex items-center gap-1 border-t border-line/60 px-1.5 py-1">

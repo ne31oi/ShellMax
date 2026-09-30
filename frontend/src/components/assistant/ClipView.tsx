@@ -7,8 +7,10 @@ import { useClip } from "../../store/clip";
 import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
 import { Button, ErrorMessage, Select, Spinner } from "../ui";
+import { ReferenceLibrary } from "../generate/ReferenceLibrary";
 import { Markdown } from "./Markdown";
 import { ChatView } from "./ChatView";
+import { ShotTakes } from "./ShotTakes";
 
 const passportLabels: Record<keyof Passport, string> = {
   concept: "Концепция", hero: "Герой и внешность", costume: "Костюм", locations: "Локации",
@@ -87,6 +89,7 @@ function CreateClip({ onCreated }: { onCreated: () => void }) {
     <div className="flex gap-2">
       <Button variant="outline" disabled={action.pending} onClick={() => audioInput.current?.click()}>Загрузить аудио</Button>
       <Button variant="outline" disabled={action.pending} onClick={() => refInput.current?.click()}>Добавить референсы</Button>
+      <ReferenceLibrary onPick={(u) => setRefs((list) => [...list, { id: u.id, name: u.name || u.orig_name }])} exclude={refs.map((r) => r.id)} kinds={["image", "video"]} />
     </div>
     <input type="file" accept="audio/*" hidden ref={audioInput} onChange={(e) => {
       const file = e.target.files?.[0]; if (!file) return;
@@ -128,6 +131,16 @@ function ClipProjectView() {
   const refs = useRef<HTMLInputElement>(null);
   const audio = useRef<HTMLInputElement>(null);
   const disabled = !!busy || action.pending;
+  const [refNames, setRefNames] = useState<Record<string, string>>({});
+  const refKey = doc.ref_ids.join("|");
+  useEffect(() => {
+    let live = true;
+    void Promise.all(doc.ref_ids.map(async (id) => {
+      const upload = await api.uploadInfo(id).catch(() => null);
+      return [id, upload?.name || upload?.orig_name || id] as const;
+    })).then((entries) => { if (live) setRefNames(Object.fromEntries(entries)); });
+    return () => { live = false; };
+  }, [refKey]); // Refresh only when the reference set changes, not on every clip poll.
   return <div className="mx-auto max-w-6xl space-y-5 p-5">
     <div className="flex items-center justify-between gap-4"><div><h2 className="text-lg font-medium">{doc.name}</h2>
       <p className="text-xs text-muted">{time(doc.audio_end - doc.audio_start)} · {doc.passport_approved ? "Паспорт утверждён" : "Обсуждаем замысел"}</p></div>
@@ -190,8 +203,10 @@ function ClipProjectView() {
             <Button size="sm" variant="outline" disabled={disabled} onClick={() => audio.current?.click()}>Заменить трек</Button>
             <input hidden ref={audio} type="file" accept="audio/*" onChange={(e) => { const file = e.target.files?.[0]; if (file) void action.run(async () => { const a = await api.importAsset(file); useLibrary.getState().upsertAsset(a); await clipEdit({ audio_asset_id: a.id, audio_start: 0, audio_end: a.duration ?? 0 }); }); e.target.value = ""; }} />
           </div></details>
-          <div className="flex flex-wrap gap-2">{doc.ref_ids.map((id) => <div key={id} className="relative"><img src={urls.uploadThumb(id)} className="h-14 w-14 rounded object-cover" alt="Референс клипа" /><button disabled={disabled} className="absolute right-0 top-0 bg-panel px-1 text-xs" aria-label="Убрать референс" onClick={() => void action.run(() => clipEdit({ ref_ids: doc.ref_ids.filter((r) => r !== id) }))}>×</button></div>)}</div>
+          <div className="flex flex-wrap gap-2">{doc.ref_ids.map((id) => <div key={id} className="relative w-24"><img src={urls.uploadThumb(id)} className="h-14 w-24 rounded object-cover" alt={refNames[id] || "Референс клипа"} /><span className="block truncate text-[10px]" title={refNames[id]}>{refNames[id] || "Референс"}</span><button disabled={disabled} className="absolute right-0 top-0 bg-panel px-1 text-xs" aria-label="Убрать референс" onClick={() => void action.run(() => clipEdit({ ref_ids: doc.ref_ids.filter((r) => r !== id) }))}>×</button></div>)}</div>
           <Button size="sm" variant="outline" disabled={disabled} onClick={() => refs.current?.click()}>Добавить референсы</Button>
+          <ReferenceLibrary onPick={async (u) => { if (!disabled) await clipEdit({ ref_ids: [...doc.ref_ids, u.id] }); }}
+            onSaved={(u) => setRefNames((names) => ({ ...names, [u.id]: u.name }))} exclude={doc.ref_ids} kinds={["image", "video"]} />
           <input hidden ref={refs} type="file" accept="image/*,video/*" multiple onChange={(e) => { const files = Array.from(e.target.files ?? []); void action.run(async () => { const ids = [...doc.ref_ids]; for (const file of files) ids.push((await api.upload(file)).id); await clipEdit({ ref_ids: ids }); }); e.target.value = ""; }} />
           {doc.analysis && <details open><summary className="cursor-pointer text-xs">Музыкальная разметка и слова</summary><AudioSummary analysis={doc.analysis} editable={!disabled} /></details>}
         </section>
@@ -304,19 +319,11 @@ function BlockView({ block, disabled }: { block: ClipBlock; disabled: boolean })
         const candidates = clip.takes.filter((g) => { const info = takeInfo(g); return info.block_id === block.id && info.block_version === version.version && info.shot_id === shot.id && info.plan_mode === mode; });
         const selected = candidates.find((g) => g.id === picks[shot.id]);
         return <div key={shot.id} className="space-y-2"><ShotDetails shot={shot} />
-          {candidates.length > 0 && <Select label="Дубль" value={String(picks[shot.id] ?? "")} options={[{ value: "", label: "Нет готового дубля" }, ...candidates.filter((g) => ["done", "draft_only"].includes(g.status)).map((g) => ({ value: String(g.id), label: `#${g.id} · готов` }))]} onChange={(value) => setSelections({ ...selections, [shot.id]: Number(value) })} />}
-          {candidates.filter((g) => !["done", "draft_only"].includes(g.status)).map((g) => <p key={g.id} className="text-[11px] text-muted">Дубль #{g.id}: {g.status === "error" ? g.error : g.status === "cancelled" ? "остановлен" : "в обработке"}</p>)}
-          {selected && <details><summary className="cursor-pointer text-xs text-muted">Посмотреть выбранный дубль</summary><video controls muted className="mt-2 max-h-72 w-full rounded-lg" src={urls.assetFile(selected.output_asset_id ?? selected.draft_asset_id!)} /></details>}
-          {selected && <div className="flex gap-2">
-            <Button size="sm" variant="ghost" disabled={blocked} onClick={() => useUI.getState().openFaceDialog({ assetId: selected.output_asset_id ?? selected.draft_asset_id! })}>Улучшить лицо</Button>
-            <Button size="sm" variant="ghost" disabled={blocked} onClick={() => useUI.getState().openEnhanceDialog({ assetId: selected.output_asset_id ?? selected.draft_asset_id! })}>Детализация SeedVR2</Button>
-          </div>}
-          {selected && clip.takes.some((g) => g.id !== selected.id && takeInfo(g).shot_id === shot.id && ["done", "draft_only"].includes(g.status)) &&
-            <Select label="Сравнить выбранный дубль" value="" options={[{ value: "", label: "Выберите второй дубль для A/B" }, ...clip.takes.filter((g) => g.id !== selected.id && takeInfo(g).shot_id === shot.id && ["done", "draft_only"].includes(g.status)).map((g) => ({ value: String(g.id), label: `#${g.id} · ${takeInfo(g).plan_mode === "final" ? "финал" : "черновик"}` }))]} onChange={(value) => {
-              if (!value) return;
-              const ui = useUI.getState(); ui.selectGen(selected.id); ui.compare(Number(value)); ui.setWorkspace("generate");
-            }} />}
-          <Button size="sm" variant="ghost" disabled={blocked || block.stale || (mode === "final" && !version.draft_approved)} onClick={() => void action.run(async () => { await applyClipBlock(block.id); await clipOperation({ kind: "generate", block_id: block.id, mode, shot_ids: [shot.id] }); })}>Новый дубль этого кадра</Button>
+          <ShotTakes selected={selected} current={candidates}
+            alternatives={clip.takes.filter((g) => { const info = takeInfo(g); return info.block_id === block.id && info.shot_id === shot.id; })}
+            blocked={blocked || block.stale || (mode === "final" && !version.draft_approved)}
+            onSelect={(id) => setSelections({ ...selections, [shot.id]: id })}
+            onGenerate={() => void action.run(async () => { await applyClipBlock(block.id); await clipOperation({ kind: "generate", block_id: block.id, mode, shot_ids: [shot.id] }); })} />
         </div>;
       })}
       <div className="flex flex-wrap gap-2">

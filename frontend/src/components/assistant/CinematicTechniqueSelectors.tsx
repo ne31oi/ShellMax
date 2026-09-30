@@ -3,7 +3,7 @@ import { Button, Select } from "../ui";
 
 const NO_TECHNIQUE = "__no_cinematic_technique__";
 
-/** Keep every source category visible while preserving one active technique at a time. */
+/** Keep every source category visible with one active technique per category. */
 export function CinematicTechniqueSelectors({
   techniques,
   value,

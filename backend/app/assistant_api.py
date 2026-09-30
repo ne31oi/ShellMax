@@ -16,10 +16,7 @@ from .llm.registry import CHOICES, FILES
 from .llm.service import AssistantBusy, AssistantService
 from .media import library
 from .workflow.camera import user_camera_directive
-from .workflow.cinematography import (CAMERA_CATEGORIES, LIGHT_CATEGORY,
-                                      resolve_cinematic_technique_ids,
-                                      selected_cinematic_techniques,
-                                      user_cinematic_technique_directive)
+from .workflow.cinematography import resolve_cinematic_technique_ids
 from .workflow.light import user_light_directive
 
 router = APIRouter(prefix="/api/assistant")
@@ -27,14 +24,11 @@ TMP = settings.DATA_DIR / "assistant_tmp"
 
 
 def _expert_directives(camera: str, light: str, techniques: list[str]) -> str:
-    categories = {item["category"] for item in selected_cinematic_techniques(techniques)}
-    parts = []
-    if camera != "auto" or not categories & CAMERA_CATEGORIES:
-        parts.append(user_camera_directive(camera))
-    if light != "auto" or LIGHT_CATEGORY not in categories:
-        parts.append(user_light_directive(light))
-    parts.append(user_cinematic_technique_directive(techniques))
-    return "\n\n".join(parts)
+    """Legacy helper kept for chat; compose/edit use prompt.plain_selects_block instead."""
+    from .workflow.cinematography import user_cinematic_technique_directive
+    parts = [user_camera_directive(camera), user_light_directive(light),
+             user_cinematic_technique_directive(techniques)]
+    return "\n\n".join(p for p in parts if p)
 
 
 def _svc(request: Request) -> AssistantService:
@@ -148,15 +142,19 @@ def compose(body: ComposeIn, request: Request):
                 images.append(Path(up.path))
     techniques = resolve_cinematic_technique_ids(body.cinematic_techniques, body.cinematic_technique,
                                                   body.camera, body.light)
-    system = prompt.compose_system(infos, body.duration, body.look, body.camera, body.light,
-                                   cinematic_techniques=techniques)
-    # the huge spec comes first; restate at the end that the action is the user's, not the photo's
-    user = (f"Описание пользователя (ГЛАВНОЕ — действие видео берётся только отсюда):\n{body.text.strip()}\n\n"
-            f"{_expert_directives(body.camera, body.light, techniques)}\n\n"
-            "Преобразуй его в промпт. summary и detailed_description описывают именно это действие; "
-            "позу, жесты и предметы с картинок не переносить.")
+    # Keep vision for identity when the user talks about appearance/refs; otherwise text+selects only.
+    if not prompt.use_reference_images_for_edit(body.text, techniques):
+        images = []
+    system = prompt.compose_system(infos, body.duration)
+    user = prompt.compose_user_message(
+        body.text,
+        look=body.look,
+        camera=body.camera,
+        light=body.light,
+        cinematic_techniques=techniques,
+    )
     return _sse(
-        _checked_prompt_edit(svc, system, user, images, "", "", techniques),
+        _checked_prompt_edit(svc, system, user, images, "", body.text.strip(), techniques, infos),
         scrub_style_slogans=True,
     )
 
@@ -181,57 +179,89 @@ class EditIn(BaseModel):
     face: FaceIn | None = None  # set when editing a face refine prompt
 
 
+# How many focused LLM repair passes after the first draft (refs/completion only).
+_MAX_PROMPT_REPAIRS = 2
+
+
+def _prompt_edit_issues(source: str, instruction: str, candidate: str,
+                        cinematic_technique: str | list[str], technique_ids: list[str],
+                        refs: list[prompt.RefInfo] | None, finish_reason: str | None) -> list[str]:
+    """Only structural checks — technique content is left to the MD spec + plain selects."""
+    del source, instruction, cinematic_technique, technique_ids
+    issues = prompt.reference_tag_issues(refs, candidate)
+    issues.extend(prompt.prompt_completion_issues(candidate, finish_reason))
+    return issues
+
+
+def _repair_message(source: str, instruction: str, user: str, technique_ids: list[str],
+                    candidate: str, issues: list[str]) -> str:
+    del technique_ids
+    repair_context = f"Исходная просьба пользователя: {instruction}\n" if source else user
+    return (
+        f"{repair_context}\n\nТекущий черновик, в котором нужно исправить ошибки:\n```text\n{candidate}\n```\n\n"
+        f"Проверка запроса не пройдена: {', '.join(issues)}\n"
+        "Исправь перечисленные несоответствия. Верни все обязательные метки "
+        "<Picture N>/<Video N>/<Audio N> для прикреплённых референсов. "
+        "Закончи все разделы и закрой все теги референсов. "
+        "Верни полный промпт в требуемом формате."
+    )
+
+
 async def _checked_prompt_edit(svc, system: str, user: str, images: list[Path],
                                source: str, instruction: str,
-                               cinematic_technique: str | list[str] = "auto"):
-    first_done = None
+                               cinematic_technique: str | list[str] = "auto",
+                               refs: list[prompt.RefInfo] | None = None):
+    """One draft (+ short repair only for missing refs / truncated output). Always yield a prompt."""
+    technique_ids = ([cinematic_technique] if isinstance(cinematic_technique, str)
+                     else list(cinematic_technique))
+
+    done = None
     async for event in svc.stream(system, user, images):
         if "done" in event:
-            first_done = event
-        else:
-            yield event
+            done = event
+        elif event.get("stage"):
+            yield {"stage": "writing" if event["stage"] != "loading" else "loading"}
 
-    # Let the first stream finish so AssistantService releases its single active slot before retrying.
-    if first_done is None or first_done.get("cancelled"):
-        if first_done is not None:
-            yield first_done
-        return
-    candidate = first_done.get("prompt", "")
-    issues = prompt.shot_size_edit_issues(source, instruction, candidate)
-    issues.extend(prompt.lighting_edit_issues(instruction, candidate))
-    issues.extend(prompt.cinematic_technique_edit_issues(cinematic_technique, candidate))
-    if not issues:
-        yield first_done
+    if done is None or done.get("cancelled"):
+        if done is not None:
+            yield done
         return
 
-    # Ask for one focused repair pass when a requested framing or lighting detail was omitted.
-    yield {"stage": "repairing"}
-    yield {"replace": ""}
-    repair = (
-        f"{user}\n\nПроверка запроса не пройдена: {', '.join(issues)}\n"
-        "Исправь перечисленные несоответствия во всём промпте. Примени запрошенные характеристики "
-        "к каждому кадру, если пользователь не указал отдельные кадры. Сохрани число кадров, "
-        "неизменённые параметры и порядок полей. Верни полный промпт в требуемом формате."
-    )
-    second_done = None
-    async for event in svc.stream(system, repair, images):
-        if "done" in event:
-            second_done = event
-        else:
-            yield event
+    candidate = done.get("prompt", "") or ""
+    issues = _prompt_edit_issues(source, instruction, candidate, cinematic_technique, technique_ids,
+                                 refs, done.get("finish_reason"))
 
-    if second_done is None or second_done.get("cancelled"):
-        if second_done is not None:
-            yield second_done
-        return
-    repaired = second_done.get("prompt", "")
-    remaining = prompt.shot_size_edit_issues(source, instruction, repaired)
-    remaining.extend(prompt.lighting_edit_issues(instruction, repaired))
-    remaining.extend(prompt.cinematic_technique_edit_issues(cinematic_technique, repaired))
-    if remaining:
-        yield {"error": "Не удалось применить правку согласованно. Исходный промпт сохранён; уточните запрос и повторите."}
-    else:
-        yield second_done
+    for _ in range(_MAX_PROMPT_REPAIRS):
+        if not issues:
+            break
+        yield {"stage": "repairing"}
+        repair = _repair_message(source, instruction, user, technique_ids, candidate, issues)
+        next_done = None
+        async for event in svc.stream(system, repair, images):
+            if "done" in event:
+                next_done = event
+            elif event.get("stage"):
+                yield {"stage": "repairing"}
+        if next_done is None or next_done.get("cancelled"):
+            if next_done is not None:
+                yield next_done
+            return
+        done = next_done
+        candidate = done.get("prompt", "") or candidate
+        issues = _prompt_edit_issues(source, instruction, candidate, cinematic_technique, technique_ids,
+                                     refs, done.get("finish_reason"))
+
+    if issues:
+        # Mechanical ref-tag fix only — no technique marker injection.
+        candidate = prompt.enforce_reference_tags(refs, candidate)
+
+    yield {
+        "done": True,
+        "prompt": candidate,
+        "text": done.get("text") or candidate,
+        "cancelled": False,
+        "finish_reason": done.get("finish_reason"),
+    }
 
 
 @router.post("/edit")
@@ -262,34 +292,29 @@ def edit(body: EditIn, request: Request):
                 infos.append(prompt.RefInfo(kind=up.kind, name=up.orig_name, with_audio=ref.with_audio))
                 if up.kind == "image":
                     images.append(Path(up.path))
-    system = prompt.edit_system(infos, body.duration, face=body.face is not None, look=body.look,
-                                camera=body.camera, light=body.light,
-                                cinematic_techniques=techniques)
-    extras = ""
-    if body.face is None:
-        extras = f"\n\n{_expert_directives(body.camera, body.light, techniques)}"
+    if body.face is None and not prompt.use_reference_images_for_edit(body.instruction, techniques):
+        images = []
+    system = prompt.edit_system(infos, body.duration, face=body.face is not None)
     instruction = body.instruction.strip()
     if not instruction and body.face is None:
-        bits = []
-        if body.camera != "auto":
-            bits.append("камеру в detailed_description")
-        if body.light != "auto":
-            bits.append("свет в visual_style")
-        if techniques:
-            bits.append("выбранные кинотехники в соответствующих разделах")
-        joined = " и ".join(bits) if bits else "экспертные настройки"
         instruction = (
-            f"Перепиши только {joined} строго по экспертному выбору; "
-            "остальной текст, структуру полей и теги референсов не меняй."
+            "Apply the selected options below to the prompt; keep the rest of the scene and structure."
         )
-    user = (f"Текущий промпт:\n```text\n{body.prompt.strip()}\n```\n\n"
-            f"Что изменить (слова пользователя):\n{instruction}{extras}"
-            f"{prompt.shot_size_edit_directive(instruction)}"
-            f"{prompt.lighting_edit_directive(instruction)}\n\n"
-            "Верни полный исправленный промпт.")
+    if body.face is not None:
+        user = (f"Текущий промпт:\n```text\n{body.prompt.strip()}\n```\n\n"
+                f"Что изменить:\n{instruction}\n\nВерни полный исправленный промпт.")
+    else:
+        user = prompt.edit_user_message(
+            body.prompt,
+            instruction,
+            look=body.look,
+            camera=body.camera,
+            light=body.light,
+            cinematic_techniques=techniques,
+        )
 
     return _sse(_checked_prompt_edit(svc, system, user, images, body.prompt, instruction,
-                                    techniques),
+                                    techniques, infos),
                 scrub_style_slogans=True)
 
 

@@ -3,6 +3,30 @@
 Full-Reference Image-to-Video · Enhanced Guide for Action, Camera, VFX, Lighting, Sound, and Continuity
 Purpose: This document consolidates the Full-Reference prompt structure and the recurring high-value patterns found in the provided MiniMax training-prompt corpus. It is an engineering-oriented writing guide, not a claim about undocumented internal MiniMax rules.
 
+## Table of Contents
+
+- 1. Core Design Principles
+- 2. Standard Full-Reference Prompt Structure
+- 3. subject_definitions
+- 4. Reference Images: Critical Distinction
+- 5. summary
+- 6. retention_analysis
+- 7. detailed_description — The Core Field
+- 8. Action Writing: From Labels to Processes
+- 9. Camera / Cinematography
+- 10. VFX and Physical Feedback
+- 11. Lighting, Materials, and Visual Texture
+- 12. Multi-Shot Timeline and Continuity
+- 13. Character Acting and Emotion
+- 14. Dialogue, Soundscape, and Music
+- 15. Reusable High-Value Templates
+- 16. Common Failure Modes
+- 17. Final Quality Checklist
+- 18. Copyable Master Template
+- 19. Single-Shot High-Quality Example
+- 20. Training-Corpus-Derived High-Value Patterns
+- 21. Recommended Prompt-Building Workflow
+
 ## 1. Core Design Principles
 
 A strong H3 prompt should explicitly control the following layers:
@@ -354,3 +378,4 @@ These are corpus-derived writing patterns. They should be treated as practical p
 8. Add synchronized sound and dialogue.
 9. Check continuity across the timeline.
 10. Remove vague filler and replace it with observable details.
+

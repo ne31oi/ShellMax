@@ -190,7 +190,7 @@ def list_uploads(*, used_only: bool = True) -> list[Upload]:
         for u in uploads:
             root = s.get(Upload, u.source_id) if u.source_id else u
             pick = root if root is not None else u
-            key = _upload_family_key(pick)
+            key = f"named:{pick.id}" if pick.name else _upload_family_key(pick)
             if key in seen_family:
                 continue
             seen_family.add(key)
@@ -262,7 +262,8 @@ async def edit_upload(upload_id: str, edit: RefEdit) -> Upload:
     stem, suffix = Path(src.orig_name).stem, dest.suffix
     derived = Upload(id=uid, kind=src.kind, orig_name=f"{stem} (обрезано){suffix}", path=str(dest),
                      duration=meta.duration, width=meta.width, height=meta.height,
-                     has_audio=meta.has_audio, source_id=src.id, edit=spec)
+                     has_audio=meta.has_audio, source_id=src.id, edit=spec,
+                     name=src.name, category=src.category, description=src.description)
     with session() as s:
         s.merge(derived)
         s.commit()

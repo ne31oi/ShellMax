@@ -15,6 +15,7 @@ import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
 import { Spinner, Tip } from "../ui";
 import { RecentRefsPicker } from "./RecentRefsPicker";
+import { ReferenceLibrary } from "./ReferenceLibrary";
 
 export const ASSET_DRAG_TYPE = "application/x-shellmax-asset";
 const ACCEPT = "image/*,video/*,audio/*";
@@ -112,6 +113,7 @@ export function RefsZone() {
           </span>
           <div className="mt-2" onClick={(e) => e.stopPropagation()}>
             <RecentRefsPicker />
+            <ReferenceLibrary onPick={(u) => addUploadsAsRefs([u])} exclude={refs.map((r) => r.upload.source_id || r.upload.id)} />
           </div>
         </button>
       ) : (
@@ -139,6 +141,7 @@ export function RefsZone() {
                   </button>
                 </Tip>
                 <RecentRefsPicker compact />
+                <ReferenceLibrary compact onPick={(u) => addUploadsAsRefs([u])} exclude={refs.map((r) => r.upload.source_id || r.upload.id)} />
               </div>
             </SortableContext>
           </DndContext>
@@ -170,7 +173,7 @@ function RefCard({ item, tag, mentioned }: { item: RefItem; tag: string; mention
       {...attributes}
       {...listeners}
     >
-      <Tip text={<span>{upload.orig_name}<br /><span className="text-muted">Щёлкните, чтобы вставить тег в промпт · тяните, чтобы изменить порядок</span></span>}>
+      <Tip text={<span>{upload.name || upload.orig_name}<br /><span className="text-muted">Щёлкните, чтобы вставить тег в промпт · тяните, чтобы изменить порядок</span></span>}>
         <button
           onClick={() => emit("insertMention", item.uid)}
           className="h-full w-full overflow-hidden rounded-lg bg-raised ring-1 ring-line hover:ring-accent/60"

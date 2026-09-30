@@ -13,6 +13,7 @@ from .api_common import not_found
 from .db.models import Generation, MediaAsset, Upload, select, session
 from .jobs.persist import register_asset
 from .media import library
+from .reference_library import ReferenceDetails, reference_usage, update_reference
 
 router = APIRouter()
 
@@ -32,6 +33,16 @@ def list_uploads(used: bool = True):
 def get_upload(uid: str):
     with session() as s:
         return s.get(Upload, uid) or not_found()
+
+
+@router.patch("/uploads/{uid}/reference")
+def patch_reference(uid: str, body: ReferenceDetails):
+    return update_reference(uid, body)
+
+
+@router.get("/uploads/{uid}/usage")
+def get_reference_usage(uid: str):
+    return reference_usage(uid)
 
 
 @router.get("/uploads/{uid}/file")

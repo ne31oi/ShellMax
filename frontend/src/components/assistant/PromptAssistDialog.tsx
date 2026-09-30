@@ -4,6 +4,7 @@ import type { CinematicTechniquePreset } from "../../api/types";
 import { selectedCinematicTechniqueIds, useForm } from "../../store/form";
 import { useLibrary } from "../../store/library";
 import { Button, Dialog, Tip } from "../ui";
+import { CinemaPreview } from "./cinema-preview/CinemaPreview";
 import { CinematicTechniqueSelectors } from "./CinematicTechniqueSelectors";
 
 const FALLBACK_TECHNIQUES: CinematicTechniquePreset[] = [
@@ -12,7 +13,7 @@ const FALLBACK_TECHNIQUES: CinematicTechniquePreset[] = [
 
 type Mode = "compose" | "edit";
 
-/** Modal before assistant compose/edit: expert camera, light and cinematography (+ instruction for edit). */
+/** Modal before assistant compose/edit: independent cinematography categories (+ instruction for edit). */
 export function PromptAssistDialog({
   mode,
   open,
@@ -29,6 +30,7 @@ export function PromptAssistDialog({
   const techniques = useLibrary((s) => s.meta?.cinematic_technique ?? FALLBACK_TECHNIQUES);
   const cinematicTechniques = useForm((s) => s.cinematicTechniques);
   const cinematicTechnique = useForm((s) => s.cinematicTechnique);
+  const aspect = useForm((s) => s.aspect);
   const set = useForm((s) => s.set);
   const [instruction, setInstruction] = useState("");
 
@@ -102,16 +104,27 @@ export function PromptAssistDialog({
           </p>
         )}
 
-        <CinematicTechniqueSelectors
-          techniques={techniques}
-          value={cinematicTechniques}
-          onChange={(category, id) => {
-            const next = category ? { ...cinematicTechniques } : {};
-            if (category && id) next[category] = id;
-            else if (category) delete next[category];
-            set({ cinematicTechniques: next, cinematicTechnique: "auto", camera: "auto", light: "auto" });
-          }}
-        />
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+          <div className="lg:sticky lg:top-0 lg:w-[min(44%,30rem)] lg:shrink-0">
+            <CinemaPreview
+              techniques={techniques}
+              selectedByCategory={cinematicTechniques}
+              aspect={aspect}
+            />
+          </div>
+          <div className="min-w-0 flex-1">
+            <CinematicTechniqueSelectors
+              techniques={techniques}
+              value={cinematicTechniques}
+              onChange={(category, id) => {
+                const next = category ? { ...cinematicTechniques } : {};
+                if (category && id) next[category] = id;
+                else if (category) delete next[category];
+                set({ cinematicTechniques: next, cinematicTechnique: "auto", camera: "auto", light: "auto" });
+              }}
+            />
+          </div>
+        </div>
 
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>

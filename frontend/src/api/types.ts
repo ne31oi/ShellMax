@@ -4,6 +4,9 @@ export interface Upload {
   id: string;
   kind: RefKind;
   orig_name: string;
+  name: string;
+  category: "character" | "location" | "object" | "style" | "other";
+  description: string;
   duration: number | null;
   width: number | null;
   height: number | null;
@@ -366,6 +369,8 @@ export interface Meta {
   enhance_color?: EnhanceColorPreset[];
   interpolate_model?: InterpolateModelPreset[];
   interpolate_multiplier?: InterpolateMultiplierPreset[];
+  /** Backend process id — used to detect a real «Перезапустить всё» swap. */
+  pid?: number;
 }
 
 export interface FsListing {

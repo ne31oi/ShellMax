@@ -123,7 +123,7 @@ export function RecentRefsPicker({ compact }: { compact?: boolean }) {
                 key={u.id}
                 type="button"
                 disabled={!!busy || used}
-                title={used ? "Уже добавлен" : u.orig_name}
+                title={used ? "Уже добавлен" : u.name || u.orig_name}
                 onClick={() => void pick(u)}
                 className={clsx(
                   "relative aspect-square overflow-hidden rounded-lg bg-raised ring-1 ring-line transition-colors",
