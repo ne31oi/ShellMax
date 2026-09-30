@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { api } from "../api/client";
-import type { Generation, RefItem, StyleChoice, Upload } from "../api/types";
+import type { Generation, RefItem, StyleChoice, Upload, MaskEditParams } from "../api/types";
 import { fromModelPrompt, newUid, toModelPrompt } from "../lib/refs";
+import { normalizePromptLibrary, type PromptPreset, type PromptSnapshot } from "../lib/prompt-presets";
 import { sortedGenerations, useLibrary } from "./library";
 
 export type RecentRefKind = "image" | "video" | "audio";
@@ -96,6 +97,11 @@ interface FormState {
   variants: number;
   profileId: number | null;
   promptHistory: string[];
+  promptLibrary: PromptPreset[];
+  promptDraft: PromptSnapshot | null;
+  maskEditDrafts: Record<string, MaskEditParams>;
+  refmodMode: string;
+  refmodAudio: boolean;
   /** Last used uploads per kind (MRU, sticky). */
   recentRefs: RecentRefs;
   /** bumps when the prompt is replaced from outside (retry/history) so the editor reloads */
@@ -120,7 +126,7 @@ interface FormState {
 const LIMITS = { image: 9, video: 3, audio: 3 } as const;
 const STICKY: (keyof FormState)[] = [
   "refs", "prompt", "aspect", "duration", "quality", "look", "cinematicTechniques", "styles",
-  "seedLocked", "seed", "variants", "profileId", "promptHistory", "recentRefs",
+  "seedLocked", "seed", "variants", "profileId", "promptHistory", "recentRefs", "promptLibrary", "promptDraft", "maskEditDrafts", "refmodMode", "refmodAudio",
 ];
 
 export function selectedCinematicTechniqueIds(state: Pick<FormState, "cinematicTechniques" | "cinematicTechnique">): string[] {
@@ -131,12 +137,13 @@ export function selectedCinematicTechniqueIds(state: Pick<FormState, "cinematicT
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 
 /** Write sticky form fields now (call on unload / profile switch — debounce alone loses the last pick). */
-export function flushFormPersist() {
+export function flushFormPersist(throwOnError = false) {
   clearTimeout(saveTimer);
   const state = useForm.getState();
   if (!state.hydrated) return;
   const value = Object.fromEntries(STICKY.map((k) => [k, state[k]]));
-  return api.saveUiState(value).catch(() => undefined);
+  const saving = api.saveUiState(value);
+  return throwOnError ? saving : saving.catch(() => undefined);
 }
 
 export const useForm = create<FormState>((set, get) => ({
@@ -157,6 +164,11 @@ export const useForm = create<FormState>((set, get) => ({
   variants: 1,
   profileId: null,
   promptHistory: [],
+  promptLibrary: [],
+  promptDraft: null,
+  maskEditDrafts: {},
+  refmodMode: "Compressed Reference",
+  refmodAudio: false,
   recentRefs: emptyRecentRefs(),
   promptRevision: 0,
 
@@ -174,6 +186,9 @@ export const useForm = create<FormState>((set, get) => ({
     set({
       ...defaults,
       ...saved,
+      promptLibrary: normalizePromptLibrary(saved.promptLibrary),
+      promptDraft: saved.promptDraft && normalizePromptLibrary([{ id: "draft", name: "draft", category: "other", snapshot: saved.promptDraft }]).length
+        ? saved.promptDraft : null,
       camera: "auto",
       light: "auto",
       cinematicTechniques: saved.cinematicTechniques && typeof saved.cinematicTechniques === "object"
@@ -209,7 +224,7 @@ export const useForm = create<FormState>((set, get) => ({
   removeRef: (uid) =>
     set((s) => ({
       refs: s.refs.filter((r) => r.uid !== uid),
-      prompt: s.prompt.replaceAll(`{{ref:${uid}}}`, "").replace(/ {2,}/g, " "),
+      prompt: s.prompt.replaceAll(`{{ref:${uid}}}`, "").replaceAll(`{{ref:${uid}:audio}}`, "").replace(/ {2,}/g, " "),
       promptRevision: s.promptRevision + 1,
     })),
 
@@ -274,7 +289,7 @@ export const useForm = create<FormState>((set, get) => ({
     const refs: RefItem[] = [];
     p.refs.forEach((r, i) => {
       const up = uploads[i];
-      if (up) refs.push({ uid: newUid(), upload: up, withAudio: r.with_audio });
+      if (up) refs.push({ uid: newUid(), upload: up, withAudio: r.with_audio, strength: r.strength ?? 1 });
     });
     set((s) => ({
       refs,

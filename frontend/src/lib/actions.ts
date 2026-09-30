@@ -8,6 +8,9 @@ import { commands, audioTracks, snapTime, useTimeline } from "../store/timeline"
 import { useUI } from "../store/ui";
 import { emit } from "./bus";
 import { toModelPrompt } from "./refs";
+import { checkPrompt } from "./prompt-checks";
+import { capturePrompt, type PromptSnapshot } from "./prompt-presets";
+import { frameCount } from "./format";
 import { useClip } from "../store/clip";
 import type { ClipOperation, ClipEdit } from "../api/clip-types";
 import { emptyPlan, type TimelineDoc, type Track } from "../store/timeline";
@@ -89,6 +92,12 @@ function handleError(e: unknown) {
 
 export async function generate(): Promise<void> {
   const f = useForm.getState();
+  const issues = checkPrompt(f.prompt, f.refs, frameCount(f.duration) / 24).filter((i) => i.level === "error");
+  if (issues.length) {
+    toast(issues[0].message, "bad", { label: "К промпту", run: () => emit("focusPrompt") });
+    emit("focusPrompt");
+    return;
+  }
   const prompt = toModelPrompt(f.prompt, f.refs).trim();
   if (!prompt) {
     toast("Опишите, что должно происходить в видео", "info");
@@ -97,7 +106,7 @@ export async function generate(): Promise<void> {
   }
   const params: UIParams = {
     prompt,
-    refs: f.refs.map((r) => ({ kind: r.upload.kind, upload_id: r.upload.id, with_audio: r.withAudio })),
+    refs: f.refs.map((r) => ({ kind: r.upload.kind, upload_id: r.upload.id, with_audio: r.withAudio, strength: r.strength ?? 1 })),
     aspect: f.aspect,
     duration: f.duration,
     quality: f.quality,
@@ -119,6 +128,27 @@ export async function generate(): Promise<void> {
   }
 }
 
+/** Restore files by ID; missing media stays visible as an unresolved token. */
+export async function restorePrompt(snapshot: PromptSnapshot): Promise<void> {
+  const before = capturePrompt(useForm.getState());
+  const resolved = await Promise.all(snapshot.refs.map(async (r) => {
+    try { return { ...r, upload: await api.uploadInfo(r.upload.id) }; }
+    catch (e) {
+      if (e && typeof e === "object" && "status" in e && e.status === 404) return null;
+      throw e;
+    }
+  }));
+  const refs = resolved.filter((r): r is NonNullable<typeof r> => r !== null);
+  const apply = (s: PromptSnapshot) => {
+    const f = useForm.getState();
+    f.set({ ...capturePrompt(s), promptRevision: f.promptRevision + 1 });
+  };
+  apply({ ...snapshot, refs });
+  const missing = resolved.filter((r) => r === null).length;
+  toast(missing ? `Промпт загружен. Не найдено референсов: ${missing} — добавьте их заново` : "Промпт и референсы загружены", missing ? "info" : "ok",
+    { label: "Вернуть как было", run: () => apply(before) });
+}
+
 export async function retry(g: Generation, sameSeed: boolean, variants = 1) {
   try {
     const gens = await api.retry(g.id, sameSeed, variants);
@@ -130,6 +160,14 @@ export async function retry(g: Generation, sameSeed: boolean, variants = 1) {
 }
 
 export async function editAndRetry(g: Generation) {
+  if (g.kind === "mask_edit" || g.kind === "mask_track") {
+    if (g.source_asset_id) useUI.getState().openMaskEditDialog({ assetId: g.source_asset_id, fromGenerationId: g.id });
+    return;
+  }
+  if (g.kind === "refmod_create") {
+    useUI.getState().openRefmods(true);
+    return;
+  }
   if (g.kind === "face") {
     if (g.source_asset_id) useUI.getState().openFaceDialog({ assetId: g.source_asset_id, fromGenerationId: g.id });
     return;

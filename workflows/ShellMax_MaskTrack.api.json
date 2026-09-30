@@ -1,0 +1,12 @@
+{
+  "sam_loader": {"class_type": "ShellMaxCheckpointLoaderByPath", "inputs": {"checkpoint_path": "__SAM_MODEL__"}},
+  "sam_track": {
+    "class_type": "ShellMaxH3ObjectMask",
+    "inputs": {
+      "model": ["sam_loader", 0], "clip": ["sam_loader", 1], "video": "__SOURCE__",
+      "text": "person", "points": "{\"frames\": [{\"time\": 0.0, \"positive\": [{\"x\": 0.5, \"y\": 0.5}], \"negative\": []}]}",
+      "start": 0.0, "end": 2.0, "threshold": 0.5, "max_objects": 4,
+      "mode": "replace", "base": "", "every_frame": false
+    }
+  }
+}

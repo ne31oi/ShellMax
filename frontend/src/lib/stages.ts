@@ -23,6 +23,25 @@ export const STAGES_BY_KIND: Record<JobKind, StageDef[]> = {
   generate: GENERATE_STAGES,
   generate_nvfp4: GENERATE_STAGES,
   generate_nvfp4_fast: GENERATE_STAGES,
+  generate_refmods: GENERATE_STAGES,
+  generate_nvfp4_refmods: GENERATE_STAGES,
+  generate_nvfp4_fast_refmods: GENERATE_STAGES,
+  refmod_create: [
+    { id: "load", label: "Загрузка кодировщиков", short: "Загрузка" },
+    { id: "encode", label: "Создание RefMod", short: "RefMod" },
+  ],
+  mask_edit: [
+    { id: "load", label: "Загрузка моделей", short: "Загрузка" },
+    { id: "encode", label: "Кодирование клипа и маски", short: "Маска" },
+    { id: "sample", label: "Перерисовка выбранной области", short: "Правка" },
+    { id: "decode", label: "Сборка кадров", short: "Декод" },
+    { id: "stitch", label: "Вклейка в исходный клип", short: "Вклейка" },
+    { id: "save", label: "Сохранение видео", short: "Сохранение" },
+  ],
+  mask_track: [
+    { id: "load", label: "Загрузка SAM", short: "Загрузка" },
+    { id: "track", label: "Выделение и трекинг объекта", short: "Трекинг" },
+  ],
   face: [
     { id: "load", label: "Загрузка моделей", short: "Загрузка" },
     { id: "track", label: "Поиск и трекинг лица", short: "Трекинг" },

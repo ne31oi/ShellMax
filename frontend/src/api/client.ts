@@ -28,6 +28,10 @@ import type {
   Style,
   UIParams,
   Upload,
+  RefModCatalogue,
+  MaskEditParams,
+  MaskEditDefaults,
+  MaskTrackParams,
 } from "./types";
 import type { ClipProject, ClipListItem, ClipEdit, ClipOperation, ClipJob, PlanProposal, AssemblyProposal } from "./clip-types";
 
@@ -98,6 +102,14 @@ function pid(explicit?: number): number {
 }
 
 export const api = {
+  refmods: () => get<RefModCatalogue>("/api/refmods"),
+  useRefmod: (file: string) => post<Upload>("/api/refmods/use", { file }),
+  createRefmod: (body: { upload_ids: string[]; name: string; mode: string; include_audio: boolean; description: string; profile_id: number | null }) =>
+    post<Generation>(`/api/refmods/create?project_id=${pid()}`, body),
+  maskEditDefaults: (assetId: number) => get<MaskEditDefaults>(`/api/mask-edit/defaults?asset_id=${assetId}`),
+  maskEdit: (body: MaskEditParams) => post<Generation>(`/api/mask-edit?project_id=${pid()}`, body),
+  maskTrackStatus: () => get<{ available: boolean; model: string | null }>("/api/mask-track/status"),
+  maskTrack: (body: MaskTrackParams) => post<Generation>(`/api/mask-track?project_id=${pid()}`, body),
   clipProjects: (projectId: number) => get<ClipListItem[]>(`/api/assistant/clip-projects?project_id=${projectId}`),
   clipProject: (id: string) => get<ClipProject>(`/api/assistant/clip-projects/${id}`),
   clipRevisions: (id: string) => get<{ revision: number; document: ClipProject["document"] }[]>(`/api/assistant/clip-projects/${id}/revisions`),

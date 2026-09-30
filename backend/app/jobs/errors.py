@@ -11,6 +11,9 @@ def humanize_error(exc_type: str, message: str, node_type: str = "") -> tuple[st
                 "Не хватило видеопамяти. Снизьте качество или длительность, либо включите «Экономию VRAM».")
     if "filenotfound" in low or "файл не найден" in low or "путь к файлу" in low:
         return "missing_file", message.replace("ShellMax: ", "")
+    if node_type in ("ShellMaxH3ObjectMask", "MiniMaxH3FantasticObjectMask") and (
+            "found nothing" in low or "didn't find" in low or "mask is empty" in low):
+        return "generic", "SAM не нашёл объект. Поставьте зелёную точку внутри него на другом кадре, уточните красными точками фон и повторите трекинг."
     where = f" ({node_type})" if node_type else ""
     return "generic", f"Ошибка движка{where}: {message.strip() or exc_type}"
 

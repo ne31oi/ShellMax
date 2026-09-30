@@ -119,6 +119,9 @@ export function Player({ asset, badge, overlay }: { asset: MediaAsset; badge?: s
               <IconButton label="Детализация (SeedVR2)" onClick={() => useUI.getState().openEnhanceDialog({ assetId: asset.id })}>
                 <Sparkles size={15} />
               </IconButton>
+              <IconButton label="Изменить область по маске" onClick={() => useUI.getState().openMaskEditDialog({ assetId: asset.id })}>
+                <Camera size={15} />
+              </IconButton>
               <IconButton label="Интерполяция (RIFE)" onClick={() => useUI.getState().openInterpolateDialog({ assetId: asset.id })}>
                 <Gauge size={15} />
               </IconButton>

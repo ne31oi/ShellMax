@@ -6,6 +6,8 @@ Stage lists are mirrored in frontend/src/lib/stages.ts - change both together.
 from dataclasses import dataclass, field
 
 from ..workflow import builder, builder_enhance, builder_face, builder_interpolate, builder_nvfp4_fast, builder_nvfp4
+from ..workflow import builder_refmods, builder_refmod_create, builder_mask_edit
+from ..workflow import builder_mask_track
 
 
 @dataclass(frozen=True)
@@ -29,6 +31,13 @@ class Pipeline:
 
 
 PIPELINES = {
+    "mask_track": Pipeline(stages=[("load", 0.1), ("track", 0.9)], stage_by_node=builder_mask_track.STAGE_BY_NODE,
+        sampler_nodes=(), final_node=builder_mask_track.FINAL_OUTPUT_NODE),
+    "refmod_create": Pipeline(stages=[("load", 0.1), ("encode", 0.9)],
+        stage_by_node=builder_refmod_create.STAGE_BY_NODE, sampler_nodes=(), final_node=builder_refmod_create.FINAL_OUTPUT_NODE),
+    "mask_edit": Pipeline(stages=[("load", 0.1), ("encode", 0.15), ("sample", 0.55), ("decode", 0.1), ("stitch", 0.05), ("save", 0.05)],
+        stage_by_node=builder_mask_edit.STAGE_BY_NODE, sampler_nodes=builder_mask_edit.SAMPLER_NODES,
+        final_node=builder_mask_edit.FINAL_OUTPUT_NODE),
     "generate": Pipeline(
         stages=[("load", 0.08), ("encode", 0.07), ("pass1", 0.25), ("draft", 0.05),
                 ("upscale", 0.05), ("pass2", 0.05), ("final", 0.35), ("decode", 0.10)],
@@ -76,3 +85,9 @@ PIPELINES = {
         final_node=builder_interpolate.FINAL_OUTPUT_NODE,
     ),
 }
+
+for _base in ("generate", "generate_nvfp4", "generate_nvfp4_fast"):
+    _pipe = PIPELINES[_base]
+    PIPELINES[_base + "_refmods"] = Pipeline(stages=_pipe.stages,
+        stage_by_node={**_pipe.stage_by_node, **builder_refmods.STAGE_BY_NODE},
+        sampler_nodes=_pipe.sampler_nodes, final_node=_pipe.final_node, draft_node=_pipe.draft_node)

@@ -4,13 +4,16 @@ import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type 
 import StarterKit from "@tiptap/starter-kit";
 import type { JSONContent } from "@tiptap/core";
 import clsx from "clsx";
-import { AlertTriangle, AudioLines, History, Square } from "lucide-react";
+import { AudioLines, History, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { urls } from "../../api/client";
 import type { RefItem } from "../../api/types";
 import { emit, on } from "../../lib/bus";
-import { KIND_COLOR, REF_TOKEN, danglingTags, fromModelPrompt, tagOf, toModelPrompt } from "../../lib/refs";
+import { KIND_COLOR, REF_TOKEN, fromModelPrompt, tagOf, toModelPrompt } from "../../lib/refs";
+import { PromptChecks } from "./PromptChecks";
+import { PromptTools } from "./PromptTools";
+import { PromptHighlighting } from "./prompt-highlighting";
 import { frameCount } from "../../lib/format";
 import { useAssistant } from "../../store/assistant";
 import { ComposeAssistButton, EditAssistButton, PromptAssistDialog } from "../assistant/PromptAssistDialog";
@@ -31,7 +34,7 @@ function toDoc(prompt: string): JSONContent {
     let last = 0;
     for (const m of line.matchAll(REF_TOKEN)) {
       if (m.index! > last) content.push({ type: "text", text: line.slice(last, m.index) });
-      content.push({ type: "mention", attrs: { id: m[1] } });
+      content.push({ type: "mention", attrs: { id: m[1], channel: m[2] ? "audio" : null } });
       last = m.index! + m[0].length;
     }
     if (last < line.length) content.push({ type: "text", text: line.slice(last) });
@@ -44,7 +47,7 @@ function fromDoc(doc: JSONContent): string {
   return (doc.content ?? [])
     .map((p) =>
       (p.content ?? [])
-        .map((n) => (n.type === "mention" ? `{{ref:${n.attrs?.id}}}` : n.type === "hardBreak" ? "\n" : (n.text ?? "")))
+        .map((n) => (n.type === "mention" ? `{{ref:${n.attrs?.id}${n.attrs?.channel === "audio" ? ":audio" : ""}}}` : n.type === "hardBreak" ? "\n" : (n.text ?? "")))
         .join(""),
     )
     .join("\n");
@@ -55,11 +58,11 @@ function MentionChip({ node }: NodeViewProps) {
   const refs = useForm((s) => s.refs);
   const uid = node.attrs.id as string;
   const ref = refs.find((r) => r.uid === uid);
-  const tag = tagOf(refs, uid);
+  const tag = tagOf(refs, uid, node.attrs.channel === "audio" ? "audio" : undefined);
   return (
     <NodeViewWrapper
       as="span"
-      className={clsx("ref-mention", !ref && "is-missing")}
+      className={clsx("ref-mention", !tag && "is-missing")}
       style={ref ? ({ "--mention-color": KIND_COLOR[ref.upload.kind] } as React.CSSProperties) : undefined}
       contentEditable={false}
     >
@@ -81,6 +84,7 @@ interface SuggestState {
 const useSuggest = create<SuggestState>(() => ({ open: false, items: [], index: 0, rect: null, pick: null }));
 
 const RefMention = Mention.extend({
+  addAttributes() { return { ...this.parent?.(), channel: { default: null } }; },
   addNodeView() {
     return ReactNodeViewRenderer(MentionChip);
   },
@@ -188,6 +192,7 @@ export function PromptEditor() {
       }),
       Placeholder.configure({ placeholder: "Опишите сцену. Нажмите @, чтобы сослаться на референс…" }),
       RefMention,
+      PromptHighlighting,
     ],
     content: toDoc(useForm.getState().prompt),
     onUpdate: ({ editor }) => {
@@ -195,6 +200,11 @@ export function PromptEditor() {
       useForm.getState().setPrompt(fromDoc(editor.getJSON()));
     },
     editorProps: {
+      clipboardTextSerializer: (slice) => slice.content.textBetween(0, slice.content.size, "\n", (node) => {
+        if (node.type.name !== "mention") return "";
+        const tag = tagOf(useForm.getState().refs, node.attrs.id, node.attrs.channel === "audio" ? "audio" : undefined);
+        return tag ? `<${tag}>` : "[удалённый референс]";
+      }),
       handleKeyDown: (view, event) => {
         if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
           emit("generate");
@@ -242,9 +252,6 @@ export function PromptEditor() {
     [editor],
   );
   useEffect(() => on("focusPrompt", () => editor?.commands.focus("end")), [editor]);
-
-  // chips are tokens, so any raw <Picture N> left in the text was typed by hand
-  const dangling = danglingTags(prompt, refs);
 
   const job = useAssistant((s) => s.job);
   const composing = job?.target === "compose" || job?.target === "edit";
@@ -343,6 +350,7 @@ export function PromptEditor() {
               </MenuItem>
             ))}
           </Menu>
+          <PromptTools editor={editor} disabled={composing} />
           <span className="ml-auto" />
           {composing ? (
             <Button variant="outline" size="sm" onClick={() => useAssistant.getState().stop()}>
@@ -370,11 +378,7 @@ export function PromptEditor() {
         onCompose={convert}
         onEdit={editWithAssistant}
       />
-      {dangling.length > 0 && (
-        <p className="mt-1.5 flex items-center gap-1.5 text-xs text-warn">
-          <AlertTriangle size={12} /> Нет референса для {dangling.join(", ")}
-        </p>
-      )}
+      <PromptChecks hidden={composing} />
       <SuggestPopup focused={!!editor?.isFocused} />
     </div>
   );

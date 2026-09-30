@@ -11,6 +11,8 @@ export interface Upload {
   width: number | null;
   height: number | null;
   has_audio: boolean;
+  refmod_file?: string | null;
+  refmod_tokens?: number | null;
   source_id?: string | null; // set on an edited (cropped / trimmed) reference: the original upload
   edit?: { crop?: CropBox; start?: number; end?: number } | null;
   created?: string;
@@ -21,6 +23,7 @@ export interface RefItem {
   uid: string;
   upload: Upload;
   withAudio: boolean;
+  strength?: number;
 }
 
 export interface LoraSpec {
@@ -217,7 +220,7 @@ export interface StyleChoice {
 
 export interface UIParams {
   prompt: string;
-  refs: { kind: RefKind; upload_id: string; with_audio: boolean }[];
+  refs: { kind: RefKind; upload_id: string; with_audio: boolean; strength?: number }[];
   aspect: string;
   duration: number;
   quality: string;
@@ -232,7 +235,8 @@ export interface UIParams {
 export type GenStatus = "queued" | "running" | "done" | "draft_only" | "error" | "cancelled";
 export type Stage = "load" | "encode" | "pass1" | "draft" | "upscale" | "pass2" | "final" | "decode" | "done";
 
-export type JobKind = "generate" | "generate_nvfp4" | "generate_nvfp4_fast" | "face" | "enhance" | "interpolate";
+export type JobKind = "generate" | "generate_nvfp4" | "generate_nvfp4_fast" | "face" | "enhance" | "interpolate"
+  | "generate_refmods" | "generate_nvfp4_refmods" | "generate_nvfp4_fast_refmods" | "refmod_create" | "mask_edit" | "mask_track";
 
 export interface Project {
   id: number;
@@ -251,6 +255,8 @@ export interface Generation {
   source_asset_id: number | null; // face: the refined clip
   // stage_seconds: exact seconds per stage; cold: models were loaded from disk (left out of averages)
   info: {
+    mask?: MaskTrackResult;
+    refmods?: string[];
     track_report?: string;
     stage_seconds?: Record<string, number>;
     cold?: boolean;
@@ -276,6 +282,33 @@ export interface Generation {
   started: string | null;
   finished: string | null;
 }
+
+export interface RefModChannel { file: string; kind: RefKind; tokens: number; seconds?: number }
+export interface RefModEntry {
+  name: string; label: string; desc: string; preview: string | null;
+  visual?: RefModChannel; audio?: RefModChannel;
+}
+export interface RefModCatalogue { items: RefModEntry[] }
+export interface MaskKey { t: number; x: number; y: number; w: number; h: number; rot: number }
+export interface ShapeMaskLayer { kind: "ellipse" | "rect"; keys: MaskKey[]; motion: "linear"; mode: "add" | "cut"; visible: boolean }
+export interface AutoMaskLayer { kind: "auto"; result: string; track_generation_id: number; mode: "add" | "cut"; visible: boolean }
+export type MaskLayer = ShapeMaskLayer | AutoMaskLayer;
+export interface MaskPoint { x: number; y: number }
+export interface MaskPointFrame { time: number; positive: MaskPoint[]; negative: MaskPoint[] }
+export interface MaskSelection { text: string; points: MaskPointFrame[] }
+export interface MaskTrackParams extends MaskSelection { source_asset_id: number; start: number; end: number }
+export interface MaskTrackResult {
+  file: string; frames: number; hit: number; share: number;
+  sprite: { file: string; tw: number; th: number; cols: number; count: number; step: number; start: number };
+}
+export interface MaskEditParams {
+  source_asset_id: number; prompt: string; layers: MaskLayer[];
+  start: number; end: number | null; strength: number; invert: boolean;
+  grow: number; feather: number; crop_to_mask: boolean; keep_audio: boolean;
+  quality: string; seed: number | null; profile_id: number | null; reference_upload_ids: string[];
+  sam_selection?: MaskSelection; sam_job_id?: number; sam_applied_id?: number;
+}
+export interface MaskEditDefaults { asset: MediaAsset; prompt: string; strength: number; grow: number; feather: number; quality: string }
 
 export interface MediaAsset {
   id: number;

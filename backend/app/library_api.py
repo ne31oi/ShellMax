@@ -5,7 +5,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
 from . import services, settings
@@ -70,6 +70,10 @@ def upload_thumb(uid: str):
     thumb = settings.THUMBS_DIR / f"up_{uid}.jpg"
     if thumb.exists():
         return FileResponse(thumb)
+    with session() as s:
+        up = s.get(Upload, uid) or not_found()
+    if up.refmod_file:
+        return Response('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160"><rect width="160" height="160" fill="#27272a"/><text x="80" y="86" text-anchor="middle" fill="#a1a1aa" font-size="20">RefMod</text></svg>', media_type="image/svg+xml")
     return upload_file(uid)
 
 

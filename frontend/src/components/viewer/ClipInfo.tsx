@@ -53,7 +53,7 @@ export function ClipInfo({
       />
     );
   }
-  return <GenerationClipInfo gen={gen} />;
+  return <GenerationClipInfo gen={gen} comparing={comparing} canToggleCompare={canToggleCompare} onToggleCompare={onToggleCompare} />;
 }
 
 export function CompareToggle({
@@ -241,7 +241,9 @@ export function FaceClipInfo({
   );
 }
 
-export function GenerationClipInfo({ gen }: { gen: Generation }) {
+export function GenerationClipInfo({ gen, comparing, canToggleCompare, onToggleCompare }: {
+  gen: Generation; comparing?: boolean; canToggleCompare?: boolean; onToggleCompare?: () => void;
+}) {
   const styles = useLibrary((s) => s.styles);
   const quality = useLibrary((s) => s.meta?.quality.find((q) => q.id === gen.ui_params.quality));
   const p = gen.ui_params;
@@ -268,6 +270,7 @@ export function GenerationClipInfo({ gen }: { gen: Generation }) {
           <p className="min-w-0 flex-1 text-xs text-faint">Без промпта</p>
         )}
         <div className="flex shrink-0 gap-1">
+          <CompareToggle comparing={comparing} canToggle={canToggleCompare} onToggle={onToggleCompare} />
           {prompt && (
             <Button size="sm" variant="ghost" onClick={() => setPromptOpen(true)} title="Промпт генерации">
               Промпт

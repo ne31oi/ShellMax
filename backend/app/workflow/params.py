@@ -123,6 +123,7 @@ class RefSpec(BaseModel):
     kind: Literal["image", "video", "audio"]
     upload_id: str  # file in data/uploads
     with_audio: bool = False  # video refs only: feed the clip's soundtrack as well
+    strength: float = Field(default=1.0, gt=0, le=1)
 
 
 class StyleSpec(BaseModel):
@@ -178,6 +179,8 @@ class ResolvedRef(BaseModel):
     comfy_name: str = ""  # name in ComfyUI's input dir (images/audio, after upload)
     path: str = ""  # absolute path (videos are loaded by path)
     with_audio: bool = False
+    refmod_file: str = ""
+    strength: float = Field(default=1.0, gt=0, le=1)
 
 
 class FullParams(BaseModel):

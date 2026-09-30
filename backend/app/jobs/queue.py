@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import hashlib
 import logging
 import shutil
 import time
@@ -51,6 +52,7 @@ class Running:
     started_at: float = field(default_factory=time.time)  # job start: exact wall time is measured from here
     stage_marks: list = field(default_factory=list)  # [(stage, t)] when each stage began
     cold: bool = False  # models had to be loaded (first job after engine start or after they were freed)
+    artifact_done: bool = False
 
     def stage_seconds(self, until: float) -> dict[str, float]:
         out: dict[str, float] = {}
@@ -261,6 +263,8 @@ class JobManager:
             full = await self._upload_face_refs(FaceFullParams(**g.full_params))
         elif handler.upload == "refs":
             full = await self._upload_refs(FullParams(**g.full_params), g.ui_params)
+        elif handler.upload == "media":
+            full = await self._upload_media(handler.params_cls(**g.full_params))
         else:
             full = handler.params_cls(**g.full_params)
         prompt = handler.build(full)
@@ -310,7 +314,7 @@ class JobManager:
     async def _finish_result(self, r: Running) -> None:
         if r.error:
             await self._finish(r.gen_id, "error", error=r.error)
-        elif r.final_asset_id:
+        elif r.final_asset_id or r.artifact_done:
             await self._finish(r.gen_id, "done", elapsed=time.time() - r.started_at)
             self.cold_next, self._warm_pid = False, self.engine.pid
         elif r.draft_asset_id and (r.stop_after_draft or r.cancelled):
@@ -368,7 +372,7 @@ class JobManager:
         refs = []
         with session() as s:
             for ref, uid in zip(full.refs, upload_ids):
-                if ref.kind in ("image", "audio") and not ref.comfy_name:
+                if ref.kind in ("image", "audio") and not ref.comfy_name and not ref.refmod_file:
                     up = s.get(Upload, uid)
                     if not up.comfy_name:
                         up.comfy_name = await self.client.upload_input(Path(up.path), Path(up.path).name)
@@ -377,6 +381,22 @@ class JobManager:
                     ref = ref.model_copy(update={"comfy_name": up.comfy_name})
                 refs.append(ref)
         return full.model_copy(update={"refs": refs})
+
+    async def _upload_media(self, full):
+        sources = []
+        for source in full.sources:
+            path = Path(source.path)
+            # A content-stamped name prevents a repeat from overwriting an older job's source.
+            stamp = hashlib.sha256(f"{path}:{path.stat().st_size}:{path.stat().st_mtime_ns}".encode()).hexdigest()[:20]
+            name = await self.client.upload_input(path, f"shellmax_{stamp}{path.suffix}")
+            sources.append(source.model_copy(update={"file": name}))
+        updated = full.model_copy(update={"sources": sources})
+        if hasattr(updated, "base"):
+            names = {source.path: source.file for source in sources}
+            refs = [ref.model_copy(update={"comfy_name": names.get(ref.path, ref.comfy_name)})
+                    if not ref.refmod_file else ref for ref in updated.base.refs]
+            updated = updated.model_copy(update={"base": updated.base.model_copy(update={"refs": refs})})
+        return updated
 
     async def _upload_face_refs(self, full: FaceFullParams) -> FaceFullParams:
         """Identity (<Picture 1>) and close-up (<Picture 2>) images go into ComfyUI's input dir."""
@@ -483,6 +503,18 @@ class JobManager:
                              "data": f"data:{mime};base64,{base64.b64encode(image).decode()}"})
 
     async def _save_output(self, r: Running, node: str, output: dict) -> None:
+        collect = get_handler(r.kind).collect_artifact
+        if collect:
+            with session() as s:
+                g = s.get(Generation, r.gen_id)
+                info = collect(g, output)
+                if info:
+                    g.info = {**(g.info or {}), **info}
+                    s.add(g)
+                    s.commit()
+                    r.artifact_done = True
+                    await push_generation(g, r.step)
+            return
         files = output.get("gifs") or output.get("videos") or []
         if not files:
             return

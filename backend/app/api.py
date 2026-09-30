@@ -9,12 +9,14 @@ from .hub import hub
 from .jobs.estimator import estimate as estimate_time  # noqa: F401 — re-export for tests
 from .library_api import router as library_router
 from .projects_api import router as projects_router
+from .fantastic_api import router as fantastic_router
 
 router = APIRouter(prefix="/api")
 router.include_router(engine_router)
 router.include_router(library_router)
 router.include_router(generations_router)
 router.include_router(projects_router)
+router.include_router(fantastic_router)
 
 # ---------------------------------------------------------------- live events
 @router.websocket("/ws")

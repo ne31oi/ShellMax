@@ -222,6 +222,8 @@ async def edit_upload(upload_id: str, edit: RefEdit) -> Upload:
         src = s.get(Upload, up.source_id) if up.source_id else up
     if src is None:
         raise HTTPException(404, "оригинал референса не найден")
+    if src.refmod_file:
+        raise HTTPException(422, "RefMod уже закодирован — измените исходный референс и создайте новый RefMod")
 
     crop = edit.crop if src.kind in ("image", "video") else None
     if crop and crop["x"] <= 0.001 and crop["y"] <= 0.001 and crop["w"] >= 0.999 and crop["h"] >= 0.999:
@@ -284,7 +286,11 @@ def create_generations(ui: UIParams, project_id: int, *, info: dict | None = Non
             up = s.get(Upload, ref.upload_id)
             if up is None:
                 raise HTTPException(404, f"референс {ref.upload_id} не найден")
-            refs.append(ResolvedRef(kind=up.kind, path=up.path, with_audio=ref.with_audio and up.kind == "video"))
+            if up.refmod_file:
+                from .refmods import resolve_member
+                resolve_member(up.refmod_file)
+            refs.append(ResolvedRef(kind=up.kind, path=up.path, with_audio=ref.with_audio and up.kind == "video" and not up.refmod_file,
+                                    refmod_file=up.refmod_file or "", strength=ref.strength))
         styles = []
         for st in ui.styles:
             lib = s.get(StyleLora, st.style_id)
@@ -294,7 +300,7 @@ def create_generations(ui: UIParams, project_id: int, *, info: dict | None = Non
             styles.append((LoraSpec(path=lib.path, strength=strength), lib.triggers))
 
     created = []
-    kind = profile.pipeline
+    kind = profile.pipeline + ("_refmods" if any(ref.refmod_file for ref in refs) else "")
     for i in range(ui.variants):
         seed = ui.seed + i if ui.seed is not None else presets.new_seed()
         full = presets.expand(ui, profile, refs, styles, seed, filename_prefix="ShellMax/gen")
@@ -479,6 +485,14 @@ def create_interpolate(ui: InterpolateUIParams, project_id: int) -> Generation:
 
 
 # ---------------------------------------------------------------- retry (no kind if/elif in routers)
+def create_asset_job(kind: str, ui, project_id: int) -> Generation:
+    from .jobs.registry import get_handler
+    handler = get_handler(kind)
+    if handler.expand is None:
+        raise HTTPException(422, "Неизвестный тип обработки")
+    return persist_generation(handler.expand(ui, project_id), f"ShellMax/{kind}")
+
+
 def _recreate_face(g: Generation, *, same_seed: bool, variants: int) -> list[Generation]:
     out: list[Generation] = []
     for i in range(variants):
@@ -509,6 +523,13 @@ _RECREATE = {
 
 def recreate_generations(g: Generation, *, same_seed: bool = False, variants: int = 1) -> list[Generation]:
     """Spawn new jobs from an existing generation (retry)."""
+    from .jobs.registry import get_handler
+    handler = get_handler(g.kind)
+    if handler.expand and handler.ui_cls:
+        values = {**g.ui_params}
+        if "seed" in handler.ui_cls.model_fields:
+            values["seed"] = g.seed if same_seed else None
+        return [create_asset_job(g.kind, handler.ui_cls(**values), g.project_id) for _ in range(variants)]
     fn = _RECREATE.get(g.kind)
     if fn:
         return fn(g, same_seed=same_seed, variants=variants)

@@ -21,7 +21,10 @@ def profile(**over) -> EngineProfile:
     return EngineProfile(**base)
 
 
-def test_quality_preset_maps_to_megapixels_and_scale():
+def test_quality_preset_maps_to_megapixels_and_scale(monkeypatch):
+    # This asserts workflow defaults, independently of saved user overrides.
+    from app.workflow import quality
+    monkeypatch.setattr(quality, "kv_get", lambda key, default=None: default)
     full = expand(UIParams(prompt="p", quality="draft"), profile(), [], [], seed=7, filename_prefix="x")
     assert (full.megapixels, full.upscale) == (0.3, 1.5)
     full = expand(UIParams(prompt="p"), profile(), [], [], seed=7, filename_prefix="x")

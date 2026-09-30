@@ -18,6 +18,13 @@ from ..workflow.builder_nvfp4 import build_nvfp4_prompt
 from ..workflow.builder_nvfp4_fast import build_nvfp4_fast_prompt
 from ..workflow.params import EnhanceFullParams, FaceFullParams, FullParams, InterpolateFullParams
 from .pipelines import PIPELINES, Pipeline
+from ..workflow import builder_refmods, builder_refmod_create, builder_mask_edit
+from ..workflow.fantastic import RefModCreateUI, RefModCreateFull, MaskEditUI, MaskEditFull
+from ..fantastic_jobs import expand_refmod_create, expand_mask_edit
+from ..refmods import collect_output as collect_refmod_output
+from ..mask_tracking import expand_mask_track, collect_output as collect_mask_output
+from ..workflow.fantastic import MaskTrackUI, MaskTrackFull
+from ..workflow.builder_mask_track import build_mask_track_prompt
 
 UploadKind = str | None  # "refs" | "face" | None
 
@@ -30,6 +37,9 @@ class KindHandler:
     upload: UploadKind = None  # upload refs into engine input before build
     free_before: bool = False  # free VRAM (SeedVR2 needs a clean slate)
     title: Callable[[Generation, bool, str | None], str] | None = None
+    ui_cls: type | None = None
+    expand: Callable[[Any, int], Generation] | None = None
+    collect_artifact: Callable[[Generation, dict], dict | None] | None = None
 
 
 def asset_title(prompt: str, gen_id: int) -> str:
@@ -68,6 +78,20 @@ def _interpolate_title(g: Generation, is_draft: bool, source_name: str | None) -
 
 
 HANDLERS: dict[str, KindHandler] = {
+    "mask_track": KindHandler("mask_track", MaskTrackFull, build_mask_track_prompt, upload="media", free_before=True,
+                              ui_cls=MaskTrackUI, expand=expand_mask_track, collect_artifact=collect_mask_output),
+    "generate_refmods": KindHandler("generate_refmods", FullParams, builder_refmods.build_refmod_prompt,
+                                    upload="refs", title=_generate_title),
+    "generate_nvfp4_refmods": KindHandler("generate_nvfp4_refmods", FullParams, builder_refmods.build_nvfp4_refmod_prompt,
+                                          upload="refs", title=_generate_title),
+    "generate_nvfp4_fast_refmods": KindHandler("generate_nvfp4_fast_refmods", FullParams, builder_refmods.build_fast_refmod_prompt,
+                                               upload="refs", title=_generate_title),
+    "refmod_create": KindHandler("refmod_create", RefModCreateFull, builder_refmod_create.build_create_refmod_prompt,
+                                 upload="media", ui_cls=RefModCreateUI, expand=expand_refmod_create,
+                                 collect_artifact=collect_refmod_output),
+    "mask_edit": KindHandler("mask_edit", MaskEditFull, builder_mask_edit.build_mask_edit_prompt,
+                             upload="media", ui_cls=MaskEditUI, expand=expand_mask_edit,
+                             title=lambda g, draft, name: f"{name or 'Клип'} · маска"),
     "generate": KindHandler("generate", FullParams, build_prompt, upload="refs", title=_generate_title),
     "generate_nvfp4": KindHandler("generate_nvfp4", FullParams, build_nvfp4_prompt, upload="refs", title=_generate_title),
     "generate_nvfp4_fast": KindHandler(

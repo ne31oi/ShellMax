@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+.prompt-editor .prompt-section { color: var(--color-muted); font-weight: 600; }
+.prompt-editor .prompt-shot { background: var(--color-hover); border-radius: 3px; }
+.prompt-editor .prompt-subject { color: var(--color-accent); }
+.prompt-editor .prompt-dialogue { background: color-mix(in srgb, var(--color-audio) 12%, transparent); border-radius: 3px; }
+
 @theme {
   --color-bg: #0d0e11;
   --color-panel: #14161b;

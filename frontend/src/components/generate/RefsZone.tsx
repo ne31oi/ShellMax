@@ -13,7 +13,7 @@ import { KIND_COLOR, KIND_LABEL, mentionedUids, tagOf } from "../../lib/refs";
 import { useForm } from "../../store/form";
 import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
-import { Spinner, Tip } from "../ui";
+import { Button, Select, Spinner, Tip } from "../ui";
 import { RecentRefsPicker } from "./RecentRefsPicker";
 import { ReferenceLibrary } from "./ReferenceLibrary";
 
@@ -113,6 +113,7 @@ export function RefsZone() {
           </span>
           <div className="mt-2" onClick={(e) => e.stopPropagation()}>
             <RecentRefsPicker />
+            <Button size="sm" onClick={() => useUI.getState().openRefmods(true)}>RefMods</Button>
             <ReferenceLibrary onPick={(u) => addUploadsAsRefs([u])} exclude={refs.map((r) => r.upload.source_id || r.upload.id)} />
           </div>
         </button>
@@ -141,6 +142,7 @@ export function RefsZone() {
                   </button>
                 </Tip>
                 <RecentRefsPicker compact />
+                <Button size="sm" onClick={() => useUI.getState().openRefmods(true)}>RefMods</Button>
                 <ReferenceLibrary compact onPick={(u) => addUploadsAsRefs([u])} exclude={refs.map((r) => r.upload.source_id || r.upload.id)} />
               </div>
             </SortableContext>
@@ -163,7 +165,7 @@ function RefCard({ item, tag, mentioned }: { item: RefItem; tag: string; mention
   const { upload } = item;
   const edited = !!upload.source_id;
   const color = KIND_COLOR[upload.kind];
-  const badDuration = upload.kind === "video" && upload.duration != null && (upload.duration < 2 || upload.duration > 15);
+  const badDuration = !upload.refmod_file && upload.kind === "video" && upload.duration != null && (upload.duration < 2 || upload.duration > 15);
 
   return (
     <div
@@ -201,7 +203,7 @@ function RefCard({ item, tag, mentioned }: { item: RefItem; tag: string; mention
         </Tip>
       )}
 
-      {upload.kind === "video" && (
+      {!upload.refmod_file && upload.kind === "video" && (
         <div className="absolute inset-x-1 bottom-1 flex items-center justify-between">
           <span className="flex items-center gap-0.5 rounded bg-black/70 px-1 text-[10px] text-white">
             {edited && <Scissors size={9} />}
@@ -231,7 +233,11 @@ function RefCard({ item, tag, mentioned }: { item: RefItem; tag: string; mention
           <Scissors size={9} />
         </span>
       )}
-      <Tip text={upload.kind === "image" ? "Обрезать" : upload.kind === "audio" ? "Вырезать фрагмент" : "Обрезать кадр и выбрать фрагмент"}>
+      {upload.refmod_file && <div className="absolute inset-x-0 bottom-0 rounded-b bg-panel/90 text-[9px]" onPointerDown={(e) => e.stopPropagation()}>
+        <Select value={String(item.strength ?? 1)} onChange={(value) => useForm.getState().set({ refs: useForm.getState().refs.map((r) => r.uid === item.uid ? { ...r, strength: Number(value) } : r) })}
+          options={[1, 0.75, 0.5, 0.25].map((v) => ({ value: String(v), label: `RefMod ${Math.round(v * 100)}%` }))} />
+      </div>}
+      {!upload.refmod_file && <Tip text={upload.kind === "image" ? "Обрезать" : upload.kind === "audio" ? "Вырезать фрагмент" : "Обрезать кадр и выбрать фрагмент"}>
         <button
           onPointerDown={(e) => e.stopPropagation()}
           onClick={() => useUI.getState().openRefEditor(item.uid)}
@@ -240,7 +246,7 @@ function RefCard({ item, tag, mentioned }: { item: RefItem; tag: string; mention
         >
           {upload.kind === "image" ? <Crop size={11} /> : <Scissors size={11} />}
         </button>
-      </Tip>
+      </Tip>}
       <button
         onPointerDown={(e) => e.stopPropagation()}
         onClick={() => removeRef(item.uid)}

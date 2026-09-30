@@ -113,6 +113,21 @@ class ShellMaxVAELoaderByPath:
             return nodes.VAELoader().load_vae(path)
 
 
+class ShellMaxCheckpointLoaderByPath:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"checkpoint_path": PATH_INPUT}}
+
+    RETURN_TYPES = ("MODEL", "CLIP", "VAE")
+    FUNCTION = "load"
+    CATEGORY = CATEGORY
+
+    def load(self, checkpoint_path):
+        path = normalize_path(checkpoint_path)
+        with absolute_paths_resolve():
+            return nodes.CheckpointLoaderSimple().load_checkpoint(path)
+
+
 class ShellMaxLoraLoaderByPath:
     """Same as core LoraLoader (and each slot of rgthree's Lora Loader Stack): patches model and clip."""
 
@@ -246,6 +261,7 @@ class ShellMaxFrameInterpLoaderByPath:
 
 
 NODE_CLASS_MAPPINGS = {
+    "ShellMaxCheckpointLoaderByPath": ShellMaxCheckpointLoaderByPath,
     "ShellMaxUNETLoaderByPath": ShellMaxUNETLoaderByPath,
     "ShellMaxCLIPLoaderByPath": ShellMaxCLIPLoaderByPath,
     "ShellMaxVAELoaderByPath": ShellMaxVAELoaderByPath,
@@ -256,6 +272,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "ShellMaxCheckpointLoaderByPath": "ShellMax Load Checkpoint (path)",
     "ShellMaxUNETLoaderByPath": "ShellMax Load Diffusion Model (path)",
     "ShellMaxCLIPLoaderByPath": "ShellMax Load Text Encoder (path)",
     "ShellMaxVAELoaderByPath": "ShellMax Load VAE (path)",

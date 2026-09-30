@@ -10,6 +10,8 @@ import { ErrorView } from "./ErrorView";
 import { DraftBanner, FaceTrackBanner, LiveView } from "./LiveProgress";
 import { Player } from "./Player";
 import { Welcome } from "./Welcome";
+import { JobResultEmpty } from "./JobResultEmpty";
+import { sourceComparison } from "./source-comparison";
 
 export function Viewer() {
   const selectedGen = useUI((s) => s.selectedGen);
@@ -49,10 +51,8 @@ export function Viewer() {
   const draft = gen.draft_asset_id ? assets[gen.draft_asset_id] : undefined;
   const final = gen.output_asset_id ? assets[gen.output_asset_id] : undefined;
   const otherAsset = actions.outputAsset(other, assets);
-  const sourceAsset =
-    (gen.kind === "face" || gen.kind === "enhance" || gen.kind === "interpolate") && gen.source_asset_id
-      ? assets[gen.source_asset_id]
-      : undefined;
+  const comparison = sourceComparison(gen, assets);
+  const sourceAsset = comparison?.asset;
   const showBeforeAfter = !!final && !!sourceAsset && !resultOnly && !otherAsset;
 
   return (
@@ -63,6 +63,8 @@ export function Viewer() {
             key={`ba-${sourceAsset.id}-${final.id}`}
             a={sourceAsset}
             b={final}
+            aStart={comparison?.start}
+            durationLimit={comparison?.duration}
             labelA="До"
             labelB="После"
             onClose={() => setResultOnly(true)}
@@ -87,15 +89,15 @@ export function Viewer() {
         ) : gen.status === "error" ? (
           <ErrorView gen={gen} />
         ) : (
-          <div className="flex h-full items-center justify-center text-muted">Генерация отменена</div>
+          <JobResultEmpty gen={gen} />
         )}
       </div>
-      <ClipInfo
+      {gen.kind !== "refmod_create" && gen.kind !== "mask_track" && <ClipInfo
         gen={gen}
         comparing={showBeforeAfter}
         canToggleCompare={!!final && !!sourceAsset && !otherAsset}
         onToggleCompare={() => setResultOnly((v) => !v)}
-      />
+      />}
     </div>
   );
 }

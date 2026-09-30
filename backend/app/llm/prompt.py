@@ -23,6 +23,21 @@ class RefInfo(BaseModel):
     kind: str  # image | video | audio
     name: str
     with_audio: bool = False
+    refmod: bool = False
+    image_available: bool = True
+
+
+def _audio_refs(refs: list[RefInfo]) -> list[RefInfo]:
+    """H3 numbers paired video soundtracks before standalone audio files."""
+    paired = [RefInfo(kind="audio", name=f"Звуковая дорожка видео {r.name}")
+              for r in refs if r.kind == "video" and r.with_audio]
+    return paired + sorted([r for r in refs if r.kind == "audio"], key=lambda r: r.refmod)
+
+
+def _reference_counts(refs: list[RefInfo]) -> dict[str, int]:
+    return {"image": sum(r.kind == "image" for r in refs),
+            "video": sum(r.kind == "video" for r in refs),
+            "audio": len(_audio_refs(refs))}
 
 
 OUTPUT_CONTRACT = f"""=== ФОРМАТ ОТВЕТА (БЕЗ ИСКЛЮЧЕНИЙ) ===
@@ -53,9 +68,9 @@ HONESTY = """=== ЧЕСТНОСТЬ И ТОЧНОСТЬ РЕФЕРЕНСОВ ===
 
 
 def _refs_block(refs: list[RefInfo]) -> str:
-    images = [r for r in refs if r.kind == "image"]
-    videos = [r for r in refs if r.kind == "video"]
-    audios = [r for r in refs if r.kind == "audio"]
+    images = sorted([r for r in refs if r.kind == "image"], key=lambda r: r.refmod)
+    videos = sorted([r for r in refs if r.kind == "video"], key=lambda r: r.refmod)
+    audios = _audio_refs(refs)
     if not refs:
         return ("Референсов НЕТ. Метки <Picture N>, <Video N>, <Audio N> ЗАПРЕЩЕНЫ. Субъекты и окружение описывай "
                 "словами и помечай в retention_analysis как newly_generated.")
@@ -65,8 +80,8 @@ def _refs_block(refs: list[RefInfo]) -> str:
         "Промпт без меток при прикреплённых референсах = ОШИБКА.",
     ]
     if images:
-        lines.append("ИЗОБРАЖЕНИЯ — ты их ВИДИШЬ (прикреплены к сообщению в этом порядке), описывай по факту:")
-        lines += [f"  <Picture {i}> = {r.name}" for i, r in enumerate(images, 1)]
+        lines.append("ИЗОБРАЖЕНИЯ — приложены только доступные картинки/превью; отсутствующие не выдумывай:")
+        lines += [f"  <Picture {i}> = {r.name}" + (" (картинка приложена)" if r.image_available else " (превью отсутствует, содержимое НЕ видно)") for i, r in enumerate(images, 1)]
     if videos:
         lines.append("ВИДЕО — только теги, кадры НЕ прикреплены: не описывай и не угадывай их содержимое; используй "
                      "метку, когда пользователь просит движение/сцену из видео:")
@@ -870,10 +885,7 @@ def reference_tag_issues(refs: list[RefInfo] | None, candidate: str) -> list[str
     """Require every attached image/video/audio to appear as <Picture N> / <Video N> / <Audio N>."""
     if not refs:
         return []
-    counts = {"image": 0, "video": 0, "audio": 0}
-    for ref in refs:
-        if ref.kind in counts:
-            counts[ref.kind] += 1
+    counts = _reference_counts(refs)
     tag_by_kind = {"image": "Picture", "video": "Video", "audio": "Audio"}
     issues: list[str] = []
     for kind, total in counts.items():
@@ -892,10 +904,7 @@ def enforce_reference_tags(refs: list[RefInfo] | None, candidate: str) -> str:
     """Insert missing <Picture N>/<Video N>/<Audio N> labels so a compose/edit can still finish."""
     if not refs or not candidate.strip():
         return candidate
-    counts = {"image": 0, "video": 0, "audio": 0}
-    for ref in refs:
-        if ref.kind in counts:
-            counts[ref.kind] += 1
+    counts = _reference_counts(refs)
     tag_by_kind = {"image": "Picture", "video": "Video", "audio": "Audio"}
     missing_tags: list[str] = []
     for kind, total in counts.items():

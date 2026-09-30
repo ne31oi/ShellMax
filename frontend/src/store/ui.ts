@@ -41,6 +41,8 @@ interface UIState {
   toasts: Toast[];
   faceDialog: FaceDialogState | null;
   enhanceDialog: EnhanceDialogState | null;
+  maskEditDialog: EnhanceDialogState | null;
+  refmodsOpen: boolean;
   interpolateDialog: InterpolateDialogState | null;
   refEditor: string | null; // uid of the reference card being edited
   viewingSequence: boolean; // montage: Viewer plays the timeline sequence
@@ -60,6 +62,8 @@ interface UIState {
   toast: (text: string, tone?: Toast["tone"], action?: Toast["action"]) => void;
   openFaceDialog: (state: FaceDialogState | null) => void;
   openEnhanceDialog: (state: EnhanceDialogState | null) => void;
+  openMaskEditDialog: (state: EnhanceDialogState | null) => void;
+  openRefmods: (open: boolean) => void;
   openInterpolateDialog: (state: InterpolateDialogState | null) => void;
   openRefEditor: (uid: string | null) => void;
   setViewingSequence: (v: boolean) => void;
@@ -93,6 +97,8 @@ export const useUI = create<UIState>((set) => ({
   toasts: [],
   faceDialog: null,
   enhanceDialog: null,
+  maskEditDialog: null,
+  refmodsOpen: false,
   interpolateDialog: null,
   refEditor: null,
   viewingSequence: false,
@@ -148,6 +154,8 @@ export const useUI = create<UIState>((set) => ({
   dismiss: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
   openFaceDialog: (faceDialog) => set({ faceDialog }),
   openEnhanceDialog: (enhanceDialog) => set({ enhanceDialog }),
+  openMaskEditDialog: (maskEditDialog) => set({ maskEditDialog }),
+  openRefmods: (refmodsOpen) => set({ refmodsOpen }),
   openInterpolateDialog: (interpolateDialog) => set({ interpolateDialog }),
   openRefEditor: (refEditor) => set({ refEditor }),
   setViewingSequence: (viewingSequence) =>
