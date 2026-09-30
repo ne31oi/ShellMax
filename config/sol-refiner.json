@@ -1,0 +1,17 @@
+{
+  "source_revision": "670482d8a857d578ac8a2ea89b052d0fb47badba",
+  "diffusers_revision": "e0abab83b5df05de9e7abd788643c1a7c1e42e28",
+  "model": "szwagros/SoL-Refiner-LTX-2.5-H3-int8-convrot",
+  "model_revision": "de48aea81fddd2862128f27029194e632f726a4a",
+  "format": "int8_convrot",
+  "files": {
+    "transformer": {"path": "diffusion_models/sol-refiner-ltx-2.5-h3-transformer-comfy-int8-convrot.safetensors", "size": 23511214864},
+    "text_encoder": {"path": "text_encoders/gemma4-12b-with-proj-sol-refiner-ltx-2.5-h3-comfy-int8-convrot.safetensors", "size": 15372988273},
+    "vae": {"path": "vae/sol-refiner-ltx-2.5-h3-video-vae-bf16.safetensors", "size": 1472223474},
+    "upsampler": {"path": "latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors", "size": 995778752}
+  },
+  "long_side": 1920,
+  "seed": 0,
+  "decoder_seed": 0,
+  "sigma": 0.9093750119
+}

@@ -2,6 +2,7 @@
 
 import math
 import uuid
+from pathlib import Path
 
 from fastapi import HTTPException
 
@@ -32,10 +33,15 @@ def _profile(profile_id):
 
 
 def expand_refmod_create(ui: RefModCreateUI, project_id: int) -> Generation:
+    if ui.source_refmod_file:
+        # Revisions use the same recipe, always with a fresh output name.
+        resolve_member(ui.source_refmod_file)
     row, profile = _profile(ui.profile_id)
     uploads = _uploads(ui.upload_ids)
     if any(up.refmod_file for up in uploads):
         raise HTTPException(422, "Для создания RefMod выберите исходные картинки, видео или аудио")
+    if any(not Path(up.path).is_file() for up in uploads):
+        raise HTTPException(422, "Исходный файл не найден — уберите его или добавьте заново")
     sources = [MediaSource(path=up.path, kind={"image": "picture", "video": "video", "audio": "audio"}[up.kind],
                            has_audio=up.has_audio, audio_mode="paired" if ui.include_audio else "off") for up in uploads]
     if not ui.include_audio and all(s.kind == "audio" for s in sources):

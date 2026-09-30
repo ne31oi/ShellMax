@@ -58,6 +58,7 @@ class Upload(SQLModel, table=True):
     comfy_name: str | None = None  # name in ComfyUI input dir once uploaded there
     refmod_file: str | None = None  # relative RefMod member; kind remains its H3 reference kind
     refmod_tokens: int | None = None
+    refmod_meta: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
     # an edited reference (crop / trimmed fragment) is a derived file; the original stays untouched
     source_id: str | None = None
     edit: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))  # {crop:{x,y,w,h}, start, end}
@@ -172,6 +173,7 @@ engine = create_engine(
 _ADDED_COLUMNS = [
     ("upload", "refmod_file", "VARCHAR"),
     ("upload", "refmod_tokens", "INTEGER"),
+    ("upload", "refmod_meta", "JSON"),
     ("generation", "kind", "VARCHAR DEFAULT 'generate' NOT NULL"),
     ("generation", "source_asset_id", "INTEGER"),
     ("generation", "info", "JSON"),

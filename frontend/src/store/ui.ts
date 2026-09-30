@@ -41,6 +41,8 @@ interface UIState {
   toasts: Toast[];
   faceDialog: FaceDialogState | null;
   enhanceDialog: EnhanceDialogState | null;
+  solRefinerDialog: EnhanceDialogState | null;
+  fidelityUpscaleDialog: EnhanceDialogState | null;
   maskEditDialog: EnhanceDialogState | null;
   refmodsOpen: boolean;
   interpolateDialog: InterpolateDialogState | null;
@@ -62,6 +64,8 @@ interface UIState {
   toast: (text: string, tone?: Toast["tone"], action?: Toast["action"]) => void;
   openFaceDialog: (state: FaceDialogState | null) => void;
   openEnhanceDialog: (state: EnhanceDialogState | null) => void;
+  openSoLRefinerDialog: (state: EnhanceDialogState | null) => void;
+  openFidelityUpscaleDialog: (state: EnhanceDialogState | null) => void;
   openMaskEditDialog: (state: EnhanceDialogState | null) => void;
   openRefmods: (open: boolean) => void;
   openInterpolateDialog: (state: InterpolateDialogState | null) => void;
@@ -97,6 +101,8 @@ export const useUI = create<UIState>((set) => ({
   toasts: [],
   faceDialog: null,
   enhanceDialog: null,
+  solRefinerDialog: null,
+  fidelityUpscaleDialog: null,
   maskEditDialog: null,
   refmodsOpen: false,
   interpolateDialog: null,
@@ -154,6 +160,8 @@ export const useUI = create<UIState>((set) => ({
   dismiss: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
   openFaceDialog: (faceDialog) => set({ faceDialog }),
   openEnhanceDialog: (enhanceDialog) => set({ enhanceDialog }),
+  openSoLRefinerDialog: (solRefinerDialog) => set({ solRefinerDialog }),
+  openFidelityUpscaleDialog: (fidelityUpscaleDialog) => set({ fidelityUpscaleDialog }),
   openMaskEditDialog: (maskEditDialog) => set({ maskEditDialog }),
   openRefmods: (refmodsOpen) => set({ refmodsOpen }),
   openInterpolateDialog: (interpolateDialog) => set({ interpolateDialog }),

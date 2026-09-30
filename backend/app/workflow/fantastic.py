@@ -22,6 +22,7 @@ class RefModCreateUI(BaseModel):
     include_audio: bool = False
     description: str = Field(default="", max_length=2000)
     profile_id: int | None = None
+    source_refmod_file: str = ""
 
 
 class RefModCreateFull(BaseModel):

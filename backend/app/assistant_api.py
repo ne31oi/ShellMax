@@ -14,6 +14,7 @@ from .llm import config, prompt
 from .llm.downloader import downloads
 from .llm.registry import CHOICES, FILES
 from .llm.service import AssistantBusy, AssistantService
+from .llm.references import load_references
 from .media import library
 from .workflow.camera import user_camera_directive
 from .workflow.cinematography import resolve_cinematic_technique_ids
@@ -131,20 +132,12 @@ def compose(body: ComposeIn, request: Request):
         raise HTTPException(422, "Опишите, что должно происходить в видео")
     if (busy := _precheck(svc)) is not None:
         return busy
-    infos, images = [], []
-    with session() as s:
-        for ref in sorted(body.refs, key=lambda r: bool(getattr(s.get(Upload, r.upload_id), "refmod_file", None))):
-            up = s.get(Upload, ref.upload_id)
-            if up is None:
-                continue
-            infos.append(prompt.RefInfo(kind=up.kind, name=up.orig_name, with_audio=ref.with_audio and not up.refmod_file, refmod=bool(up.refmod_file), image_available=not up.refmod_file or (settings.THUMBS_DIR / f"up_{up.id}.jpg").exists()))
-            if up.kind == "image" and (not up.refmod_file or (settings.THUMBS_DIR / f"up_{up.id}.jpg").exists()):
-                images.append(settings.THUMBS_DIR / f"up_{up.id}.jpg" if up.refmod_file else Path(up.path))
     techniques = resolve_cinematic_technique_ids(body.cinematic_techniques, body.cinematic_technique,
                                                   body.camera, body.light)
     # Keep vision for identity when the user talks about appearance/refs; otherwise text+selects only.
-    if not prompt.use_reference_images_for_edit(body.text, techniques):
-        images = []
+    with session() as s:
+        infos, images = load_references(s, body.refs,
+            include_images=prompt.use_reference_images_for_edit(body.text, techniques))
     system = prompt.compose_system(infos, body.duration)
     user = prompt.compose_user_message(
         body.text,
@@ -285,15 +278,8 @@ def edit(body: EditIn, request: Request):
                 images = [Path(identity.path), _crop(Path(identity.path), body.face.closeup_crop,
                                                      TMP / f"crop_{uuid.uuid4().hex[:8]}.jpg")]
         else:
-            for ref in sorted(body.refs, key=lambda r: bool(getattr(s.get(Upload, r.upload_id), "refmod_file", None))):
-                up = s.get(Upload, ref.upload_id)
-                if up is None:
-                    continue
-                infos.append(prompt.RefInfo(kind=up.kind, name=up.orig_name, with_audio=ref.with_audio and not up.refmod_file, refmod=bool(up.refmod_file), image_available=not up.refmod_file or (settings.THUMBS_DIR / f"up_{up.id}.jpg").exists()))
-                if up.kind == "image" and (not up.refmod_file or (settings.THUMBS_DIR / f"up_{up.id}.jpg").exists()):
-                    images.append(settings.THUMBS_DIR / f"up_{up.id}.jpg" if up.refmod_file else Path(up.path))
-    if body.face is None and not prompt.use_reference_images_for_edit(body.instruction, techniques):
-        images = []
+            infos, images = load_references(s, body.refs,
+                include_images=prompt.use_reference_images_for_edit(body.instruction, techniques))
     system = prompt.edit_system(infos, body.duration, face=body.face is not None)
     instruction = body.instruction.strip()
     if not instruction and body.face is None:
@@ -489,13 +475,7 @@ def send(cid: str, body: ChatIn, request: Request):
         infos, images = [], []
         fresh = sum(m["role"] == "user" for m in chat.messages) <= 1  # studio правка 166
         if not fresh:
-            for ref in sorted(body.refs, key=lambda r: bool(getattr(s.get(Upload, r.upload_id), "refmod_file", None))):
-                up = s.get(Upload, ref.upload_id)
-                if up is None:
-                    continue
-                infos.append(prompt.RefInfo(kind=up.kind, name=up.orig_name, with_audio=ref.with_audio and not up.refmod_file, refmod=bool(up.refmod_file), image_available=not up.refmod_file or (settings.THUMBS_DIR / f"up_{up.id}.jpg").exists()))
-                if up.kind == "image" and (not up.refmod_file or (settings.THUMBS_DIR / f"up_{up.id}.jpg").exists()):
-                    images.append(settings.THUMBS_DIR / f"up_{up.id}.jpg" if up.refmod_file else Path(up.path))
+            infos, images = load_references(s, body.refs)
         history = [_as_llm_message(m) for m in chat.messages[-HISTORY_LIMIT:]]
     if body.attachment and (ATTACH_DIR / msg["attachment"]["id"]).exists():
         images.append(ATTACH_DIR / msg["attachment"]["id"])

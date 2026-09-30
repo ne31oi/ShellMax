@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from ..workflow import builder, builder_enhance, builder_face, builder_interpolate, builder_nvfp4_fast, builder_nvfp4
 from ..workflow import builder_refmods, builder_refmod_create, builder_mask_edit
 from ..workflow import builder_mask_track
+from ..workflow import builder_sol_refiner
+from ..workflow import builder_fidelity_upscale
 
 
 @dataclass(frozen=True)
@@ -31,6 +33,11 @@ class Pipeline:
 
 
 PIPELINES = {
+    "fidelity_upscale": Pipeline(stages=[("load", 0.05), ("upscale", 0.9), ("save", 0.05)],
+                                 stage_by_node=builder_fidelity_upscale.STAGE_BY_NODE, sampler_nodes=(),
+                                 final_node=builder_fidelity_upscale.FINAL_OUTPUT_NODE),
+    "sol_refine": Pipeline(stages=[("load", 0.05), ("refine", 0.95)], stage_by_node=builder_sol_refiner.STAGE_BY_NODE,
+                           sampler_nodes=(), final_node=builder_sol_refiner.FINAL_OUTPUT_NODE),
     "mask_track": Pipeline(stages=[("load", 0.1), ("track", 0.9)], stage_by_node=builder_mask_track.STAGE_BY_NODE,
         sampler_nodes=(), final_node=builder_mask_track.FINAL_OUTPUT_NODE),
     "refmod_create": Pipeline(stages=[("load", 0.1), ("encode", 0.9)],

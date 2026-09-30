@@ -1,0 +1,9 @@
+{
+  "model": "data/upscale_models/001_classicalSR_DF2K_s64w8_SwinIR-M_x2.pth",
+  "url": "https://github.com/JingyunLiang/SwinIR/releases/download/v0.0/001_classicalSR_DF2K_s64w8_SwinIR-M_x2.pth",
+  "size": 67277475,
+  "sha256": "2032ebf8f401dd3ce2fae5f3852117cb72101ec6ed8358faa64c2a3fa09ed4ac",
+  "scale": 1,
+  "model_scale": 2,
+  "crf": 17
+}

@@ -11,8 +11,38 @@ from .jobs.estimator import estimate as estimate_time
 from .jobs.persist import push_generation
 from .workflow import enhance, face, interpolate
 from .workflow.params import EnhanceUIParams, FaceUIParams, InterpolateUIParams, UIParams
+from .workflow.sol_refiner import SoLRefinerUI
+from .workflow.fidelity_upscale import FidelityUI
 
 router = APIRouter()
+
+
+@router.get("/fidelity-upscale/defaults")
+def fidelity_defaults(asset_id: int):
+    from .workflow.fidelity_upscale import defaults
+    return defaults(asset_id)
+
+
+@router.post("/fidelity-upscale")
+async def create_fidelity_job(ui: FidelityUI, request: Request, project_id: int = 1):
+    g = services.create_asset_job("fidelity_upscale", ui, project_id)
+    await push_generation(g)
+    state(request).jobs.enqueue(g.id)
+    return g
+
+
+@router.get("/sol-refiner/defaults")
+def sol_refiner_defaults(asset_id: int):
+    from .sol_refiner_jobs import defaults
+    return defaults(asset_id)
+
+
+@router.post("/sol-refiner")
+async def create_sol_refiner(ui: SoLRefinerUI, request: Request, project_id: int = 1):
+    g = services.create_asset_job("sol_refine", ui, project_id)
+    await push_generation(g)
+    state(request).jobs.enqueue(g.id)
+    return g
 
 # ---------------------------------------------------------------- generations
 @router.get("/generations")

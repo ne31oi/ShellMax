@@ -19,6 +19,21 @@ async def refmod_library():
     return await refmods.catalogue()
 
 
+@router.get("/refmods/limits")
+def refmod_limits():
+    return refmods.limits()
+
+
+@router.get("/refmods/edit")
+async def refmod_edit_defaults(file: str):
+    return await refmods.revision_defaults(file)
+
+
+@router.delete("/refmods")
+async def delete_refmod(file: str):
+    return await refmods.delete_member(file)
+
+
 @router.get("/refmods/preview")
 async def refmod_preview(name: str):
     try:
@@ -45,6 +60,13 @@ async def _enqueue(kind, ui, request, project_id):
 
 @router.post("/refmods/create")
 async def create_refmod(ui: RefModCreateUI, request: Request, project_id: int = 1):
+    return await _enqueue("refmod_create", ui, request, project_id)
+
+
+@router.post("/refmods/edit")
+async def edit_refmod(ui: RefModCreateUI, request: Request, project_id: int = 1):
+    if not ui.source_refmod_file:
+        raise HTTPException(422, "Выберите RefMod для редактирования")
     return await _enqueue("refmod_create", ui, request, project_id)
 
 

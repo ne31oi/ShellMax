@@ -51,6 +51,7 @@ $DebugPacks = @(
 
 # node classes the ShellMax graph uses; verified against /object_info
 $RequiredClasses = @(
+    'ShellMaxSoLRefinerByPath', 'ShellMaxUpscaleModelLoaderByPath', 'ImageUpscaleWithModel', 'ImageScale',
     'MiniMaxH3ReferenceToVideo', 'BlockSparseAttention', 'ModelAttentionBackend', 'ExtendIntermediateSigmas',
     'LTXVSeparateAVLatent', 'LTXVConcatAVLatent', 'ComfyMathExpression', 'ResolutionSelector',
     'PrimitiveFloat', 'PrimitiveStringMultiline', 'SamplerCustomAdvanced', 'BasicGuider', 'BasicScheduler',

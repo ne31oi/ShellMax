@@ -20,6 +20,11 @@ export const GENERATE_STAGES: StageDef[] = [
 
 /** Pipeline stages per job kind, in execution order (mirrors backend jobs/pipelines.py). */
 export const STAGES_BY_KIND: Record<JobKind, StageDef[]> = {
+  fidelity_upscale: [{ id: "load", label: "Загрузка клипа и модели", short: "Загрузка" },
+    { id: "upscale", label: "Бережное улучшение", short: "SwinIR" },
+    { id: "save", label: "Сохранение", short: "Сохранение" }],
+  sol_refine: [{ id: "load", label: "Загрузка моделей", short: "Загрузка" },
+    { id: "refine", label: "SoL-Refiner — детализация клипа", short: "SoL-Refiner" }],
   generate: GENERATE_STAGES,
   generate_nvfp4: GENERATE_STAGES,
   generate_nvfp4_fast: GENERATE_STAGES,

@@ -1,9 +1,34 @@
 import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { urls } from "../../api/client";
 import type { Estimate, Generation, MediaAsset } from "../../api/types";
 import { reportJobError } from "../../lib/errors";
 import { estimateBasis, fmtEstimate, fmtSeconds } from "../../lib/format";
-import { Button, ErrorMessage, Spinner } from "../ui";
+import { Button, Dialog, ErrorMessage, Spinner } from "../ui";
+
+export function PostProcessDialogShell({ open, title, onClose, children }: {
+  open: boolean; title: string; onClose: () => void; children: ReactNode;
+}) {
+  return <Dialog open={open} onOpenChange={(value) => !value && onClose()} title={title}>{children}</Dialog>;
+}
+
+/** Shared fetch/create lifecycle; discarded dialog requests cannot update a later source. */
+export function useAssetJobForm<T>(assetId: number, load: (id: number) => Promise<T>) {
+  const [defaults, setDefaults] = useState<T | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let active = true;
+    setDefaults(null);
+    load(assetId).then((value) => { if (active) setDefaults(value); })
+      .catch((e) => { if (active) setError(e instanceof Error ? e.message : "Не удалось открыть клип"); });
+    return () => { active = false; };
+  }, [assetId, load]);
+  const submit = (create: () => Promise<Generation>, opts: {
+    upsert: (g: Generation) => void; select: (id: number) => void; onDone: () => void;
+  }) => runAssetJob(create, { ...opts, setBusy, setError });
+  return { defaults, busy, error, submit };
+}
 
 /** Shared loading / error shell while defaults fetch. */
 export function JobLoading({ error, tall }: { error: string; tall?: boolean }) {
@@ -50,6 +75,7 @@ export function JobFooter({
   estimate,
   label,
   icon,
+  disabled = false,
 }: {
   onCancel: () => void;
   onSubmit: () => void;
@@ -57,13 +83,14 @@ export function JobFooter({
   estimate: Estimate | null;
   label: string;
   icon: ReactNode;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex justify-end gap-2 border-t border-line pt-4">
       <Button variant="ghost" onClick={onCancel} disabled={busy}>
         Отмена
       </Button>
-      <Button variant="primary" size="lg" onClick={onSubmit} disabled={busy} title={estimateBasis(estimate)}>
+      <Button variant="primary" size="lg" onClick={onSubmit} disabled={busy || disabled} title={estimateBasis(estimate)}>
         {busy ? <Spinner /> : icon} {label}
       </Button>
     </div>

@@ -13,6 +13,7 @@ export interface Upload {
   has_audio: boolean;
   refmod_file?: string | null;
   refmod_tokens?: number | null;
+  refmod_meta?: { source_kind?: string; description?: string } | null;
   source_id?: string | null; // set on an edited (cropped / trimmed) reference: the original upload
   edit?: { crop?: CropBox; start?: number; end?: number } | null;
   created?: string;
@@ -106,6 +107,15 @@ export interface FaceDefaults {
   frames: number;
   warnings: string[];
   presets: FaceStrength[];
+}
+
+export interface FidelityDefaults {
+  asset: MediaAsset;
+  ready: boolean;
+  frames: number;
+  width: number;
+  height: number;
+  scale: 1 | 2;
 }
 
 export interface EnhanceUIParams {
@@ -232,11 +242,16 @@ export interface UIParams {
   profile_id: number | null;
 }
 
+export interface SoLRefinerUIParams { source_asset_id: number; prompt: string; seed: number | null }
+export interface SoLRefinerDefaults {
+  asset: MediaAsset; prompt: string; ready: boolean; frames: number; width: number; height: number;
+}
+
 export type GenStatus = "queued" | "running" | "done" | "draft_only" | "error" | "cancelled";
 export type Stage = "load" | "encode" | "pass1" | "draft" | "upscale" | "pass2" | "final" | "decode" | "done";
 
-export type JobKind = "generate" | "generate_nvfp4" | "generate_nvfp4_fast" | "face" | "enhance" | "interpolate"
-  | "generate_refmods" | "generate_nvfp4_refmods" | "generate_nvfp4_fast_refmods" | "refmod_create" | "mask_edit" | "mask_track";
+export type JobKind = "generate" | "generate_nvfp4" | "generate_nvfp4_fast" | "face" | "enhance" | "interpolate" | "sol_refine"
+  | "generate_refmods" | "generate_nvfp4_refmods" | "generate_nvfp4_fast_refmods" | "refmod_create" | "mask_edit" | "mask_track" | "fidelity_upscale";
 
 export interface Project {
   id: number;
@@ -283,12 +298,25 @@ export interface Generation {
   finished: string | null;
 }
 
-export interface RefModChannel { file: string; kind: RefKind; tokens: number; seconds?: number }
+export interface RefModChannel {
+  file: string; kind: RefKind; tokens: number | null; seconds?: number;
+  context?: { source_kind?: string; description?: string; source_upload_ids?: string[] };
+}
 export interface RefModEntry {
   name: string; label: string; desc: string; preview: string | null;
   visual?: RefModChannel; audio?: RefModChannel;
+  deletable: boolean;
 }
-export interface RefModCatalogue { items: RefModEntry[] }
+export interface RefModLimits { create_visual_tokens: number | null; total_tokens: Record<string, number | null> }
+export interface RefModCatalogue { items: RefModEntry[]; limits: RefModLimits }
+export interface RefModRevisionDefaults {
+  item: RefModEntry; uploads: Upload[]; missing_sources: number; has_sources: boolean;
+  mode: string; include_audio: boolean; limits: RefModLimits;
+}
+export interface RefModCreateParams {
+  upload_ids: string[]; name: string; mode: string; include_audio: boolean;
+  description: string; profile_id: number | null; source_refmod_file?: string;
+}
 export interface MaskKey { t: number; x: number; y: number; w: number; h: number; rot: number }
 export interface ShapeMaskLayer { kind: "ellipse" | "rect"; keys: MaskKey[]; motion: "linear"; mode: "add" | "cut"; visible: boolean }
 export interface AutoMaskLayer { kind: "auto"; result: string; track_generation_id: number; mode: "add" | "cut"; visible: boolean }

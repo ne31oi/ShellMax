@@ -7,6 +7,8 @@ def humanize_error(exc_type: str, message: str, node_type: str = "") -> tuple[st
     low = f"{exc_type} {message}".lower()
     if ("out of memory" in low or "outofmemory" in low or "allocation on device" in low
             or "mha_graph.execute" in low):
+        if node_type == "ShellMaxSoLRefinerByPath":
+            return "generic", "SoL-Refiner не хватило памяти. Попробуйте обработать более короткий клип или используйте SeedVR2."
         return ("oom",
                 "Не хватило видеопамяти. Снизьте качество или длительность, либо включите «Экономию VRAM».")
     if "filenotfound" in low or "файл не найден" in low or "путь к файлу" in low:

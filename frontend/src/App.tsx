@@ -4,6 +4,8 @@ import { useEffect } from "react";
 import { AssistantSetup } from "./components/assistant/AssistantSetup";
 import { FaceRefineDialog } from "./components/face/FaceRefineDialog";
 import { EnhanceDialog } from "./components/enhance/EnhanceDialog";
+import { SoLRefinerDialog } from "./components/enhance/SoLRefinerDialog";
+import { FidelityUpscaleDialog } from "./components/enhance/FidelityUpscaleDialog";
 import { MaskEditDialog } from "./components/mask/MaskEditDialog";
 import { RefModLibrary } from "./components/generate/RefModLibrary";
 import { InterpolateDialog } from "./components/enhance/InterpolateDialog";
@@ -254,6 +256,8 @@ export default function App() {
       <SettingsDialog />
       <FaceRefineDialog />
       <EnhanceDialog />
+      <SoLRefinerDialog />
+      <FidelityUpscaleDialog />
       <MaskEditDialog />
       <RefModLibrary />
       <InterpolateDialog />

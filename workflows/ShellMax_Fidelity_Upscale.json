@@ -1,0 +1,12 @@
+{
+  "1": {"class_type": "VHS_LoadVideoPath", "inputs": {
+    "video": "__SOURCE__", "force_rate": 0, "custom_width": 0, "custom_height": 0,
+    "frame_load_cap": 0, "skip_first_frames": 0, "select_every_nth": 1, "format": "None"}},
+  "2": {"class_type": "ShellMaxUpscaleModelLoaderByPath", "inputs": {"model_path": "__MODEL__"}},
+  "3": {"class_type": "ImageUpscaleWithModel", "inputs": {"image": ["1", 0], "upscale_model": ["2", 0]}},
+  "5": {"class_type": "ImageScale", "inputs": {"image": ["3", 0], "upscale_method": "lanczos", "width": 896, "height": 512, "crop": "disabled"}},
+  "4": {"class_type": "VHS_VideoCombine", "inputs": {
+    "images": ["5", 0], "audio": ["1", 2], "filename_prefix": "ShellMax/fidelity_upscale",
+    "frame_rate": 24, "loop_count": 0, "format": "video/h264-mp4", "pix_fmt": "yuv420p",
+    "crf": 17, "save_metadata": true, "trim_to_audio": false, "pingpong": false, "save_output": true}}
+}

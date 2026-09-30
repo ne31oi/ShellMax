@@ -2,7 +2,7 @@ import type { Generation, MaskEditParams, MediaAsset } from "../../api/types";
 
 /** Source lookup and trimming belong to the job, rather than the player UI. */
 export function sourceComparison(gen: Generation, assets: Record<number, MediaAsset>) {
-  if (!gen.source_asset_id || !["face", "enhance", "interpolate", "mask_edit"].includes(gen.kind)) return null;
+  if (!gen.source_asset_id || !["face", "enhance", "interpolate", "mask_edit", "sol_refine", "fidelity_upscale"].includes(gen.kind)) return null;
   const asset = assets[gen.source_asset_id];
   if (!asset) return null;
   if (gen.kind !== "mask_edit") return { asset, start: 0, duration: undefined };

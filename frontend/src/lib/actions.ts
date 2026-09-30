@@ -160,6 +160,14 @@ export async function retry(g: Generation, sameSeed: boolean, variants = 1) {
 }
 
 export async function editAndRetry(g: Generation) {
+  if (g.kind === "fidelity_upscale") {
+    if (g.source_asset_id) useUI.getState().openFidelityUpscaleDialog({ assetId: g.source_asset_id, fromGenerationId: g.id });
+    return;
+  }
+  if (g.kind === "sol_refine") {
+    if (g.source_asset_id) useUI.getState().openSoLRefinerDialog({ assetId: g.source_asset_id, fromGenerationId: g.id });
+    return;
+  }
   if (g.kind === "mask_edit" || g.kind === "mask_track") {
     if (g.source_asset_id) useUI.getState().openMaskEditDialog({ assetId: g.source_asset_id, fromGenerationId: g.id });
     return;
@@ -185,6 +193,14 @@ export async function editAndRetry(g: Generation) {
   if (ui.workspace !== "assistant" && !ui.panelOpen) ui.togglePanel();
   emit("focusPrompt");
   toast("Параметры загружены в панель — измените и нажмите «Создать»", "info");
+}
+
+export function refineWithSoL(asset: MediaAsset) {
+  useUI.getState().openSoLRefinerDialog({ assetId: asset.id });
+}
+
+export function upscaleFaithfully(asset: MediaAsset) {
+  useUI.getState().openFidelityUpscaleDialog({ assetId: asset.id });
 }
 
 export async function cancel(g: Generation) {

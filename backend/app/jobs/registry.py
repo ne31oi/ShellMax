@@ -25,6 +25,11 @@ from ..refmods import collect_output as collect_refmod_output
 from ..mask_tracking import expand_mask_track, collect_output as collect_mask_output
 from ..workflow.fantastic import MaskTrackUI, MaskTrackFull
 from ..workflow.builder_mask_track import build_mask_track_prompt
+from ..workflow.builder_sol_refiner import build_sol_refiner_prompt
+from ..workflow.sol_refiner import SoLRefinerUI, SoLRefinerFull
+from ..sol_refiner_jobs import expand as expand_sol_refiner
+from ..workflow.fidelity_upscale import FidelityFull, FidelityUI, expand as expand_fidelity
+from ..workflow.builder_fidelity_upscale import build_fidelity_prompt
 
 UploadKind = str | None  # "refs" | "face" | None
 
@@ -40,6 +45,7 @@ class KindHandler:
     ui_cls: type | None = None
     expand: Callable[[Any, int], Generation] | None = None
     collect_artifact: Callable[[Generation, dict], dict | None] | None = None
+    retry_defaults: dict[str, Any] | None = None
 
 
 def asset_title(prompt: str, gen_id: int) -> str:
@@ -78,6 +84,13 @@ def _interpolate_title(g: Generation, is_draft: bool, source_name: str | None) -
 
 
 HANDLERS: dict[str, KindHandler] = {
+    "fidelity_upscale": KindHandler("fidelity_upscale", FidelityFull, build_fidelity_prompt, free_before=True,
+                                   ui_cls=FidelityUI, expand=expand_fidelity,
+                                   retry_defaults={"scale": 2},
+                                   title=lambda g, draft, name: f"{name or 'Клип'} · SwinIR ×{g.ui_params.get('scale', 2)}"),
+    "sol_refine": KindHandler("sol_refine", SoLRefinerFull, build_sol_refiner_prompt, free_before=True,
+                              ui_cls=SoLRefinerUI, expand=expand_sol_refiner,
+                              title=lambda g, draft, name: f"{name or 'Клип'} · SoL-Refiner"),
     "mask_track": KindHandler("mask_track", MaskTrackFull, build_mask_track_prompt, upload="media", free_before=True,
                               ui_cls=MaskTrackUI, expand=expand_mask_track, collect_artifact=collect_mask_output),
     "generate_refmods": KindHandler("generate_refmods", FullParams, builder_refmods.build_refmod_prompt,

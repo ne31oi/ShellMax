@@ -2,7 +2,7 @@ import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type D
 import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
-import { AlertTriangle, AudioLines, Crop, ImagePlus, Plus, Scissors, Volume2, VolumeX, X } from "lucide-react";
+import { AlertTriangle, AudioLines, Crop, ImagePlus, Pencil, Plus, Scissors, Volume2, VolumeX, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { urls } from "../../api/client";
 import type { MediaAsset, RefItem } from "../../api/types";
@@ -16,6 +16,7 @@ import { useUI } from "../../store/ui";
 import { Button, Select, Spinner, Tip } from "../ui";
 import { RecentRefsPicker } from "./RecentRefsPicker";
 import { ReferenceLibrary } from "./ReferenceLibrary";
+import { RefModBudget, tokenLabel } from "./RefModBudget";
 
 export const ASSET_DRAG_TYPE = "application/x-shellmax-asset";
 const ACCEPT = "image/*,video/*,audio/*";
@@ -154,6 +155,7 @@ export function RefsZone() {
           )}
         </div>
       )}
+      <RefModBudget />
     </div>
   );
 }
@@ -175,7 +177,10 @@ function RefCard({ item, tag, mentioned }: { item: RefItem; tag: string; mention
       {...attributes}
       {...listeners}
     >
-      <Tip text={<span>{upload.name || upload.orig_name}<br /><span className="text-muted">Щёлкните, чтобы вставить тег в промпт · тяните, чтобы изменить порядок</span></span>}>
+      <Tip text={<span>{upload.name || upload.orig_name}<br />
+        {upload.refmod_meta?.source_kind === "photo_set" && <span>Набор фото · общая метка {tag}<br /></span>}
+        {upload.refmod_file && <span>{tokenLabel(upload.refmod_tokens)}<br /></span>}
+        <span className="text-muted">Щёлкните, чтобы вставить тег в промпт · тяните, чтобы изменить порядок</span></span>}>
         <button
           onClick={() => emit("insertMention", item.uid)}
           className="h-full w-full overflow-hidden rounded-lg bg-raised ring-1 ring-line hover:ring-accent/60"
@@ -237,16 +242,17 @@ function RefCard({ item, tag, mentioned }: { item: RefItem; tag: string; mention
         <Select value={String(item.strength ?? 1)} onChange={(value) => useForm.getState().set({ refs: useForm.getState().refs.map((r) => r.uid === item.uid ? { ...r, strength: Number(value) } : r) })}
           options={[1, 0.75, 0.5, 0.25].map((v) => ({ value: String(v), label: `RefMod ${Math.round(v * 100)}%` }))} />
       </div>}
-      {!upload.refmod_file && <Tip text={upload.kind === "image" ? "Обрезать" : upload.kind === "audio" ? "Вырезать фрагмент" : "Обрезать кадр и выбрать фрагмент"}>
+      {upload.refmod_file && <span className="pointer-events-none absolute left-1 top-6 rounded bg-black/75 px-1 text-[9px] text-white tabular-nums">{upload.refmod_tokens == null ? "? ток." : `${upload.refmod_tokens.toLocaleString("ru-RU")} ток.`}</span>}
+      <Tip text={upload.refmod_file ? "Изменить состав RefMod" : upload.kind === "image" ? "Обрезать" : upload.kind === "audio" ? "Вырезать фрагмент" : "Обрезать кадр и выбрать фрагмент"}>
         <button
           onPointerDown={(e) => e.stopPropagation()}
           onClick={() => useUI.getState().openRefEditor(item.uid)}
           aria-label="Изменить референс"
           className="absolute -top-1.5 right-4 hidden h-5 w-5 items-center justify-center rounded-full border border-line bg-panel text-muted hover:text-fg group-hover:flex"
         >
-          {upload.kind === "image" ? <Crop size={11} /> : <Scissors size={11} />}
+          {upload.refmod_file ? <Pencil size={11} /> : upload.kind === "image" ? <Crop size={11} /> : <Scissors size={11} />}
         </button>
-      </Tip>}
+      </Tip>
       <button
         onPointerDown={(e) => e.stopPropagation()}
         onClick={() => removeRef(item.uid)}

@@ -13,7 +13,7 @@ workflows/MiniMax_H3_FaceRefine_Best.json.
 import re
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 SPEC = Path(__file__).with_name("prompt_spec.md").read_text(encoding="utf-8").strip()
 F = "```"
@@ -25,6 +25,12 @@ class RefInfo(BaseModel):
     with_audio: bool = False
     refmod: bool = False
     image_available: bool = True
+    source_kind: str = ""
+    description: str = ""
+    appearance: str = ""
+    voice_description: str = ""
+    retained_attributes: str = ""
+    attached_images: list[str] = Field(default_factory=list)
 
 
 def _audio_refs(refs: list[RefInfo]) -> list[RefInfo]:
@@ -74,19 +80,30 @@ def _refs_block(refs: list[RefInfo]) -> str:
     if not refs:
         return ("Референсов НЕТ. Метки <Picture N>, <Video N>, <Audio N> ЗАПРЕЩЕНЫ. Субъекты и окружение описывай "
                 "словами и помечай в retention_analysis как newly_generated.")
-    lines = [
-        "Каждое изображение обязано попасть в промпт своей меткой <Picture N>: создай <Subject N> в "
-        "subject_definitions и привяжи его к <Picture N> (раздел 4 спецификации), дальше используй <Subject N>.",
-        "Промпт без меток при прикреплённых референсах = ОШИБКА.",
-    ]
+    lines = ["Промпт без меток при прикреплённых референсах = ОШИБКА."]
+    if images:
+        lines.append("Каждое изображение обязано попасть в промпт своей меткой <Picture N>: создай <Subject N> в "
+                     "subject_definitions и привяжи его к <Picture N> (раздел 4 спецификации), дальше используй <Subject N>.")
     if images:
         lines.append("ИЗОБРАЖЕНИЯ — приложены только доступные картинки/превью; отсутствующие не выдумывай:")
         lines += [f"  <Picture {i}> = {r.name}" + (" (картинка приложена)" if r.image_available else " (превью отсутствует, содержимое НЕ видно)") for i, r in enumerate(images, 1)]
     if videos:
-        lines.append("ВИДЕО — только теги, кадры НЕ прикреплены: не описывай и не угадывай их содержимое; используй "
-                     "метку, когда пользователь просит движение/сцену из видео:")
-        lines += [f"  <Video {i}> = {r.name}" + (" (со звуковой дорожкой для MiniMax)" if r.with_audio else "")
-                  for i, r in enumerate(videos, 1)]
+        lines.append("РЕФЕРЕНСЫ С МЕТКОЙ VIDEO — тип содержимого указан отдельно:")
+        for i, r in enumerate(videos, 1):
+            if r.source_kind == "photo_set":
+                detail = ("набор статичных фото в одном RefMod, НЕ видеоклип и НЕ последовательность действий. "
+                          "Все фото относятся к одной метке; не создавай для них дополнительные <Picture N>. "
+                          "Используй этот набор для внешности, одежды и аксессуаров по запросу пользователя. "
+                          "Движение, камеру и монтаж задаёт запрос, их нельзя выводить из порядка фото. "
+                          "Обязательно свяжи <Video " + str(i) + "> с соответствующим субъектом/предметом "
+                          "в subject_definitions и retention_analysis")
+            else:
+                detail = ("видеореференс; движение и последовательность кадров НЕ видны ассистенту. "
+                          "Превью, если приложено, показывает только внешность; не угадывай движение")
+            lines.append(f"  <Video {i}> = {r.name} ({detail})" +
+                         (" (со звуковой дорожкой для MiniMax)" if r.with_audio else ""))
+            if r.source_kind == "photo_set" and not r.image_available:
+                lines.append("  Фото/превью этого набора НЕ приложены в этом запросе; не выдумывай внешность.")
     if audios:
         lines.append(
             "АУДИО — прикреплённые звуковые референсы для MiniMax. Ты их НЕ слышишь; модель получит файл по метке "
@@ -113,7 +130,7 @@ def _refs_block(refs: list[RefInfo]) -> str:
         lines.append("<Video N> ЗАПРЕЩЕНЫ — видео-референсов нет.")
     if not audios:
         lines.append("<Audio N> ЗАПРЕЩЕНЫ — аудио-референсов нет; голоса и реплики описывай словами.")
-    if images:
+    if images or any(r.source_kind == "photo_set" for r in videos):
         # a reference photo of someone biting a donut must not turn "she dances" into a donut video
         lines.append("КАРТИНКА ЗАДАЁТ ТОЛЬКО ВНЕШНОСТЬ (лицо, волосы, телосложение, одежда, украшения). Поза, жесты, выражение, "
                      "предметы в руках, еда, фон, КРОП/КРУПНОСТЬ/ДИСТАНЦИЯ КАМЕРЫ на фото и то, что человек делает на "
@@ -149,6 +166,24 @@ def _refs_block(refs: list[RefInfo]) -> str:
             "frozen expression. Не оставляй лицо в «neutral expression» на весь клип, если есть речь, музыка или действие — "
             "выражение должно меняться по ходу."
         )
+    if not images:
+        # Photo stacks retain their Video label; examples must not invent Picture labels.
+        lines = [line.replace("<Picture K>", "<Video K>").replace("<Picture 1>", "<Video 1>") for line in lines]
+    attachment_index = 0
+    for ref in refs:
+        group = images if ref.kind == "image" else videos if ref.kind == "video" else audios
+        label = {"image": "Picture", "video": "Video", "audio": "Audio"}[ref.kind]
+        index = next(index for index, item in enumerate(group, 1) if item is ref)
+        tag = f"<{label} {index}>"
+        if ref.refmod:
+            for title, value in (("Описание", ref.description), ("Внешность", ref.appearance),
+                                 ("Описание голоса", ref.voice_description), ("Сохраняемые признаки", ref.retained_attributes)):
+                if value:
+                    lines.append(f"Метаданные {tag}, {title} (текст автора, не наблюдение ассистента): {value}")
+        for name in ref.attached_images:
+            attachment_index += 1
+            lines.append(f"Вложенная картинка {attachment_index}: {tag} — {name}. "
+                         "Это фото/превью этого референса, а не отдельная метка генерации.")
     return "\n".join(lines)
 
 

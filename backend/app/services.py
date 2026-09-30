@@ -526,7 +526,7 @@ def recreate_generations(g: Generation, *, same_seed: bool = False, variants: in
     from .jobs.registry import get_handler
     handler = get_handler(g.kind)
     if handler.expand and handler.ui_cls:
-        values = {**g.ui_params}
+        values = {**(handler.retry_defaults or {}), **g.ui_params}
         if "seed" in handler.ui_cls.model_fields:
             values["seed"] = g.seed if same_seed else None
         return [create_asset_job(g.kind, handler.ui_cls(**values), g.project_id) for _ in range(variants)]

@@ -260,7 +260,25 @@ class ShellMaxFrameInterpLoaderByPath:
         return (patcher,)
 
 
+class ShellMaxUpscaleModelLoaderByPath:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"model_path": PATH_INPUT}}
+
+    RETURN_TYPES = ("UPSCALE_MODEL",)
+    FUNCTION = "load"
+    CATEGORY = CATEGORY
+
+    def load(self, model_path):
+        from comfy_extras.nodes_upscale_model import UpscaleModelLoader
+        path = normalize_path(model_path)
+        with absolute_paths_resolve():
+            output = UpscaleModelLoader.execute(path)
+        return (output.result[0],)
+
+
 NODE_CLASS_MAPPINGS = {
+    "ShellMaxUpscaleModelLoaderByPath": ShellMaxUpscaleModelLoaderByPath,
     "ShellMaxCheckpointLoaderByPath": ShellMaxCheckpointLoaderByPath,
     "ShellMaxUNETLoaderByPath": ShellMaxUNETLoaderByPath,
     "ShellMaxCLIPLoaderByPath": ShellMaxCLIPLoaderByPath,
@@ -272,6 +290,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "ShellMaxUpscaleModelLoaderByPath": "ShellMax Load Upscale Model (path)",
     "ShellMaxCheckpointLoaderByPath": "ShellMax Load Checkpoint (path)",
     "ShellMaxUNETLoaderByPath": "ShellMax Load Diffusion Model (path)",
     "ShellMaxCLIPLoaderByPath": "ShellMax Load Text Encoder (path)",

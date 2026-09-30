@@ -170,10 +170,11 @@ export function Slider({
   );
 }
 
-export function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
+export function Switch({ checked, onChange, label, disabled }: { checked: boolean; onChange: (v: boolean) => void; label?: string; disabled?: boolean }) {
   return (
     <SwitchPrimitive.Root
       checked={checked}
+      disabled={disabled}
       onCheckedChange={onChange}
       aria-label={label}
       className={clsx(
@@ -347,8 +348,8 @@ export function ErrorMessage({ text, className = "", tone = "bad" }: { text: str
 
 // ---------------------------------------------------------------- select
 /** Dropdown for fields with a fixed set of choices; the workflow's value is marked. */
-export function Select({ label, value, onChange, options, defaultValue }: {
-  label?: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; defaultValue?: string;
+export function Select({ label, value, onChange, options, defaultValue, disabled }: {
+  label?: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; defaultValue?: string; disabled?: boolean;
 }) {
   const all = options.some((o) => o.value === value) ? options : [{ value, label: value }, ...options];
   const current = all.find((o) => o.value === value);
@@ -361,7 +362,7 @@ export function Select({ label, value, onChange, options, defaultValue }: {
       {label && <p className="mb-1 text-xs text-muted">{label}</p>}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
-          <button className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-line bg-raised px-2.5 text-left text-[13px] outline-none hover:bg-hover focus-visible:border-accent/60 data-[state=open]:border-accent/60">
+          <button disabled={disabled} className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-line bg-raised px-2.5 text-left text-[13px] outline-none hover:bg-hover focus-visible:border-accent/60 data-[state=open]:border-accent/60 disabled:opacity-50">
             <span className="truncate">{current?.label ?? value}</span>
             <ChevronDown size={13} className="shrink-0 text-faint" />
           </button>
