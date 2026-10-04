@@ -1,0 +1,20 @@
+[project]
+name = "vhs-metadata-loader"  # Уникальный идентификатор ноды в реестре — после публикации не меняется
+description = "Load Video (from VHS Filenames) with preview, IMAGE/AUDIO/video_info outputs, and container-level metadata (workflow/prompt) extraction + re-embedding into another video. Includes a METADATA-typed output compatible with ComfyUI-Image-Saver."
+version = "1.2.0"  # Семантическое версионирование (semver) — поднимайте при каждом изменении
+license = { file = "LICENSE" }
+dependencies = [
+    "opencv-python",
+    "numpy",
+    "torch",
+    "torchaudio",
+    "imageio-ffmpeg",
+]
+
+[project.urls]
+Repository = "https://github.com/ВАШ_ЛОГИН/vhs-metadata-loader"  # Замените на реальный URL репозитория
+
+[tool.comfy]
+PublisherId = "ВАШ_PUBLISHER_ID"  # Замените на ваш PublisherId с registry.comfy.org
+DisplayName = "VHS Metadata Loader"
+Icon = ""  # Необязательно: ссылка на PNG/SVG/JPG/GIF иконку, до 800x400px

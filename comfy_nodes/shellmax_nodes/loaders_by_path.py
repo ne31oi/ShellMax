@@ -209,6 +209,10 @@ class ShellMaxLatentUpscalerByPath:
     CATEGORY = CATEGORY
 
     def upscale(self, latent, model_path, scale, align, device, precision):
+        mode = {"mode": "scale by multiplier", "scale": scale}
+        return self._upscale(latent, model_path, mode, align, device, precision)
+
+    def _upscale(self, latent, model_path, mode, align, device, precision):
         path = normalize_path(model_path)
         upscaler_cls, module = _upscaler_module()
 
@@ -221,12 +225,27 @@ class ShellMaxLatentUpscalerByPath:
         orig_dir = module.get_models_dir
         module.get_models_dir = lambda: os.path.dirname(path)
         try:
-            mode = {"mode": "scale by multiplier", "scale": scale}
             out = upscaler_cls.execute(latent, os.path.basename(path), mode, align, device, precision)
         finally:
             module.get_models_dir = orig_dir
         result = out.result if hasattr(out, "result") else out
         return (result[0],)
+
+
+class ShellMaxLatentUpscalerDimensionsByPath(ShellMaxLatentUpscalerByPath):
+    """The same upstream loader in target-dimensions mode, without changing its algorithm."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        inputs = super().INPUT_TYPES()["required"].copy()
+        inputs.pop("scale")
+        inputs.update(width=("INT", {"default": 1280, "min": 32, "max": 16384}),
+                      height=("INT", {"default": 704, "min": 32, "max": 16384}))
+        return {"required": inputs}
+
+    def upscale(self, latent, model_path, width, height, align, device, precision):
+        return self._upscale(latent, model_path, {"mode": "target dimensions", "width": width, "height": height},
+                             align, device, precision)
 
 
 class ShellMaxFrameInterpLoaderByPath:
@@ -277,7 +296,40 @@ class ShellMaxUpscaleModelLoaderByPath:
         return (output.result[0],)
 
 
+class ShellMaxModelPatchLoaderByPath:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"model_path": PATH_INPUT}}
+
+    RETURN_TYPES = ("MODEL_PATCH",)
+    FUNCTION = "load"
+    CATEGORY = CATEGORY
+
+    def load(self, model_path):
+        path = normalize_path(model_path)
+        with absolute_paths_resolve():
+            return nodes.NODE_CLASS_MAPPINGS["ModelPatchLoader"]().load_model_patch(path)
+
+
+class ShellMaxBackgroundRemovalLoaderByPath:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"model_path": PATH_INPUT}}
+
+    RETURN_TYPES = ("BACKGROUND_REMOVAL",)
+    FUNCTION = "load"
+    CATEGORY = CATEGORY
+
+    def load(self, model_path):
+        path = normalize_path(model_path)
+        with absolute_paths_resolve():
+            return (nodes.NODE_CLASS_MAPPINGS["LoadBackgroundRemovalModel"].execute(path).result[0],)
+
+
 NODE_CLASS_MAPPINGS = {
+    "ShellMaxModelPatchLoaderByPath": ShellMaxModelPatchLoaderByPath,
+    "ShellMaxBackgroundRemovalLoaderByPath": ShellMaxBackgroundRemovalLoaderByPath,
+    "ShellMaxLatentUpscalerDimensionsByPath": ShellMaxLatentUpscalerDimensionsByPath,
     "ShellMaxUpscaleModelLoaderByPath": ShellMaxUpscaleModelLoaderByPath,
     "ShellMaxCheckpointLoaderByPath": ShellMaxCheckpointLoaderByPath,
     "ShellMaxUNETLoaderByPath": ShellMaxUNETLoaderByPath,

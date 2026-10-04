@@ -1,9 +1,10 @@
 import { create } from "zustand";
 import { api } from "../api/client";
-import type { Generation, RefItem, StyleChoice, Upload, MaskEditParams } from "../api/types";
+import type { Generation, RefItem, StyleChoice, Upload, MaskEditParams, BodySwapUIParams, DLSS5Params } from "../api/types";
 import { fromModelPrompt, newUid, toModelPrompt } from "../lib/refs";
 import { normalizePromptLibrary, type PromptPreset, type PromptSnapshot } from "../lib/prompt-presets";
 import { sortedGenerations, useLibrary } from "./library";
+import { isGenerationKind } from "../lib/stages";
 
 export type RecentRefKind = "image" | "video" | "audio";
 export type RecentRefs = Record<RecentRefKind, Upload[]>;
@@ -102,6 +103,10 @@ interface FormState {
   maskEditDrafts: Record<string, MaskEditParams>;
   refmodMode: string;
   refmodAudio: boolean;
+  headSwapIdentityUploadId: string | null;
+  bodySwapPhotoIds: [string, string];
+  bodySwapDrafts: Record<string, BodySwapUIParams>;
+  dlss5Settings: Omit<DLSS5Params, "source_asset_id"> | null;
   /** Last used uploads per kind (MRU, sticky). */
   recentRefs: RecentRefs;
   /** bumps when the prompt is replaced from outside (retry/history) so the editor reloads */
@@ -125,8 +130,9 @@ interface FormState {
 
 const LIMITS = { image: 9, video: 3, audio: 3 } as const;
 const STICKY: (keyof FormState)[] = [
+  "bodySwapPhotoIds", "bodySwapDrafts", "dlss5Settings",
   "refs", "prompt", "aspect", "duration", "quality", "look", "cinematicTechniques", "styles",
-  "seedLocked", "seed", "variants", "profileId", "promptHistory", "recentRefs", "promptLibrary", "promptDraft", "maskEditDrafts", "refmodMode", "refmodAudio",
+  "seedLocked", "seed", "variants", "profileId", "promptHistory", "recentRefs", "promptLibrary", "promptDraft", "maskEditDrafts", "refmodMode", "refmodAudio", "headSwapIdentityUploadId",
 ];
 
 export function selectedCinematicTechniqueIds(state: Pick<FormState, "cinematicTechniques" | "cinematicTechnique">): string[] {
@@ -169,6 +175,10 @@ export const useForm = create<FormState>((set, get) => ({
   maskEditDrafts: {},
   refmodMode: "Compressed Reference",
   refmodAudio: false,
+  headSwapIdentityUploadId: null,
+  bodySwapPhotoIds: ["", ""],
+  bodySwapDrafts: {},
+  dlss5Settings: null,
   recentRefs: emptyRecentRefs(),
   promptRevision: 0,
 
@@ -256,7 +266,7 @@ export const useForm = create<FormState>((set, get) => ({
     if (!need.length) return;
 
     const gens = sortedGenerations(useLibrary.getState().generations).filter(
-      (g) => (g.kind === "generate" || g.kind === "generate_nvfp4" || g.kind === "generate_nvfp4_fast") && Array.isArray(g.ui_params?.refs) && g.ui_params.refs.length,
+      (g) => isGenerationKind(g.kind) && Array.isArray(g.ui_params?.refs) && g.ui_params.refs.length,
     );
 
     const want = new Set(need);

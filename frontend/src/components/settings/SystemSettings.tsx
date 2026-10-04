@@ -7,11 +7,13 @@ import { notifySettings } from "../../lib/notify";
 import { useLibrary } from "../../store/library";
 import { Button, ErrorMessage, SectionTitle, Switch } from "../ui";
 import { ENGINE_LABEL } from "../layout/EngineStatus";
+import { EngineUpdatesSettings } from "./EngineUpdatesSettings";
 
 export function SystemSettings() {
   const engine = useLibrary((s) => s.engine);
   const [lines, setLines] = useState<string[]>([]);
   const [notify, setNotify] = useState(notifySettings.get());
+  const [updating, setUpdating] = useState(false);
   const { restarting, restartAll, overlay: restartOverlay } = useRestartAll();
   const { shuttingDown, shutdownAll, overlay: shutdownOverlay } = useShutdownAll();
   const logBox = useRef<HTMLPreElement>(null);
@@ -41,12 +43,13 @@ export function SystemSettings() {
 
   return (
     <div className="space-y-6 p-5">
+      <EngineUpdatesSettings onInstallingChange={setUpdating} />
       <section>
         <SectionTitle>Движок (ComfyUI)</SectionTitle>
         <div className="rounded-xl border border-line p-4">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <span className={clsx("h-2.5 w-2.5 rounded-full", state === "ready" || state === "external" ? "bg-ok" : state === "starting" ? "bg-warn animate-pulse" : "bg-bad")} />
-            <div className="flex-1">
+            <div className="min-w-0 flex-1">
               <p className="text-[13px]">{ENGINE_LABEL[state]}</p>
               <p className="text-[11px] text-faint">
                 {engine?.url}
@@ -54,19 +57,19 @@ export function SystemSettings() {
               </p>
             </div>
             {state !== "not_installed" && (
-              <div className="flex gap-1.5">
+              <div className="flex flex-wrap gap-1.5">
                 {!running && (
-                  <Button size="sm" variant="primary" onClick={() => api.engineAction("start")}>
+                  <Button size="sm" variant="primary" disabled={updating} onClick={() => api.engineAction("start")}>
                     <Play size={12} /> Запустить
                   </Button>
                 )}
                 {running && (
-                  <Button size="sm" onClick={() => api.engineAction("restart")}>
+                  <Button size="sm" disabled={updating} onClick={() => api.engineAction("restart")}>
                     <RefreshCw size={12} /> Перезапустить
                   </Button>
                 )}
                 {running && state !== "external" && (
-                  <Button size="sm" variant="ghost" onClick={() => api.engineAction("stop")}>
+                  <Button size="sm" variant="ghost" disabled={updating} onClick={() => api.engineAction("stop")}>
                     <Square size={12} /> Остановить
                   </Button>
                 )}
@@ -95,10 +98,10 @@ export function SystemSettings() {
             После обновления бэкенда или если всё «зависло» — перезапуск. Модели загрузятся снова.
           </p>
           <div className="flex flex-wrap gap-1.5">
-            <Button size="sm" variant="danger" disabled={restarting || shuttingDown} onClick={restartAll}>
+            <Button size="sm" variant="danger" disabled={updating || restarting || shuttingDown} onClick={restartAll}>
               <RefreshCw size={12} /> Перезапустить всё
             </Button>
-            <Button size="sm" variant="ghost" disabled={restarting || shuttingDown} onClick={shutdownAll}>
+            <Button size="sm" variant="ghost" disabled={updating || restarting || shuttingDown} onClick={shutdownAll}>
               <Power size={12} /> Выключить всё
             </Button>
           </div>

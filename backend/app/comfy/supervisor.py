@@ -15,6 +15,8 @@ import time
 
 from .. import settings
 from .client import ComfyClient
+from .compat import patch_kj_attention
+from .health import WORKER_FAILED, worker_failed
 
 log = logging.getLogger("shellmax.engine")
 
@@ -29,6 +31,7 @@ def sync_shellmax_nodes() -> None:
         if src.is_dir() and not src.name.startswith(("_", ".")):
             shutil.copytree(src, custom_nodes / src.name, dirs_exist_ok=True,
                             ignore=shutil.ignore_patterns("__pycache__"))
+    patch_kj_attention(custom_nodes)
 
 
 def pid_alive(pid: int | None) -> bool:
@@ -78,6 +81,7 @@ class EngineSupervisor:
         self.pid: int | None = None
         self._lock = asyncio.Lock()
         self.started_at: float | None = None
+        self._failed_pid: int | None = None
 
     @property
     def python(self):
@@ -107,14 +111,20 @@ class EngineSupervisor:
 
     async def start(self) -> None:
         async with self._lock:
-            if await self.client.alive():
-                pid = read_pid()
-                if pid_alive(pid):
-                    # our own engine from a previous backend run: take it over again
-                    self.pid = pid
+            pid = read_pid()
+            if pid_alive(pid):
+                # A dead worker or poisoned CUDA context must not spawn a second engine.
+                self.pid = pid
+                if self._failed_pid == pid or worker_failed(self.log_tail()):
+                    self._failed_pid = pid
+                    await self._set("error", WORKER_FAILED)
+                elif await self.client.alive():
                     await self._set("ready", "Подключился к уже работающему движку")
                 else:
-                    await self._set("external", "На порту работает другой ComfyUI, запущенный не ShellMax")
+                    await self._set("error", "Процесс движка запущен, но проверка его состояния не проходит. Перезапустите движок в Настройках → Система.")
+                return
+            if await self.client.alive():
+                await self._set("external", "На порту работает другой ComfyUI, запущенный не ShellMax")
                 return
             if not self.installed():
                 await self._set("not_installed", "Движок не установлен: запустите scripts\\install_comfy.ps1")
@@ -126,6 +136,10 @@ class EngineSupervisor:
             if extra.exists():
                 args += ["--extra-model-paths-config", str(extra)]
             env = {**os.environ, **cfg.get("env", {}), "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"}
+            # VHS metadata needs ffprobe; the DLSS runtime bundles both binaries.
+            dlss_ffmpeg = settings.portable_dir() / "ComfyUI/custom_nodes/ComfyUI-DLSS5-Enhancer/ffmpeg/bin"
+            if dlss_ffmpeg.is_dir():
+                env["PATH"] = str(dlss_ffmpeg) + os.pathsep + env.get("PATH", "")
             log.info("starting ComfyUI: %s", " ".join(args))
             settings.ensure_dirs()
             with LOG_FILE.open("wb") as log_file:
@@ -136,6 +150,7 @@ class EngineSupervisor:
                     if os.name == "nt" else 0,
                 )
             self.pid = proc.pid
+            self._failed_pid = None
             PID_FILE.write_text(str(proc.pid))
             self.started_at = time.time()
             await self._set("starting", "Запуск движка…")
@@ -169,11 +184,23 @@ class EngineSupervisor:
         await self.stop()
         await self.start()
 
+    async def check_health(self) -> None:
+        """Use process/log evidence: GPU stats can time out during valid model initialization."""
+        if self.state not in ("ready", "external"):
+            return
+        if self.state == "ready":
+            if not pid_alive(self.pid):
+                await self._set("error", "Движок остановился. Подробности — в логе (Настройки → Система)")
+                return
+            if worker_failed(self.log_tail()):
+                self._failed_pid = self.pid
+                await self._set("error", WORKER_FAILED)
+                return
+        elif not await self.client.alive():
+            await self._set("stopped")
+
     async def watch(self) -> None:
         """Detect crashes of a running engine."""
         while True:
             await asyncio.sleep(3)
-            if self.state == "ready" and not pid_alive(self.pid):
-                await self._set("error", "Движок остановился. Подробности — в логе (Настройки → Система)")
-            elif self.state == "external" and not await self.client.alive():
-                await self._set("stopped")
+            await self.check_health()

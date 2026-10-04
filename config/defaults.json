@@ -23,6 +23,51 @@
     ],
     "low_vram": false
   },
+  "pdmd": {
+    "name": "PDMD 4 · DualSampling 2+2",
+    "lora": "data/models/pdmd/minimax_h3_pdmd_4nfe_comfyui_v6.safetensors",
+    "expert": {
+      "steps": 4,
+      "scheduler": "simple",
+      "sampler": "euler",
+      "extend_steps": 1,
+      "split_step": 2,
+      "chunk_ff_chunks": 8
+    }
+  },
+  "memory_optimization": {
+    "_comment": "Opt-in ShellMax_Singularity_Memory.json recipe. Initial sampling protects the first two steps; final sampling starts with 30% video attention and restores all connections only on its last step. The original engine recipe above stays intact.",
+    "text_encoder": "text_encoders/minimax_h3/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+    "aimdo_residency": "stock",
+    "fused_qkv": "auto",
+    "mlp_memory": "auto",
+    "chunk_rows": 4096,
+    "preserve_precision": true,
+    "precision_mode": "Preserve native",
+    "qkv_streaming_mode": "Forced",
+    "embedding_memory_mode": "Auto",
+    "kitchen_v_memory_mode": "Lower VRAM (slower)",
+    "sparse_attention": {
+      "video_budget": 0.3,
+      "early_steps": 2,
+      "early_kv": 1.0,
+      "late_steps": 1,
+      "late_kv": 1.0,
+      "backend": "Kitchen INT8 64Q x 64KV (Quality)",
+      "early_schedule": "Hold",
+      "video_token_order": "Raster (stock H3 order)"
+    },
+    "sparse_attention_final": {
+      "video_budget": 0.3,
+      "early_steps": 0,
+      "early_kv": 1.0,
+      "late_steps": 1,
+      "late_kv": 1.0,
+      "backend": "Kitchen INT8 64Q x 64KV (Quality)",
+      "early_schedule": "Hold",
+      "video_token_order": "Raster (stock H3 order)"
+    }
+  },
   "quality_presets": {
     "draft": {
       "label": "Черновик",
@@ -214,5 +259,171 @@
       "multiplier": 4,
       "hint": "24 → 96 к/с"
     }
-  ]
+  ],
+  "head_swap": {
+    "_comment": "Existing H3 weights and Head Swap LoRA. Approved MatAnyone 2 and ProPainter reconstruct the vacated silhouette with temporal hair alpha; source hands are restored. Author sampler settings are retained.",
+    "composite_weights_dir": "head_swap_composite",
+    "models": {
+      "unet": "diffusion_models/minimax_h3/Minimax-h3_Singularity_ref2va_Pruned_v1.3_int8.safetensors",
+      "text_encoder": "text_encoders/minimax_h3/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "vision_encoder": "text_encoders/minimax_h3/qwen3vl_4b_INT8_ConvRot_HQ.safetensors",
+      "vae_video": "vae/minimax_h3/minimax_h3_video_vae_fp16.safetensors",
+      "vae_audio": "vae/minimax_h3/minimax_h3_audio_vae_fp32.safetensors",
+      "turbo": "loras/minimax_h3/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors",
+      "head_lora": "loras/minimax_h3_head_swap_v1.0_r32.safetensors",
+      "lms": "loras/minimax_h3/minimax_h3_lms_v1.0_r64.safetensors",
+      "upscaler": "latent_upscale_models/minimax_h3_latent_upscaler_3d_conv_v1_fp16.safetensors",
+      "sam": "sam3/sam3.pt"
+    },
+    "head_strength": 1.0,
+    "turbo_strength": 1.0,
+    "lms_strength": 0.5,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "steps": 8,
+    "scheduler": "beta",
+    "sampler": "euler",
+    "sigmas_second": "0.9035, 0.6316, 0.3158, 0.0000",
+    "ref_image_size": "match",
+    "crf": 14,
+    "target": {
+      "detector": "bbox\\face_yolov8m.pt",
+      "confidence": 0.35,
+      "identity_threshold": 0.28,
+      "canvas": 0,
+      "crop_factor": 3.0,
+      "smooth_window": 5,
+      "size_smooth_window": 9,
+      "feather": 6,
+      "colour_match": 0.0,
+      "blend": 1.0,
+      "mask_threshold": 0.3,
+      "mask_edge_grow": 24
+    }
+  },
+  "dlss5": {
+    "ui": {"mode": "1x (DLAA / native)", "style": "Default", "intensity": 1.0},
+    "controls": {
+      "upscaling_mode": "1x (DLAA / native)", "nr_preset": "Default", "nr_style": "Default",
+      "nr_intensity": 1.0, "local_tone_strength": 1.0, "local_structure_strength": 1.5,
+      "skin_structure_strength": 2.0, "automatic_mask": true, "dlss_model_preset": "M",
+      "motion": "auto", "scene_change_threshold": 0.24, "warmup_frames": 0, "runtime_dir": ""
+    },
+    "encoding": {"codec": "H.264", "container": "MP4", "quality": "Good"}
+  },
+  "body_swap": {
+    "models": {
+      "unet": "diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+      "text_encoder": "text_encoders/minimax_h3/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "vae_video": "vae/minimax_h3/minimax_h3_video_vae_fp16.safetensors",
+      "vae_audio": "vae/minimax_h3/minimax_h3_audio_vae_fp32.safetensors",
+      "turbo": "loras/minimax_h3/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors",
+      "sam": "checkpoints/sam3.1_multiplex_fp16.safetensors",
+      "background": "background_removal/birefnet.safetensors",
+      "controlnet": "model_patches/minimax_h3_fun_controlnet_union_pruned_bf16.safetensors",
+      "detector": "annotators/yzd-v/DWPose/yolox_l.onnx",
+      "pose": "annotators/hr16/DWPose-TorchScript-BatchSize5/dw-ll_ucoco_384_bs5.torchscript.pt"
+    },
+    "steps": 16,
+    "cfg": 1,
+    "sampler": "er_sde",
+    "scheduler": "simple",
+    "shift_video": 12,
+    "shift_audio": 1.5,
+    "control_strength": 0.8,
+    "crop_megapixels": 0.7,
+    "frame_rate": 24,
+    "max_frames": 175,
+    "crf": 19,
+    "singularity_unet": "diffusion_models/minimax_h3/Minimax-h3_Singularity_ref2va_Pruned_v1.3_int8.safetensors",
+    "full": {
+      "recipe_version": 6,
+      "steps": 16,
+      "cfg": 1,
+      "control_strength": 1.0,
+      "preserve_hands": false,
+      "turbo": true,
+      "reference_roles": [
+        "costume_body",
+        "identity_hair"
+      ],
+      "source_context": true,
+      "union_silhouettes": true,
+      "control_end": 0.7,
+      "detect_face": false,
+      "mask_grow": 48,
+      "background_reconstruction": "source_pixel_extension",
+      "new_subject_alpha": "BiRefNet",
+      "head_registration": "source_face_height_and_center",
+      "relighting": "source_face_bands_and_costume_highlights",
+      "background_radius": 5,
+      "background_margin": 4
+    },
+    "full_base": {
+      "recipe_version": 2,
+      "steps": 40,
+      "cfg": 1,
+      "control_strength": 1.0,
+      "preserve_hands": false,
+      "turbo": false,
+      "reference_roles": [
+        "costume_body",
+        "identity_hair"
+      ],
+      "source_context": true,
+      "union_silhouettes": true
+    },
+    "full_reference": {
+      "recipe_version": 3,
+      "steps": 16,
+      "cfg": 1,
+      "control_strength": 1.0,
+      "preserve_hands": false,
+      "turbo": true,
+      "reference_roles": [
+        "costume_body",
+        "identity_hair"
+      ],
+      "source_context": true,
+      "union_silhouettes": true,
+      "control_end": 0.7,
+      "detect_face": false
+    },
+    "full_coverage": {
+      "recipe_version": 4,
+      "steps": 16,
+      "cfg": 1,
+      "control_strength": 1.0,
+      "preserve_hands": false,
+      "turbo": true,
+      "reference_roles": [
+        "costume_body",
+        "identity_hair"
+      ],
+      "source_context": true,
+      "union_silhouettes": true,
+      "control_end": 0.7,
+      "detect_face": false,
+      "mask_grow": 48
+    },
+    "full_background": {
+      "recipe_version": 5,
+      "steps": 16,
+      "cfg": 1,
+      "control_strength": 1.0,
+      "preserve_hands": false,
+      "turbo": true,
+      "reference_roles": [
+        "costume_body",
+        "identity_hair"
+      ],
+      "source_context": true,
+      "union_silhouettes": true,
+      "control_end": 0.7,
+      "detect_face": false,
+      "mask_grow": 48,
+      "background_reconstruction": "ProPainter",
+      "new_subject_alpha": "BiRefNet"
+    }
+  }
 }

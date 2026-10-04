@@ -13,6 +13,7 @@ from . import settings
 from .db.models import EngineProfileRow, Generation, MediaAsset, Project, StyleLora, Upload, select, session
 from .jobs.estimator import estimate_seconds
 from .media import library
+from .reference_library import generation_upload_ids
 from .workflow import enhance, face, interpolate, presets
 from .workflow.params import EnhanceUIParams, EngineProfile, FaceUIParams, InterpolateUIParams, LoraSpec, ResolvedRef, UIParams
 
@@ -60,6 +61,8 @@ def bootstrap() -> None:
             s.add(EngineProfileRow(name=prof.name, data=prof.model_dump(), is_default=True))
         s.commit()
     _migrate_realism_to_styles()
+    from .workflow.pdmd import ensure_profile
+    ensure_profile()
 
 
 def _migrate_realism_to_styles() -> None:
@@ -109,6 +112,8 @@ def profile_problems(profile: EngineProfile) -> list[dict]:
     fields["upscaler"] = profile.upscaler
     if profile.pipeline in ("generate_nvfp4", "generate_nvfp4_fast"):
         fields["nvfp4_unet"] = profile.nvfp4_unet
+    if profile.pipeline == "generate_pdmd":
+        fields["pdmd_lora"] = profile.pdmd_lora
     out = [{"field": k, "path": v} for k, v in fields.items() if not check(v)["exists"]]
     for group in ("loras_main", "loras_final"):
         for i, lora in enumerate(getattr(profile, group)):
@@ -156,11 +161,8 @@ def _collect_used_upload_ids(s) -> list[str]:
     gens = list(s.exec(select(Generation).order_by(Generation.id.desc())).all())
     for g in gens:
         ui = g.ui_params or {}
-        for ref in ui.get("refs") or []:
-            if isinstance(ref, dict):
-                add(ref.get("upload_id"))
-        add(ui.get("identity_upload_id"))
-        add(ui.get("closeup_upload_id"))
+        for uid in generation_upload_ids(ui):
+            add(uid)
 
     for p in s.exec(select(Project)).all():
         tl = p.timeline or {}
@@ -486,7 +488,9 @@ def create_interpolate(ui: InterpolateUIParams, project_id: int) -> Generation:
 
 # ---------------------------------------------------------------- retry (no kind if/elif in routers)
 def create_asset_job(kind: str, ui, project_id: int) -> Generation:
-    from .jobs.registry import get_handler
+    from .jobs.registry import HANDLERS, get_handler
+    if kind not in HANDLERS:
+        raise HTTPException(422, "Этот тип обработки больше не поддерживается")
     handler = get_handler(kind)
     if handler.expand is None:
         raise HTTPException(422, "Неизвестный тип обработки")
@@ -523,7 +527,9 @@ _RECREATE = {
 
 def recreate_generations(g: Generation, *, same_seed: bool = False, variants: int = 1) -> list[Generation]:
     """Spawn new jobs from an existing generation (retry)."""
-    from .jobs.registry import get_handler
+    from .jobs.registry import HANDLERS, get_handler
+    if g.kind not in HANDLERS:
+        raise HTTPException(422, "Этот тип обработки больше не поддерживается. Готовый клип сохранён; выберите другой способ обработки в его меню.")
     handler = get_handler(g.kind)
     if handler.expand and handler.ui_cls:
         values = {**(handler.retry_defaults or {}), **g.ui_params}

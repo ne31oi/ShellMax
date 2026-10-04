@@ -1,0 +1,693 @@
+{
+  "2": {
+    "class_type": "ShellMaxUNETLoaderByPath",
+    "inputs": {
+      "unet_path": "__UNET__",
+      "weight_dtype": "default"
+    }
+  },
+  "1": {
+    "class_type": "ShellMaxCLIPLoaderByPath",
+    "inputs": {
+      "clip_path": "__TEXT_ENCODER__",
+      "type": "minimax",
+      "device": "default"
+    }
+  },
+  "85": {
+    "class_type": "ShellMaxCLIPLoaderByPath",
+    "inputs": {
+      "clip_path": "__VISION_ENCODER__",
+      "type": "ltxv",
+      "device": "default"
+    }
+  },
+  "3": {
+    "class_type": "ShellMaxVAELoaderByPath",
+    "inputs": {
+      "vae_path": "__VAE_VIDEO__"
+    }
+  },
+  "29": {
+    "class_type": "ShellMaxVAELoaderByPath",
+    "inputs": {
+      "vae_path": "__VAE_AUDIO__"
+    }
+  },
+  "9": {
+    "class_type": "MiniMaxH3SigmaShift",
+    "inputs": {
+      "model": [
+        "2",
+        0
+      ],
+      "shift_video": 12.0,
+      "shift_audio": 3.0
+    }
+  },
+  "58": {
+    "class_type": "ModelAttentionBackend",
+    "inputs": {
+      "model": [
+        "9",
+        0
+      ],
+      "attention": "comfy kitchen attention"
+    }
+  },
+  "64": {
+    "class_type": "ShellMaxLoraModelOnlyByPath",
+    "inputs": {
+      "model": [
+        "58",
+        0
+      ],
+      "lora_path": "__TURBO__",
+      "strength_model": 1.0
+    }
+  },
+  "586": {
+    "class_type": "ShellMaxLoraModelOnlyByPath",
+    "inputs": {
+      "model": [
+        "64",
+        0
+      ],
+      "lora_path": "__HEAD_LORA__",
+      "strength_model": 1.0
+    }
+  },
+  "484": {
+    "class_type": "ShellMaxLoraModelOnlyByPath",
+    "inputs": {
+      "model": [
+        "586",
+        0
+      ],
+      "lora_path": "__LMS__",
+      "strength_model": 0.5
+    }
+  },
+  "320": {
+    "class_type": "VHS_LoadVideoPath",
+    "inputs": {
+      "video": "__SOURCE__",
+      "force_rate": 0,
+      "custom_width": 0,
+      "custom_height": 0,
+      "frame_load_cap": 0,
+      "skip_first_frames": 0,
+      "select_every_nth": 1,
+      "format": "None"
+    }
+  },
+  "head_pad": {
+    "class_type": "ShellMaxH3HeadSwapPad",
+    "inputs": {
+      "images": [
+        "head_track",
+        0
+      ]
+    }
+  },
+  "349": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "__IDENTITY__"
+    }
+  },
+  "362": {
+    "class_type": "ImageResizeKJv2",
+    "inputs": {
+      "image": [
+        "349",
+        0
+      ],
+      "width": [
+        "head_pad",
+        1
+      ],
+      "height": [
+        "head_pad",
+        2
+      ],
+      "upscale_method": "lanczos",
+      "keep_proportion": "pad",
+      "pad_color": "0, 0, 0",
+      "crop_position": "center",
+      "divisible_by": 2,
+      "device": "cpu"
+    }
+  },
+  "826": {
+    "class_type": "TextGenerate",
+    "inputs": {
+      "clip": [
+        "85",
+        0
+      ],
+      "image": [
+        "362",
+        0
+      ],
+      "prompt": "Describe this face in a short comma-separated attribute list, in exactly this style: \"Male, oval face shape, average-sized head with strong jawline, light brown skin, dark eyes, black tousled hair, silver hoop earring.\" Cover, in order: gender, head/face shape and proportions (e.g. oval/round/square/heart-shaped, narrow/wide, jaw structure, whether the head reads as small/average/large relative to the shoulders), skin tone, eye color, hair color and style, and any distinctive features (facial hair, jewelry, makeup, glasses, etc.). Only output the description, nothing else.",
+      "max_length": 512,
+      "sampling_mode": "on",
+      "sampling_mode.temperature": 0.7,
+      "sampling_mode.top_k": 64,
+      "sampling_mode.top_p": 0.95,
+      "sampling_mode.min_p": 0.05,
+      "sampling_mode.repetition_penalty": 1.05,
+      "sampling_mode.seed": 0,
+      "sampling_mode.presence_penalty": 0,
+      "thinking": true,
+      "use_default_template": true
+    }
+  },
+  "829": {
+    "class_type": "StringConcatenate",
+    "inputs": {
+      "string_a": "head_swap:\n\nsubject_definitions:\n\n<Subject 1> is the reference head identity from <Picture 1>, including the complete head, facial identity, facial structure, head shape, hairstyle, hairline, skin appearance, proportions, and all distinctive visual features.\n\nFacial details of <Subject 1>:\n",
+      "string_b": [
+        "826",
+        0
+      ],
+      "delimiter": ""
+    }
+  },
+  "830": {
+    "class_type": "StringConcatenate",
+    "inputs": {
+      "string_a": [
+        "829",
+        0
+      ],
+      "string_b": "\n\n<Subject 2> is the original person in <Video 1>, whose body, neck, clothing, pose, physical proportions below the head, actions, motion, timing, and interaction with the environment must remain unchanged.\n\n<Video 1> is the source video for the target video edit, providing the original body performance, motion, camera movement, framing, timing, lighting, environment, scene composition, and temporal structure.\n\nsummary:\n\n[video editing + reference generation]\n\nThe target video is an edited version of <Video 1>. Replace only the entire head of <Subject 2> with the reference head identity defined by <Subject 1> from <Picture 1>. Preserve the source video's body, clothing, performance, motion, camera behavior, environment, lighting, timing, and composition.\n\nretention_analysis:\n\n<Subject 1> (appears throughout the target video): attribute_transfer - the complete head identity from <Picture 1>, including facial identity, facial structure, hairstyle, head shape, proportions, skin appearance, and distinctive features, is transferred consistently onto the body of <Subject 2>.\n\n<Subject 2> (appears throughout the target video): partially_preserved - the original body, neck position, clothing, pose, motion, gestures, actions, and physical performance are preserved, while only the original head is replaced.\n\n<Video 1> (entire target timeline): partially_preserved - the original video timing, body motion, camera movement, framing, lighting, background, environment, scene composition, and temporal structure are preserved; only the subject's head appearance is modified.\n\ndetailed_description:\n\nPreserve <Video 1> as the complete temporal and compositional foundation of the target video. <Subject 2> retains the exact original body, clothing, pose, body proportions, movement, gestures, actions, speed, timing, and interaction with the environment.\n\nReplace only the entire original head of <Subject 2> with <Subject 1>, the reference head identity from <Picture 1>. Preserve the complete recognizable identity of <Subject 1>, including facial structure, skull and head shape, hairstyle, hairline, skin appearance, facial proportions, eyes, eyebrows, nose, mouth, jawline, ears, and distinctive identifying features.\n\nThe transferred head follows the original head motion and performance of <Subject 2> throughout <Video 1>, including head rotation, tilt, pitch, yaw, natural translation, facial orientation, gaze direction, and perspective changes. Maintain anatomically correct head scale and a seamless connection between the transferred head and the original neck.\n\nPreserve the lighting conditions of <Video 1> on the transferred head. The head naturally responds to changes in illumination, shadows, highlights, color temperature, exposure, depth of field, motion blur, occlusion, camera angle, and perspective while continuously maintaining the identity established by <Picture 1>.\n\nMaintain strong temporal consistency across every frame. The identity, facial geometry, hairstyle, head size, skin appearance, and distinguishing features of <Subject 1> remain stable during motion and viewpoint changes. Prevent identity drift, facial morphing, hairstyle changes, head-size fluctuations, geometry instability, texture crawling, temporal flickering, frame-to-frame inconsistency, or sudden changes in facial appearance.\n\nDo not alter the body, clothing, hands, pose, gestures, action, background, objects, environment, camera trajectory, framing, lens behavior, scene timing, or composition inherited from <Video 1>. The final result should appear as though <Subject 1>'s head naturally belonged to <Subject 2>'s body during the original recorded performance.\n\noverall_soundscape:\n\nPreserve the original audiovisual timing and visible action structure of <Video 1>. No visual modifications are made outside the head replacement.\n\nnon_diegetic_music:\nN/A",
+      "delimiter": ""
+    }
+  },
+  "550": {
+    "class_type": "StringConcatenate",
+    "inputs": {
+      "string_a": [
+        "830",
+        0
+      ],
+      "string_b": "\nEnhance this video with sharp, crisp details while preserving a natural photorealistic appearance.",
+      "delimiter": ""
+    }
+  },
+  "400": {
+    "class_type": "MiniMaxH3ReferenceToVideo",
+    "inputs": {
+      "prompt": [
+        "830",
+        0
+      ],
+      "clip": [
+        "1",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ],
+      "audio_vae": [
+        "29",
+        0
+      ],
+      "width": [
+        "head_pad",
+        1
+      ],
+      "height": [
+        "head_pad",
+        2
+      ],
+      "length": [
+        "head_pad",
+        3
+      ],
+      "ref_image_size": "match",
+      "ref_images.ref_image_0": [
+        "362",
+        0
+      ]
+    }
+  },
+  "289": {
+    "class_type": "EmptyMiniMaxH3LatentAV",
+    "inputs": {
+      "width": [
+        "head_pad",
+        1
+      ],
+      "height": [
+        "head_pad",
+        2
+      ],
+      "length": [
+        "head_pad",
+        3
+      ]
+    }
+  },
+  "81": {
+    "class_type": "MiniMaxH3AddGuide",
+    "inputs": {
+      "positive": [
+        "400",
+        0
+      ],
+      "latent": [
+        "289",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ],
+      "audio_vae": [
+        "29",
+        0
+      ],
+      "image": [
+        "head_pad",
+        0
+      ],
+      "audio": [
+        "320",
+        2
+      ],
+      "frame_idx": 0
+    }
+  },
+  "11": {
+    "class_type": "CFGGuider",
+    "inputs": {
+      "model": [
+        "586",
+        0
+      ],
+      "positive": [
+        "81",
+        0
+      ],
+      "negative": [
+        "81",
+        0
+      ],
+      "cfg": 1
+    }
+  },
+  "13": {
+    "class_type": "RandomNoise",
+    "inputs": {
+      "noise_seed": "__SEED__"
+    }
+  },
+  "15": {
+    "class_type": "KSamplerSelect",
+    "inputs": {
+      "sampler_name": "euler"
+    }
+  },
+  "181": {
+    "class_type": "BasicScheduler",
+    "inputs": {
+      "model": [
+        "586",
+        0
+      ],
+      "scheduler": "beta",
+      "steps": 8,
+      "denoise": 1
+    }
+  },
+  "14": {
+    "class_type": "SamplerCustomAdvanced",
+    "inputs": {
+      "noise": [
+        "13",
+        0
+      ],
+      "guider": [
+        "11",
+        0
+      ],
+      "sampler": [
+        "15",
+        0
+      ],
+      "sigmas": [
+        "181",
+        0
+      ],
+      "latent_image": [
+        "289",
+        0
+      ]
+    }
+  },
+  "529": {
+    "class_type": "LTXVSeparateAVLatent",
+    "inputs": {
+      "av_latent": [
+        "14",
+        1
+      ]
+    }
+  },
+  "530": {
+    "class_type": "ShellMaxLatentUpscalerDimensionsByPath",
+    "inputs": {
+      "latent": [
+        "529",
+        0
+      ],
+      "model_path": "__UPSCALER__",
+      "width": [
+        "head_pad",
+        1
+      ],
+      "height": [
+        "head_pad",
+        2
+      ],
+      "align": 32,
+      "device": "cuda",
+      "precision": "fp16"
+    }
+  },
+  "531": {
+    "class_type": "LTXVConcatAVLatent",
+    "inputs": {
+      "video_latent": [
+        "530",
+        0
+      ],
+      "audio_latent": [
+        "529",
+        1
+      ]
+    }
+  },
+  "587": {
+    "class_type": "MiniMaxH3ReferenceToVideo",
+    "inputs": {
+      "prompt": [
+        "550",
+        0
+      ],
+      "clip": [
+        "1",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ],
+      "audio_vae": [
+        "29",
+        0
+      ],
+      "width": [
+        "head_pad",
+        1
+      ],
+      "height": [
+        "head_pad",
+        2
+      ],
+      "length": [
+        "head_pad",
+        3
+      ],
+      "ref_image_size": "match",
+      "ref_images.ref_image_0": [
+        "362",
+        0
+      ]
+    }
+  },
+  "548": {
+    "class_type": "MiniMaxH3AddGuide",
+    "inputs": {
+      "positive": [
+        "587",
+        0
+      ],
+      "latent": [
+        "531",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ],
+      "audio_vae": [
+        "29",
+        0
+      ],
+      "image": [
+        "head_pad",
+        0
+      ],
+      "audio": [
+        "320",
+        2
+      ],
+      "frame_idx": 0
+    }
+  },
+  "534": {
+    "class_type": "BasicGuider",
+    "inputs": {
+      "model": [
+        "484",
+        0
+      ],
+      "conditioning": [
+        "548",
+        0
+      ]
+    }
+  },
+  "535": {
+    "class_type": "ManualSigmas",
+    "inputs": {
+      "sigmas": "0.9035, 0.6316, 0.3158, 0.0000"
+    }
+  },
+  "537": {
+    "class_type": "SamplerCustomAdvanced",
+    "inputs": {
+      "noise": [
+        "13",
+        0
+      ],
+      "guider": [
+        "534",
+        0
+      ],
+      "sampler": [
+        "15",
+        0
+      ],
+      "sigmas": [
+        "535",
+        0
+      ],
+      "latent_image": [
+        "531",
+        0
+      ]
+    }
+  },
+  "737": {
+    "class_type": "LTXVSeparateAVLatent",
+    "inputs": {
+      "av_latent": [
+        "537",
+        0
+      ]
+    }
+  },
+  "538": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "737",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    }
+  },
+  "head_restore": {
+    "class_type": "ShellMaxH3HeadSwapRestore",
+    "inputs": {
+      "images": [
+        "538",
+        0
+      ],
+      "source": [
+        "head_track",
+        0
+      ]
+    }
+  },
+  "head_track": {
+    "class_type": "ShellMaxH3HeadSwapTrack",
+    "inputs": {
+      "images": [
+        "320",
+        0
+      ],
+      "target": "__TARGET__",
+      "detector": "bbox\\face_yolov8m.pt",
+      "confidence": 0.35,
+      "identity_threshold": 0.28,
+      "canvas": 0,
+      "crop_factor": 3.0,
+      "smooth_window": 5,
+      "size_smooth_window": 9
+    }
+  },
+  "head_stitch": {
+    "class_type": "ShellMaxH3HeadSwapStitch",
+    "inputs": {
+      "base_images": [
+        "320",
+        0
+      ],
+      "refined_crops": [
+        "head_composite",
+        1
+      ],
+      "transform": [
+        "head_track",
+        1
+      ],
+      "masks": [
+        "head_composite",
+        0
+      ],
+      "paste_region": "full_crop",
+      "mask_dilation": 0,
+      "feather": 6,
+      "colour_match": 0.0,
+      "blend": 1.0,
+      "undetected_frames": "skip",
+      "feather_scales_with_crop": false,
+      "source_foreground": [
+        "head_composite",
+        3
+      ]
+    }
+  },
+  "head_report": {
+    "class_type": "PreviewAny",
+    "inputs": {
+      "source": [
+        "head_composite",
+        2
+      ]
+    }
+  },
+  "head_preview": {
+    "class_type": "VHS_VideoCombine",
+    "inputs": {
+      "images": [
+        "head_track",
+        2
+      ],
+      "frame_rate": "__FPS__",
+      "loop_count": 0,
+      "filename_prefix": "__PREVIEW_PREFIX__",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 20,
+      "save_metadata": true,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": false
+    }
+  },
+  "539": {
+    "class_type": "VHS_VideoCombine",
+    "inputs": {
+      "images": [
+        "head_stitch",
+        0
+      ],
+      "audio": [
+        "320",
+        2
+      ],
+      "frame_rate": "__FPS__",
+      "loop_count": 0,
+      "filename_prefix": "__PREFIX__",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 14,
+      "save_metadata": true,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true
+    }
+  },
+  "head_sam": {
+    "class_type": "ShellMaxCheckpointLoaderByPath",
+    "inputs": {
+      "checkpoint_path": "__SAM__"
+    }
+  },
+  "head_masks": {
+    "class_type": "ShellMaxH3HeadSwapContours",
+    "inputs": {
+      "source_crops": [
+        "head_track",
+        0
+      ],
+      "refined_crops": [
+        "head_restore",
+        0
+      ],
+      "transform": [
+        "head_track",
+        1
+      ],
+      "selection_masks": [
+        "head_track",
+        7
+      ],
+      "model": [
+        "head_sam",
+        0
+      ],
+      "clip": [
+        "head_sam",
+        1
+      ],
+      "tracking_report": [
+        "head_track",
+        3
+      ],
+      "threshold": 0.3
+    }
+  },
+  "head_composite": {
+    "class_type": "ShellMaxH3HeadSwapTemporal",
+    "inputs": {
+      "contours": [
+        "head_masks",
+        0
+      ],
+      "weights_dir": "__COMPOSITE_WEIGHTS__",
+      "edge_grow": 24
+    }
+  }
+}

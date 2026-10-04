@@ -6,10 +6,10 @@ import { reportJobError } from "../../lib/errors";
 import { estimateBasis, fmtEstimate, fmtSeconds } from "../../lib/format";
 import { Button, Dialog, ErrorMessage, Spinner } from "../ui";
 
-export function PostProcessDialogShell({ open, title, onClose, children }: {
-  open: boolean; title: string; onClose: () => void; children: ReactNode;
+export function PostProcessDialogShell({ open, title, onClose, children, wide = false }: {
+  open: boolean; title: string; onClose: () => void; children: ReactNode; wide?: boolean;
 }) {
-  return <Dialog open={open} onOpenChange={(value) => !value && onClose()} title={title}>{children}</Dialog>;
+  return <Dialog open={open} onOpenChange={(value) => !value && onClose()} title={title} wide={wide}>{children}</Dialog>;
 }
 
 /** Shared fetch/create lifecycle; discarded dialog requests cannot update a later source. */

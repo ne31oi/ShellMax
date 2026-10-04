@@ -1,6 +1,7 @@
 /** User actions shared by the generate panel, media cards, context menus and the viewer. */
 import { api } from "../api/client";
 import { reportJobError } from "./errors";
+import { isSupportedJobKind } from "./stages";
 import type { Generation, MediaAsset, UIParams, Upload } from "../api/types";
 import { useForm } from "../store/form";
 import { defaultProfile, useLibrary } from "../store/library";
@@ -150,6 +151,10 @@ export async function restorePrompt(snapshot: PromptSnapshot): Promise<void> {
 }
 
 export async function retry(g: Generation, sameSeed: boolean, variants = 1) {
+  if (!isSupportedJobKind(g.kind)) {
+    toast("Этот тип обработки больше не поддерживается. Выберите другой способ обработки клипа", "info");
+    return;
+  }
   try {
     const gens = await api.retry(g.id, sameSeed, variants);
     gens.forEach((x) => useLibrary.getState().upsertGeneration(x));
@@ -160,12 +165,24 @@ export async function retry(g: Generation, sameSeed: boolean, variants = 1) {
 }
 
 export async function editAndRetry(g: Generation) {
-  if (g.kind === "fidelity_upscale") {
-    if (g.source_asset_id) useUI.getState().openFidelityUpscaleDialog({ assetId: g.source_asset_id, fromGenerationId: g.id });
+  if (!isSupportedJobKind(g.kind)) {
+    toast("Этот тип обработки больше не поддерживается. Выберите другой способ обработки клипа", "info");
     return;
   }
-  if (g.kind === "sol_refine") {
-    if (g.source_asset_id) useUI.getState().openSoLRefinerDialog({ assetId: g.source_asset_id, fromGenerationId: g.id });
+  if (g.kind === "head_swap") {
+    if (g.source_asset_id) useUI.getState().openHeadSwapDialog({ assetId: g.source_asset_id, fromGenerationId: g.id });
+    return;
+  }
+  if (g.kind === "dlss5") {
+    if (g.source_asset_id) useUI.getState().openDLSS5Dialog({ assetId: g.source_asset_id, fromGenerationId: g.id });
+    return;
+  }
+  if (g.kind === "body_swap" || g.kind === "body_swap_singularity") {
+    if (g.source_asset_id) useUI.getState().openBodySwapDialog({ assetId: g.source_asset_id, fromGenerationId: g.id });
+    return;
+  }
+  if (g.kind === "fidelity_upscale") {
+    if (g.source_asset_id) useUI.getState().openFidelityUpscaleDialog({ assetId: g.source_asset_id, fromGenerationId: g.id });
     return;
   }
   if (g.kind === "mask_edit" || g.kind === "mask_track") {
@@ -195,12 +212,20 @@ export async function editAndRetry(g: Generation) {
   toast("Параметры загружены в панель — измените и нажмите «Создать»", "info");
 }
 
-export function refineWithSoL(asset: MediaAsset) {
-  useUI.getState().openSoLRefinerDialog({ assetId: asset.id });
+export function replaceHead(asset: MediaAsset) {
+  useUI.getState().openHeadSwapDialog({ assetId: asset.id });
+}
+
+export function replaceBody(asset: MediaAsset) {
+  useUI.getState().openBodySwapDialog({ assetId: asset.id });
 }
 
 export function upscaleFaithfully(asset: MediaAsset) {
   useUI.getState().openFidelityUpscaleDialog({ assetId: asset.id });
+}
+
+export function enhanceDLSS5(asset: MediaAsset) {
+  useUI.getState().openDLSS5Dialog({ assetId: asset.id });
 }
 
 export async function cancel(g: Generation) {

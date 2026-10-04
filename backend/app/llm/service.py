@@ -17,6 +17,7 @@ import httpx
 
 from ..comfy.client import ComfyClient
 from . import config
+from .codex import CodexRunner
 from .downloader import downloads
 from .prompt import extract_prompt
 from .registry import CHOICES, FILES
@@ -32,6 +33,7 @@ class AssistantBusy(Exception):
 class AssistantService:
     def __init__(self, comfy: ComfyClient, jobs_busy, on_models_freed=None):
         self.runner = LlmRunner()
+        self.codex = CodexRunner()
         self.comfy = comfy
         self._jobs_busy = jobs_busy  # () -> bool: a video job is running or queued
         self._on_models_freed = on_models_freed  # the next video job will be a cold start
@@ -40,12 +42,24 @@ class AssistantService:
         self._cancel: asyncio.Event | None = None
 
     # ------------------------------------------------------------------ status
-    def status(self) -> dict:
+    def status(self, *, refresh: bool = False) -> dict:
         s = config.load()
+        if s.provider == "codex":
+            probe = self.codex.status(refresh=refresh, model=s.codex_model, reasoning_effort=s.codex_reasoning_effort)
+            return {
+                "provider": "codex", "model": probe["model"],
+                "label": "Codex" + (f" · {probe['model']}" if probe["model"] else ""),
+                "ready": probe["authenticated"], "error": probe["error"],
+                "notice": probe.get("notice", ""),
+                "models": probe.get("models", []),
+                "reasoning_effort": probe.get("reasoning_effort", ""),
+                "files": [], "total_bytes": 0, "received_bytes": 0, "downloading": False,
+                "running": self.codex.running(), "starting": False, "busy": self.active > 0,
+            }
         choice = CHOICES[s.model]
         files = [downloads.status(fid) for fid in choice.all_files()]
         return {
-            "model": s.model, "label": choice.label,
+            "provider": "local", "model": s.model, "label": choice.label,
             "ready": all(f["status"] == "ready" for f in files),
             "files": files,
             "total_bytes": sum(f["total"] or 0 for f in files),
@@ -77,6 +91,11 @@ class AssistantService:
         if self._cancel:
             self._cancel.set()
 
+    async def shutdown(self) -> None:
+        self.cancel()
+        await self.codex.stop()
+        await self.runner.stop()
+
     # ------------------------------------------------------------------ one answer
     async def stream(self, system: str, user_text: str, images: list[Path]) -> AsyncIterator[dict]:
         """Yields {"stage"}, {"delta"}, then {"done", "prompt", "text"} or {"error"}."""
@@ -86,6 +105,10 @@ class AssistantService:
     async def chat(self, system: str, history: list[dict], images: list[Path]) -> AsyncIterator[dict]:
         """A multi-turn answer; `images` go with the last user message (studio: refs sit next to it)."""
         s = config.load()
+        if s.provider == "codex":
+            async for event in self._codex_chat(system, history, images, s.codex_model, s.codex_reasoning_effort):
+                yield event
+            return
         choice = CHOICES[s.model]
         if not all(FILES[f].ready() for f in choice.all_files()):
             yield {"error": "model_missing"}
@@ -164,6 +187,25 @@ class AssistantService:
             self.active -= 1
             self._cancel = None
             self.runner.touch()
+
+    async def _codex_chat(self, system: str, history: list[dict], images: list[Path],
+                          model: str, reasoning_effort: str) -> AsyncIterator[dict]:
+        if self._jobs_busy() or self.active:
+            yield {"error": "Ассистент сейчас недоступен — идёт генерация видео или другой ответ"}
+            return
+        self.active += 1
+        self._cancel = cancel = asyncio.Event()
+        try:
+            probe = await asyncio.to_thread(self.codex.status, model=model, reasoning_effort=reasoning_effort)
+            if not probe["authenticated"]:
+                yield {"error": probe["error"]}
+                return
+            async for event in self.codex.stream(system, _alternate(history), images, cancel,
+                                                 model=model, reasoning_effort=reasoning_effort):
+                yield event
+        finally:
+            self.active -= 1
+            self._cancel = None
 
     async def _free_comfy(self, choice) -> None:
         """Ask ComfyUI to drop its models and wait until the GPU has room for the LLM."""

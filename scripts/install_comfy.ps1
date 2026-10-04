@@ -36,6 +36,10 @@ $TritonSpec     = 'triton-windows==3.6.0.post25'
 $OnnxSpec       = 'onnxruntime-gpu==1.24.4'   # insightface (face identity in H3FaceTrackCrop) runs on it
 
 $NodePacks = @(
+    @{ Name = 'ComfyUI-DLSS5-Enhancer'; Url = 'https://github.com/Blueforcer/ComfyUI-DLSS5-Enhancer'; Commit = '796ed5927a202ba50b5c929cd08e16b365041162' },
+    @{ Name = 'MaskVidExperiments'; Url = 'https://github.com/drozbay/MaskVidExperiments'; Commit = 'c32ed8c17e6fe892a174ebf25fe98b1317de97fb' },
+    @{ Name = 'comfyui-controlnet-aux'; Url = 'https://github.com/comfyorg/comfyui-controlnet-aux'; Commit = '83463c2e4b04e729268e57f638b4212e0da4badc' },
+    @{ Name = 'H3-Optimizations'; Url = 'https://github.com/Zironic/H3-Optimizations'; Commit = '862774944a331bc1a66cee1cf805b94bd138ebbe' },
     @{ Name = 'ComfyUI-KJNodes';                    Url = 'https://github.com/kijai/ComfyUI-KJNodes';                       Commit = '203eb357743402b437db8ae973a062a9b15387d2' },
     @{ Name = 'ComfyUI-VideoHelperSuite';           Url = 'https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite';        Commit = '4ee72c065db22c9d96c2427954dc69e7b908444b' },
     @{ Name = 'Comfyui_Minimax_h3_latent_Upscaler'; Url = 'https://github.com/LBH-123-AI/Comfyui_Minimax_h3_latent_Upscaler'; Commit = '04f71594d11325be877b5ba05096fcb851c29048' },
@@ -51,7 +55,13 @@ $DebugPacks = @(
 
 # node classes the ShellMax graph uses; verified against /object_info
 $RequiredClasses = @(
-    'ShellMaxSoLRefinerByPath', 'ShellMaxUpscaleModelLoaderByPath', 'ImageUpscaleWithModel', 'ImageScale',
+    'DLSS5Settings', 'DLSS5EnhanceImages', 'DLSS5EnhanceVideoFile', 'VHS_LoadVideoFromFilenames', 'VHS_InsertMetadataToVideo', 'ShellMaxVideoPathToFilenames',
+    'VHS_LoadVideoFFmpegPath', 'GetImageSize', 'SAM3_TrackToMask', 'SolidMask', 'SetLatentNoiseMask', 'VAEEncodeAudio', 'VAEEncode', 'MaskComposite', 'GrowMaskWithBlur', 'VRAM_Debug', 'RemoveBackground', 'CLIPTextEncode',
+    'MVEx_SubjectCrop', 'MVEx_SubjectUncrop', 'MVEx_MaskCleanup', 'MVEx_MaskToLatentSpace', 'DWPreprocessor', 'MiniMaxH3FunControlNetApply', 'ShellMaxModelPatchLoaderByPath', 'ShellMaxBackgroundRemovalLoaderByPath', 'ShellMaxBodySwapSource', 'ShellMaxBodySwapRestoreHands', 'ShellMaxBodySwapBackground', 'ShellMaxBodySwapFitComposite',
+    'ShellMaxH3HeadSwapTrack', 'ShellMaxH3HeadSwapMasks', 'ShellMaxH3HeadSwapContours', 'ShellMaxH3HeadSwapTemporal', 'ShellMaxH3HeadSwapStitch', 'ShellMaxH3HeadSwapPad', 'ShellMaxH3HeadSwapRestore', 'ShellMaxLatentUpscalerDimensionsByPath',
+    'MiniMaxH3AddGuide', 'MiniMaxH3SigmaShift', 'EmptyMiniMaxH3LatentAV', 'TextGenerate', 'StringConcatenate', 'CFGGuider', 'ManualSigmas', 'ImageResizeKJv2',
+    'H3MemoryOptimization', 'H3AIMDOResidencyLimiter', 'H3SparseAttentionAdvanced',
+    'ShellMaxUpscaleModelLoaderByPath', 'ImageUpscaleWithModel', 'ImageScale',
     'MiniMaxH3ReferenceToVideo', 'BlockSparseAttention', 'ModelAttentionBackend', 'ExtendIntermediateSigmas',
     'LTXVSeparateAVLatent', 'LTXVConcatAVLatent', 'ComfyMathExpression', 'ResolutionSelector',
     'PrimitiveFloat', 'PrimitiveStringMultiline', 'SamplerCustomAdvanced', 'BasicGuider', 'BasicScheduler',
@@ -182,6 +192,9 @@ foreach ($p in $packs) {
     Ok "$($p.Name) @ $(if ($p.Commit) { $p.Commit.Substring(0,7) } else { 'latest' })"
 }
 
+# The pinned KJNodes predates the core attention override argument (upstream #750).
+Invoke-Native $Python @('-s', (Join-Path $Root 'backend\app\comfy\compat.py'), $CustomNodes)
+
 # ---------------------------------------------------------------- 5. shellmax nodes
 Step '5/7 ноды из проекта (comfy_nodes\*)'
 # copied, not linked: exFAT volumes support neither symlinks nor junctions.
@@ -195,6 +208,8 @@ foreach ($pack in Get-ChildItem (Join-Path $Root 'comfy_nodes') -Directory) {
 }
 
 # ---------------------------------------------------------------- 6. models
+Invoke-Native $Python @('-s', (Join-Path $Root 'scripts\install_dlss5.py'))
+
 Step '6/7 extra_model_paths.yaml (модели из существующей установки)'
 $models = $Config.legacy_models_dir -replace '\\', '/'
 if (-not (Test-Path $models)) { Write-Host "    внимание: папка моделей не найдена: $models" -ForegroundColor Yellow }

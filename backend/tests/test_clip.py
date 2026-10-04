@@ -353,7 +353,8 @@ async def test_queue_resume_uses_existing_comfy_prompt(monkeypatch):
             return {"status": {"completed": True, "status_str": "success"}}
         async def queue_prompt(self, _):
             pytest.fail("Recovery must not submit a graph")
-    manager = JobManager(Client(), SimpleNamespace(state="ready", pid=42))
+    from unittest.mock import AsyncMock
+    manager = JobManager(Client(), SimpleNamespace(state="ready", pid=42, check_health=AsyncMock()))
     async def collect(r):
         r.final_asset_id = 100
     results = []

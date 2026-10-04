@@ -309,8 +309,10 @@ def delete_profile(pid: int):
 
 
 @router.get("/profiles/workflow-defaults")
-def workflow_defaults():
-    return face.with_face_defaults(presets.default_profile()).model_dump()
+def workflow_defaults(pipeline: str = "generate"):
+    from .workflow.pdmd import default_profile as pdmd_profile
+    profile = pdmd_profile() if pipeline == "generate_pdmd" else presets.default_profile()
+    return face.with_face_defaults(profile).model_dump()
 
 
 def _make_default(s, pid: int) -> None:

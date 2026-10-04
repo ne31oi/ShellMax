@@ -12,6 +12,7 @@ from . import services, settings
 from .api_common import not_found
 from .db.models import Generation, MediaAsset, Upload, select, session
 from .jobs.persist import register_asset
+from .hub import hub
 from .media import library
 from .reference_library import ReferenceDetails, reference_usage, update_reference
 

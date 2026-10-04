@@ -11,9 +11,13 @@ import type {
   EngineProfile,
   EnhanceDefaults,
   EnhanceUIParams,
-  SoLRefinerDefaults,
-  SoLRefinerUIParams,
+  HeadSwapDefaults,
+  BodySwapDefaults,
+  BodySwapUIParams,
+  HeadSwapUIParams,
   FidelityDefaults,
+  DLSS5Defaults,
+  DLSS5Params,
   FaceDefaults,
   FaceUIParams,
   InterpolateDefaults,
@@ -40,6 +44,7 @@ import type {
   MaskTrackParams,
 } from "./types";
 import type { ClipProject, ClipListItem, ClipEdit, ClipOperation, ClipJob, PlanProposal, AssemblyProposal } from "./clip-types";
+import type { EngineUpdateStatus } from "./update-types";
 
 /** Bound by App when the active project changes — keeps HTTP layer free of zustand. */
 let _projectId = 1;
@@ -146,6 +151,10 @@ export const api = {
   saveUiState: (value: Record<string, unknown>) => put("/api/state/ui", value),
 
   engine: () => get<EngineState>("/api/engine"),
+  engineUpdates: () => get<EngineUpdateStatus>("/api/engine-updates"),
+  checkEngineUpdates: () => post<EngineUpdateStatus>("/api/engine-updates/check"),
+  installEngineUpdates: (ids: string[], check_id: string) => post<EngineUpdateStatus>("/api/engine-updates/install", { ids, check_id }),
+  restoreEngineUpdates: () => post<EngineUpdateStatus>("/api/engine-updates/restore"),
   engineAction: (action: "start" | "stop" | "restart") => post<EngineState>(`/api/engine/${action}`),
   restartAll: () => post<{ ok: boolean }>("/api/system/restart"),
   shutdownAll: () => post<{ ok: boolean }>("/api/system/shutdown"),
@@ -153,7 +162,7 @@ export const api = {
   engineLog: () => get<{ lines: string[] }>("/api/engine/log"),
 
   profiles: () => get<ProfileRow[]>("/api/profiles"),
-  workflowDefaults: () => get<EngineProfile>("/api/profiles/workflow-defaults"),
+  workflowDefaults: (pipeline = "generate") => get<EngineProfile>(`/api/profiles/workflow-defaults?pipeline=${encodeURIComponent(pipeline)}`),
   createProfile: (data: EngineProfile, is_default = false) => post<{ id: number }>("/api/profiles", { data, is_default }),
   updateProfile: (id: number, data: EngineProfile, is_default = false) =>
     put<{ ok: boolean; problems: ProfileRow["problems"] }>(`/api/profiles/${id}`, { data, is_default }),
@@ -233,18 +242,21 @@ export const api = {
   deleteGeneration: (id: number) => del(`/api/generations/${id}`),
 
   faceDefaults: (assetId: number) => get<FaceDefaults>("/api/face/defaults" + q({ asset_id: assetId })),
+  headSwapDefaults: (assetId: number) => get<HeadSwapDefaults>("/api/head-swap/defaults" + q({ asset_id: assetId, project_id: pid() })),
+  bodySwapDefaults: (assetId: number) => get<BodySwapDefaults>("/api/body-swap/defaults" + q({ asset_id: assetId, project_id: pid() })),
+  bodySwap: (params: BodySwapUIParams) => post<Generation>("/api/body-swap" + q({ project_id: pid() }), params),
+  headSwap: (params: HeadSwapUIParams) => post<Generation>("/api/head-swap" + q({ project_id: pid() }), params),
   faceDetect: (uploadId: string) => post<{ found: boolean; crop: CropBox }>("/api/face/detect", { upload_id: uploadId }),
   faceRefine: (params: FaceUIParams, projectId?: number) =>
     post<Generation>("/api/face" + q({ project_id: pid(projectId) }), params),
   faceEstimate: (assetId: number) => get<Estimate>("/api/face/estimate" + q({ asset_id: assetId })),
 
   enhanceDefaults: (assetId: number) => get<EnhanceDefaults>("/api/enhance/defaults" + q({ asset_id: assetId })),
-  solRefinerDefaults: (assetId: number) => get<SoLRefinerDefaults>("/api/sol-refiner/defaults" + q({ asset_id: assetId })),
   fidelityDefaults: (assetId: number) => get<FidelityDefaults>("/api/fidelity-upscale/defaults" + q({ asset_id: assetId })),
+  dlss5Defaults: (assetId: number) => get<DLSS5Defaults>("/api/dlss5/defaults" + q({ asset_id: assetId })),
+  dlss5: (params: DLSS5Params, projectId?: number) => post<Generation>("/api/dlss5" + q({ project_id: pid(projectId) }), params),
   fidelityUpscale: (params: { source_asset_id: number; scale: 1 | 2 }, projectId?: number) =>
     post<Generation>("/api/fidelity-upscale" + q({ project_id: pid(projectId) }), params),
-  solRefiner: (params: SoLRefinerUIParams, projectId?: number) =>
-    post<Generation>("/api/sol-refiner" + q({ project_id: pid(projectId) }), params),
   enhanceEstimate: (assetId: number, scale: number) =>
     get<Estimate>("/api/enhance/estimate" + q({ asset_id: assetId, scale })),
   enhance: (params: EnhanceUIParams, projectId?: number) =>
@@ -257,7 +269,7 @@ export const api = {
   interpolate: (params: InterpolateUIParams, projectId?: number) =>
     post<Generation>("/api/interpolate" + q({ project_id: pid(projectId) }), params),
 
-  assistantStatus: () => get<AssistantStatus>("/api/assistant/status"),
+  assistantStatus: (refresh = false) => get<AssistantStatus>(`/api/assistant/status${refresh ? "?refresh=true" : ""}`),
   assistantModels: () => get<AssistantModel[]>("/api/assistant/models"),
   assistantDownload: () => post("/api/assistant/download"),
   assistantSettings: () => get<AssistantSettings>("/api/assistant/settings"),

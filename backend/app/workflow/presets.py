@@ -168,6 +168,7 @@ def expand(
         seed=seed,
         unet=profile.unet,
         nvfp4_unet=profile.nvfp4_unet,
+        pdmd_lora=profile.pdmd_lora,
         text_encoder=profile.text_encoder,
         vae_video=profile.vae_video,
         vae_audio=profile.vae_audio,

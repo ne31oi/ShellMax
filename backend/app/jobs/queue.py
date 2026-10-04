@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .. import settings
 from ..comfy.client import ComfyClient, PromptRejected
+from ..comfy.health import WORKER_FAILED
 from ..comfy.supervisor import EngineSupervisor
 from ..db.models import Generation, MediaAsset, Upload, select, session, utcnow
 from ..hub import hub
@@ -18,7 +19,7 @@ from ..workflow.params import FaceFullParams, FullParams
 from .errors import describe_rejection, humanize_error
 from .persist import push_generation, register_asset
 from .pipelines import PIPELINES, Pipeline
-from .registry import asset_title_for, get_handler, pipeline_for
+from .registry import HANDLERS, asset_title_for, get_handler, pipeline_for
 
 log = logging.getLogger("shellmax.jobs")
 
@@ -225,6 +226,7 @@ class JobManager:
                 self.running = None
 
     async def _ensure_engine(self) -> str | None:
+        await self.engine.check_health()
         if self.engine.state not in READY_STATES:
             if self.engine.state == "not_installed":
                 return self.engine.detail
@@ -241,6 +243,9 @@ class JobManager:
         return None
 
     async def _run(self, g: Generation) -> None:
+        if g.kind not in HANDLERS:
+            await self._finish(g.id, "error", error=("generic", "Этот тип обработки больше не поддерживается. Готовые клипы сохранены; выберите другой способ обработки."))
+            return
         r = self.running = Running(gen_id=g.id, pipe=pipeline_for(g.kind), kind=g.kind)
         r.stage_marks.append(("prepare", r.started_at))
         with session() as s:
@@ -336,11 +341,18 @@ class JobManager:
                 pass
             if await self._reconcile_prompt(r):
                 return
+            # A dead worker can leave its prompt in the HTTP queue forever.
+            # Only the fatal worker diagnosis overrides queue presence, not a stats timeout.
+            if self.engine.state == "error" and self.engine.detail == WORKER_FAILED:
+                r.error = ("engine_down", WORKER_FAILED)
+                r.done.set()
+                return
             alive = False
             try:
-                if self.engine.state in READY_STATES:
-                    q = await self.client.queue_state()
-                    alive = self.client.prompt_in_queue(q, r.prompt_id or "")
+                # The engine status can lag a transient HTTP/GPU-stat failure;
+                # only the actual queue can tell us whether this prompt disappeared.
+                q = await self.client.queue_state()
+                alive = self.client.prompt_in_queue(q, r.prompt_id or "")
             except Exception:  # noqa: BLE001
                 alive = False
             if alive:

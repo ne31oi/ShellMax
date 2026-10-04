@@ -7,12 +7,15 @@ as in its base builder. Node 56 uses Fantastic Text Encode (latent output 2).
 
 import json
 
-from . import builder, builder_nvfp4, builder_nvfp4_fast
+from . import builder, builder_memory, builder_nvfp4, builder_nvfp4_fast
 from .params import FullParams
+from .builder_pdmd import build_pdmd_prompt
 
 BASE_BUILDERS = {"generate": builder.build_prompt,
+                 "generate_memory": builder_memory.build_memory_prompt,
                  "generate_nvfp4": builder_nvfp4.build_nvfp4_prompt,
-                 "generate_nvfp4_fast": builder_nvfp4_fast.build_nvfp4_fast_prompt}
+                 "generate_nvfp4_fast": builder_nvfp4_fast.build_nvfp4_fast_prompt,
+                 "generate_pdmd": build_pdmd_prompt}
 STAGE_BY_NODE = {**builder.STAGE_BY_NODE, "refmod_stack": "encode", "ref_bundle": "encode"}
 SAMPLER_NODES = builder.SAMPLER_NODES
 FINAL_OUTPUT_NODE = builder.FINAL_OUTPUT_NODE
@@ -50,5 +53,13 @@ def build_nvfp4_refmod_prompt(p: FullParams) -> dict:
     return build_refmod_prompt(p, "generate_nvfp4")
 
 
+def build_memory_refmod_prompt(p: FullParams) -> dict:
+    return build_refmod_prompt(p, "generate_memory")
+
+
 def build_fast_refmod_prompt(p: FullParams) -> dict:
     return build_refmod_prompt(p, "generate_nvfp4_fast")
+
+
+def build_pdmd_refmod_prompt(p: FullParams) -> dict:
+    return build_refmod_prompt(p, "generate_pdmd")

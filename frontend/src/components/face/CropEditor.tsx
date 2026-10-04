@@ -18,6 +18,8 @@ export function CropEditor({
   mediaAspect = 1,
   media,
   heightClass = "max-h-72",
+  emptySelection = false,
+  minSize = MIN,
 }: {
   src: string;
   value: CropBox | null;
@@ -26,6 +28,8 @@ export function CropEditor({
   mediaAspect?: number; // image width/height, to convert the pixel ratio to normalized units
   media?: ReactNode; // e.g. a <video>; defaults to an <img> of src
   heightClass?: string;
+  emptySelection?: boolean;
+  minSize?: number;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const crop = value ?? { x: 0, y: 0, w: 1, h: 1 };
@@ -51,10 +55,10 @@ export function CropEditor({
       } else if (handle === "new") {
         next = { x: Math.min(origin.x, p.x), y: Math.min(origin.y, p.y), w: Math.abs(dx), h: Math.abs(dy) };
       } else {
-        const x0 = handle.includes("w") ? clamp(initial.x + dx, 0, initial.x + initial.w - MIN) : initial.x;
-        const y0 = handle.includes("n") ? clamp(initial.y + dy, 0, initial.y + initial.h - MIN) : initial.y;
-        const x1 = handle.includes("e") ? clamp(initial.x + initial.w + dx, initial.x + MIN) : initial.x + initial.w;
-        const y1 = handle.includes("s") ? clamp(initial.y + initial.h + dy, initial.y + MIN) : initial.y + initial.h;
+        const x0 = handle.includes("w") ? clamp(initial.x + dx, 0, initial.x + initial.w - minSize) : initial.x;
+        const y0 = handle.includes("n") ? clamp(initial.y + dy, 0, initial.y + initial.h - minSize) : initial.y;
+        const x1 = handle.includes("e") ? clamp(initial.x + initial.w + dx, initial.x + minSize) : initial.x + initial.w;
+        const y1 = handle.includes("s") ? clamp(initial.y + initial.h + dy, initial.y + minSize) : initial.y + initial.h;
         next = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
       }
       if (ratio && handle !== "move") {
@@ -71,7 +75,7 @@ export function CropEditor({
         if (w > maxW) [w, h] = [maxW, maxW * k];
         next = { x: left ? right - w : next.x, y: up ? bottom - h : next.y, w, h };
       }
-      if (next.w >= MIN && next.h >= MIN) onChange(round(next));
+      if (next.w >= minSize && next.h >= minSize) onChange(round(next));
     };
     const up = () => {
       window.removeEventListener("pointermove", move);
@@ -84,6 +88,7 @@ export function CropEditor({
   return (
     <div ref={box} className={clsx("relative inline-block cursor-crosshair select-none overflow-hidden rounded-lg bg-black", heightClass)} onPointerDown={(e) => start(e, "new")}>
       {media ?? <img src={src} alt="" className={clsx("block w-auto", heightClass)} draggable={false} />}
+      {(value !== null || !emptySelection) && <>
       {/* dim everything outside the crop */}
       <div
         className="pointer-events-none absolute border-2 border-accent shadow-[0_0_0_9999px_rgba(0,0,0,0.55)]"
@@ -107,6 +112,7 @@ export function CropEditor({
           />
         ))}
       </div>
+      </>}
     </div>
   );
 }

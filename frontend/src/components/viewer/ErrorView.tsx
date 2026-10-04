@@ -1,6 +1,7 @@
 import { AlertCircle } from "lucide-react";
 import type { Generation } from "../../api/types";
 import * as actions from "../../lib/actions";
+import { isGenerationKind } from "../../lib/stages";
 import { useUI } from "../../store/ui";
 import { Button, ErrorMessage } from "../ui";
 
@@ -15,10 +16,12 @@ export function ErrorView({ gen }: { gen: Generation }) {
         </div>
         {gen.error && <ErrorMessage text={gen.error} />}
         <div className="mt-4 flex flex-wrap gap-2">
-          {gen.error_kind === "oom" && (gen.kind === "generate" || gen.kind === "generate_nvfp4" || gen.kind === "generate_nvfp4_fast") && (
+          {gen.error_kind === "oom" && isGenerationKind(gen.kind) && (
             <>
               <Button size="sm" variant="primary" onClick={() => actions.fixes.lowerQuality(gen)}>Снизить качество</Button>
-              <Button size="sm" onClick={() => actions.fixes.enableLowVram().then(() => actions.retry(gen, true))}>Включить экономию VRAM и повторить</Button>
+              {gen.kind !== "generate_memory" && (
+                <Button size="sm" onClick={() => actions.fixes.enableLowVram().then(() => actions.retry(gen, true))}>Включить экономию VRAM и повторить</Button>
+              )}
             </>
           )}
           {gen.error_kind === "oom" && gen.kind === "enhance" && gen.source_asset_id && (

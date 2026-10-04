@@ -10,7 +10,7 @@ import type { Generation, MediaAsset, Upload } from "../../api/types";
 import * as actions from "../../lib/actions";
 import { fmtDuration, fmtEstimate } from "../../lib/format";
 import { KIND_LABEL, promptTitle } from "../../lib/refs";
-import { stageInfo, stepProgress, timeBreakdown } from "../../lib/stages";
+import { isSupportedJobKind, stageInfo, stepProgress, timeBreakdown } from "../../lib/stages";
 import { useElapsed } from "../../lib/useElapsed";
 import { recentFamilyInUse, useForm } from "../../store/form";
 import { generationOwningAsset, useLibrary } from "../../store/library";
@@ -77,18 +77,23 @@ export function GenerationCard({ gen }: { gen: Generation }) {
   const parent = generationOwningAsset(generations, gen.source_asset_id);
   const title =
     asset?.name ?? (gen.kind === "mask_track" ? "Маска SAM" : gen.kind === "refmod_create" ? `RefMod: ${String(gen.full_params?.label ?? gen.id)}` : null) ??
-    (gen.kind === "face"
+    (gen.kind === "body_swap" || gen.kind === "body_swap_singularity"
+      ? "Замена персонажа"
+      : gen.kind === "head_swap"
+      ? "Замена головы"
+      : gen.kind === "face"
       ? "Улучшение лица"
-      : gen.kind === "sol_refine"
-        ? "SoL-Refiner"
       : gen.kind === "fidelity_upscale"
         ? "Бережное улучшение"
+      : gen.kind === "dlss5"
+        ? "Улучшение DLSS5"
       : gen.kind === "enhance"
         ? "Детализация"
         : gen.kind === "interpolate"
           ? "Интерполяция"
           : promptTitle(gen.ui_params.prompt) || `Генерация ${gen.id}`);
   const active = gen.status === "running" || gen.status === "queued";
+  const canRetry = isSupportedJobKind(gen.kind);
 
   const card = (
     <div
@@ -128,9 +133,9 @@ export function GenerationCard({ gen }: { gen: Generation }) {
             <ScanFace size={10} /> лицо
           </span>
         )}
-        {(gen.kind === "enhance" || gen.kind === "sol_refine" || gen.kind === "fidelity_upscale") && gen.status !== "running" && (
+        {(gen.kind === "enhance" || gen.kind === "fidelity_upscale" || gen.kind === "dlss5") && gen.status !== "running" && (
           <span className="absolute left-1 top-1 flex items-center gap-0.5 rounded bg-accent px-1 text-[10px] font-semibold text-accent-fg">
-            <Sparkles size={10} /> {gen.kind === "sol_refine" ? "SoL" : gen.kind === "fidelity_upscale" ? `×${gen.ui_params.scale ?? 2}` : "деталь"}
+            <Sparkles size={10} /> {gen.kind === "dlss5" ? "DLSS5" : gen.kind === "fidelity_upscale" ? `×${gen.ui_params.scale ?? 2}` : "деталь"}
           </span>
         )}
         {gen.kind === "interpolate" && gen.status !== "running" && (
@@ -189,14 +194,14 @@ export function GenerationCard({ gen }: { gen: Generation }) {
       <ContextMenu.Portal>
         <ContextMenu.Content className="z-40 min-w-56 rounded-xl border border-line bg-panel p-1 shadow-2xl">
           {active && <CtxItem icon={<Square size={13} />} onSelect={() => actions.cancel(gen)}>{gen.draft_asset_id ? "Остановить, оставить черновик" : "Отменить"}</CtxItem>}
-          <CtxItem icon={<Dices size={13} />} onSelect={() => actions.retry(gen, false)}>Повторить с новым сидом</CtxItem>
-          {gen.kind !== "face" && gen.kind !== "enhance" && gen.kind !== "sol_refine" && gen.kind !== "fidelity_upscale" && gen.kind !== "interpolate" && gen.kind !== "refmod_create" && gen.kind !== "mask_track" && (
+          <CtxItem icon={<Dices size={13} />} disabled={!canRetry} onSelect={() => actions.retry(gen, false)}>Повторить с новым сидом</CtxItem>
+          {canRetry && gen.kind !== "dlss5" && gen.kind !== "body_swap" && gen.kind !== "body_swap_singularity" && gen.kind !== "head_swap" && gen.kind !== "face" && gen.kind !== "enhance" && gen.kind !== "fidelity_upscale" && gen.kind !== "interpolate" && gen.kind !== "refmod_create" && gen.kind !== "mask_track" && (
             <>
               <CtxItem icon={<Copy size={13} />} onSelect={() => actions.retry(gen, true)}>Повторить точно (тот же сид)</CtxItem>
               <CtxItem icon={<Shuffle size={13} />} onSelect={() => actions.retry(gen, false, 4)}>Вариации ×4</CtxItem>
             </>
           )}
-          <CtxItem icon={<Pencil size={13} />} onSelect={() => actions.editAndRetry(gen)}>Изменить и повторить</CtxItem>
+          <CtxItem icon={<Pencil size={13} />} disabled={!canRetry} onSelect={() => actions.editAndRetry(gen)}>Изменить и повторить</CtxItem>
           {parent && (
             <CtxItem icon={<Film size={13} />} onSelect={() => useUI.getState().selectGen(parent.id)}>
               Открыть исходный #{parent.id}
@@ -207,8 +212,10 @@ export function GenerationCard({ gen }: { gen: Generation }) {
               <ContextMenu.Separator className="my-1 h-px bg-line" />
               <CtxItem icon={<ScanFace size={13} />} onSelect={() => useUI.getState().openFaceDialog({ assetId: asset.id })} disabled={gen.status !== "done"}>Улучшить лицо…</CtxItem>
               <CtxItem icon={<Sparkles size={13} />} onSelect={() => useUI.getState().openEnhanceDialog({ assetId: asset.id })} disabled={gen.status !== "done"}>Детализация (SeedVR2)…</CtxItem>
-              <CtxItem icon={<Sparkles size={13} />} onSelect={() => actions.refineWithSoL(asset)} disabled={gen.status !== "done"}>Детализация (SoL-Refiner)…</CtxItem>
+              <CtxItem icon={<ScanFace size={13} />} onSelect={() => actions.replaceHead(asset)} disabled={gen.status !== "done"}>Заменить голову (Head Swap)…</CtxItem>
+              <CtxItem icon={<ScanFace size={13} />} onSelect={() => actions.replaceBody(asset)} disabled={gen.status !== "done" || asset.kind !== "video"}>Заменить персонажа (Body Swap)…</CtxItem>
               <CtxItem icon={<Sparkles size={13} />} onSelect={() => actions.upscaleFaithfully(asset)} disabled={gen.status !== "done"}>Бережное улучшение…</CtxItem>
+              <CtxItem icon={<Sparkles size={13} />} onSelect={() => actions.enhanceDLSS5(asset)} disabled={gen.status !== "done" || asset.kind !== "video"}>Улучшить (DLSS5)…</CtxItem>
               <CtxItem icon={<Sparkles size={13} />} onSelect={() => useUI.getState().openMaskEditDialog({ assetId: asset.id })} disabled={gen.status !== "done"}>Изменить по маске…</CtxItem>
               <CtxItem icon={<Gauge size={13} />} onSelect={() => useUI.getState().openInterpolateDialog({ assetId: asset.id })} disabled={gen.status !== "done"}>Интерполяция (RIFE)…</CtxItem>
               <CtxItem icon={<Film size={13} />} onSelect={() => actions.addToTimeline(asset)} disabled={gen.status !== "done"}>В таймлайн (V)</CtxItem>
@@ -275,8 +282,10 @@ export function AssetCard({ asset }: { asset: MediaAsset }) {
           <CtxItem icon={<ImagePlus size={13} />} onSelect={() => actions.assetAsRef(asset)}>Использовать как референс</CtxItem>
           <CtxItem icon={<ScanFace size={13} />} onSelect={() => useUI.getState().openFaceDialog({ assetId: asset.id })} disabled={!canVideo}>Улучшить лицо…</CtxItem>
           <CtxItem icon={<Sparkles size={13} />} onSelect={() => useUI.getState().openEnhanceDialog({ assetId: asset.id })} disabled={!canVideo}>Детализация (SeedVR2)…</CtxItem>
-          <CtxItem icon={<Sparkles size={13} />} onSelect={() => actions.refineWithSoL(asset)} disabled={!canVideo}>Детализация (SoL-Refiner)…</CtxItem>
+          <CtxItem icon={<ScanFace size={13} />} onSelect={() => actions.replaceHead(asset)} disabled={!canVideo}>Заменить голову (Head Swap)…</CtxItem>
+          <CtxItem icon={<ScanFace size={13} />} onSelect={() => actions.replaceBody(asset)} disabled={!canVideo}>Заменить персонажа (Body Swap)…</CtxItem>
           <CtxItem icon={<Sparkles size={13} />} onSelect={() => actions.upscaleFaithfully(asset)} disabled={!canVideo}>Бережное улучшение…</CtxItem>
+          <CtxItem icon={<Sparkles size={13} />} onSelect={() => actions.enhanceDLSS5(asset)} disabled={!canVideo}>Улучшить (DLSS5)…</CtxItem>
           <CtxItem icon={<Sparkles size={13} />} onSelect={() => useUI.getState().openMaskEditDialog({ assetId: asset.id })} disabled={!canVideo}>Изменить по маске…</CtxItem>
           <CtxItem icon={<Gauge size={13} />} onSelect={() => useUI.getState().openInterpolateDialog({ assetId: asset.id })} disabled={!canVideo}>Интерполяция (RIFE)…</CtxItem>
           <CtxItem icon={<FolderOpen size={13} />} onSelect={() => actions.reveal(asset)}>Показать в папке</CtxItem>

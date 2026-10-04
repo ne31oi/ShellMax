@@ -16,6 +16,8 @@ DEFAULT_SEC_PER_UNIT = {
     "generate": 180 / (1440 * 832 * 53),
     "generate_nvfp4": 370 / (1440 * 832 * 56),
     "generate_nvfp4_fast": 247 / (1440 * 832 * 56),
+    "generate_pdmd": 120 / (1440 * 832 * 56),  # Prior only; real warm samples replace it.
+    "generate_pdmd_refmods": 120 / (1440 * 832 * 56),
     "face": 150 / (768 * 768 * 56),
     # SeedVR2 1-step restore ≈ 2–4 min for a short 720p×2 clip on 16 GB
     "enhance": 180 / (1280 * 720 * 48 * 4),

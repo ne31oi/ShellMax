@@ -8,6 +8,7 @@ import { urls } from "../../api/client";
 import type { MediaAsset } from "../../api/types";
 import * as actions from "../../lib/actions";
 import { fmtDuration } from "../../lib/format";
+import { isGenerationKind } from "../../lib/stages";
 import { useLibrary } from "../../store/library";
 import { type Clip } from "../../store/timeline";
 import { useUI } from "../../store/ui";
@@ -176,7 +177,7 @@ export function ClipBlock({
           </TlCtxItem>
           <TlCtxItem
             icon={Film}
-            disabled={!gen || (gen.kind !== "generate" && gen.kind !== "generate_nvfp4" && gen.kind !== "generate_nvfp4_fast")}
+            disabled={!gen || !isGenerationKind(gen.kind)}
             onSelect={() => {
               if (gen) void actions.retry(gen, false);
             }}

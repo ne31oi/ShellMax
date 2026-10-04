@@ -4,7 +4,7 @@ import type { AssistantStatus } from "../api/types";
 import { useUI } from "./ui";
 
 // edit: fix the generation prompt in plain words; chat: the ideas assistant tab
-export type AssistantTarget = "compose" | "edit" | "face" | "chat";
+export type AssistantTarget = "compose" | "edit" | "face" | "mask" | "chat";
 
 interface AssistantJob {
   target: AssistantTarget;
@@ -15,8 +15,9 @@ interface AssistantJob {
 interface AssistantState {
   status: AssistantStatus | null;
   job: AssistantJob | null;
+  lastError: string | null;
   setupOpen: boolean; // "model not downloaded" dialog
-  refresh: () => Promise<void>;
+  refresh: (force?: boolean) => Promise<void>;
   download: () => Promise<void>;
   openSetup: (open: boolean) => void;
   /** Runs a job; resolves with the finished prompt, or null if stopped/failed/unavailable. */
@@ -29,11 +30,12 @@ let abort: AbortController | null = null;
 export const useAssistant = create<AssistantState>((set, get) => ({
   status: null,
   job: null,
+  lastError: null,
   setupOpen: false,
 
-  refresh: async () => {
+  refresh: async (force = false) => {
     try {
-      set({ status: await api.assistantStatus() });
+      set({ status: await api.assistantStatus(force) });
     } catch {
       /* backend restarting */
     }
@@ -48,9 +50,11 @@ export const useAssistant = create<AssistantState>((set, get) => ({
 
   run: async (target, url, body) => {
     if (get().job) return null;
+    set({ lastError: null });
     await get().refresh();
+    if (get().job) return null;
     if (!get().status?.ready) {
-      set({ setupOpen: true });
+      set({ setupOpen: true, lastError: "Ассистент не настроен — откройте его настройки" });
       return null;
     }
     abort = new AbortController();
@@ -65,15 +69,17 @@ export const useAssistant = create<AssistantState>((set, get) => ({
           else if ("delta" in e) set((s) => ({ job: s.job && { ...s.job, stage: "writing", text: s.job.text + e.delta } }));
           else if ("replace" in e) set((s) => ({ job: s.job && { ...s.job, stage: "writing", text: e.replace } }));
           else if ("error" in e) {
-            if (e.error === "model_missing") set({ setupOpen: true });
-            else useUI.getState().toast(e.error, "bad");
+            if (e.error === "model_missing") set({ setupOpen: true, lastError: "Модель ассистента не установлена — откройте его настройки" });
+            else { set({ lastError: e.error }); useUI.getState().toast(e.error, "bad"); }
           } else if ("done" in e && !e.cancelled && e.prompt.trim()) result = e.prompt;
         },
         abort.signal,
       );
     } catch (e) {
       if ((e as Error).name !== "AbortError") {
-        useUI.getState().toast(e instanceof ApiError ? e.message : "Ассистент недоступен", e instanceof ApiError && e.status === 409 ? "info" : "bad");
+        const message = e instanceof ApiError ? e.message : "Ассистент недоступен";
+        set({ lastError: message });
+        useUI.getState().toast(message, e instanceof ApiError && e.status === 409 ? "info" : "bad");
       }
     } finally {
       abort = null;

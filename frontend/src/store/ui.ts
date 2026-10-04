@@ -40,9 +40,11 @@ interface UIState {
   binFilter: "all" | "video" | "draft" | "imported";
   toasts: Toast[];
   faceDialog: FaceDialogState | null;
+  headSwapDialog: FaceDialogState | null;
+  bodySwapDialog: FaceDialogState | null;
   enhanceDialog: EnhanceDialogState | null;
-  solRefinerDialog: EnhanceDialogState | null;
   fidelityUpscaleDialog: EnhanceDialogState | null;
+  dlss5Dialog: EnhanceDialogState | null;
   maskEditDialog: EnhanceDialogState | null;
   refmodsOpen: boolean;
   interpolateDialog: InterpolateDialogState | null;
@@ -63,9 +65,11 @@ interface UIState {
   setBinFilter: (f: UIState["binFilter"]) => void;
   toast: (text: string, tone?: Toast["tone"], action?: Toast["action"]) => void;
   openFaceDialog: (state: FaceDialogState | null) => void;
+  openHeadSwapDialog: (state: FaceDialogState | null) => void;
+  openBodySwapDialog: (state: FaceDialogState | null) => void;
   openEnhanceDialog: (state: EnhanceDialogState | null) => void;
-  openSoLRefinerDialog: (state: EnhanceDialogState | null) => void;
   openFidelityUpscaleDialog: (state: EnhanceDialogState | null) => void;
+  openDLSS5Dialog: (state: EnhanceDialogState | null) => void;
   openMaskEditDialog: (state: EnhanceDialogState | null) => void;
   openRefmods: (open: boolean) => void;
   openInterpolateDialog: (state: InterpolateDialogState | null) => void;
@@ -100,9 +104,11 @@ export const useUI = create<UIState>((set) => ({
   binFilter: "all",
   toasts: [],
   faceDialog: null,
+  headSwapDialog: null,
+  bodySwapDialog: null,
   enhanceDialog: null,
-  solRefinerDialog: null,
   fidelityUpscaleDialog: null,
+  dlss5Dialog: null,
   maskEditDialog: null,
   refmodsOpen: false,
   interpolateDialog: null,
@@ -159,9 +165,11 @@ export const useUI = create<UIState>((set) => ({
   },
   dismiss: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
   openFaceDialog: (faceDialog) => set({ faceDialog }),
+  openHeadSwapDialog: (headSwapDialog) => set({ headSwapDialog }),
+  openBodySwapDialog: (bodySwapDialog) => set({ bodySwapDialog }),
   openEnhanceDialog: (enhanceDialog) => set({ enhanceDialog }),
-  openSoLRefinerDialog: (solRefinerDialog) => set({ solRefinerDialog }),
   openFidelityUpscaleDialog: (fidelityUpscaleDialog) => set({ fidelityUpscaleDialog }),
+  openDLSS5Dialog: (dlss5Dialog) => set({ dlss5Dialog }),
   openMaskEditDialog: (maskEditDialog) => set({ maskEditDialog }),
   openRefmods: (refmodsOpen) => set({ refmodsOpen }),
   openInterpolateDialog: (interpolateDialog) => set({ interpolateDialog }),

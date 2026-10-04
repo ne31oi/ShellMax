@@ -8,6 +8,13 @@ from .db.models import ClipProject, Generation, Project, Upload, select, session
 CATEGORIES = {"character", "location", "object", "style", "other"}
 
 
+def generation_upload_ids(ui: dict) -> list[str]:
+    """Reference identities shared by library history and reverse project usage."""
+    ids = [ref.get("upload_id") for ref in ui.get("refs") or [] if isinstance(ref, dict)]
+    ids.extend(ui.get(key) for key in ("identity_upload_id", "closeup_upload_id", "front_upload_id", "side_upload_id"))
+    return [uid for uid in ids if isinstance(uid, str) and uid]
+
+
 class ReferenceDetails(BaseModel):
     name: str = Field(max_length=100)
     category: str = "other"
@@ -77,8 +84,6 @@ def reference_usage(uid: str) -> list[dict]:
 
         for generation in s.exec(select(Generation).order_by(Generation.id.desc())).all():
             ui = generation.ui_params or {}
-            ids = [r.get("upload_id") for r in ui.get("refs", []) if isinstance(r, dict)]
-            ids.extend([ui.get("identity_upload_id"), ui.get("closeup_upload_id")])
-            if any(ref in family for ref in ids):
+            if any(ref in family for ref in generation_upload_ids(ui)):
                 add(generation.project_id, "generation", f"Генерация #{generation.id}", str(generation.id))
         return result

@@ -37,3 +37,19 @@ def test_rename_applies_to_edits_and_usage_resolves_family(db):
     assert {u.id for u in services.list_uploads(used_only=False) if u.name} == {"root", "other"}
     uses = reference_library.reference_usage("root")
     assert {(u["kind"], u["label"]) for u in uses} == {("plan", "Вход"), ("generation", "Генерация #10")}
+
+
+def test_body_swap_photos_remain_in_library_and_project_usage(db):
+    with Session(db) as s:
+        s.add_all([
+            Upload(id="body-front", kind="image", orig_name="front.png", path="front.png"),
+            Upload(id="body-side", kind="image", orig_name="side.png", path="side.png"),
+            Generation(id=11, project_id=1, kind="body_swap", seed=42,
+                       ui_params={"front_upload_id": "body-front", "side_upload_id": "body-side"}),
+        ])
+        s.commit()
+    assert {u.id for u in services.list_uploads()} >= {"body-front", "body-side"}
+    for uid in ("body-front", "body-side"):
+        assert reference_library.reference_usage(uid) == [
+            {"project_id": 1, "project": "Клип", "kind": "generation", "label": "Генерация #11"},
+        ]

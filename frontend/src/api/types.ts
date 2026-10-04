@@ -118,6 +118,22 @@ export interface FidelityDefaults {
   scale: 1 | 2;
 }
 
+export type DLSS5Mode = "1x (DLAA / native)" | "1.5x (Quality)" | "1.724x (Balanced)" | "2x (Performance)" | "3x (Ultra Performance)";
+export interface DLSS5Params {
+  source_asset_id: number;
+  mode: DLSS5Mode;
+  style: "Default" | "Natural" | "Cinematic";
+  intensity: number;
+}
+export interface DLSS5Defaults extends Omit<DLSS5Params, "source_asset_id"> {
+  asset: MediaAsset;
+  ready: boolean;
+  detail: string;
+  frames: number;
+  modes: DLSS5Mode[];
+  styles: DLSS5Params["style"][];
+}
+
 export interface EnhanceUIParams {
   source_asset_id: number;
   scale: number | null;
@@ -192,7 +208,8 @@ export interface InterpolateDefaults {
 export interface EngineProfile {
   name: string;
   /** Standard INT8 and the two retained NVFP4 recipes. */
-  pipeline?: "generate" | "generate_nvfp4" | "generate_nvfp4_fast";
+  pipeline?: "generate" | "generate_memory" | "generate_nvfp4" | "generate_nvfp4_fast" | "generate_pdmd";
+  pdmd_lora?: string;
   nvfp4_unet?: string;
   unet: string;
   text_encoder: string;
@@ -242,16 +259,25 @@ export interface UIParams {
   profile_id: number | null;
 }
 
-export interface SoLRefinerUIParams { source_asset_id: number; prompt: string; seed: number | null }
-export interface SoLRefinerDefaults {
-  asset: MediaAsset; prompt: string; ready: boolean; frames: number; width: number; height: number;
+export interface HeadSwapTarget { frame_index: number; box: CropBox }
+export interface HeadSwapUIParams { source_asset_id: number; identity_upload_id: string; seed: number | null; target: HeadSwapTarget }
+export interface HeadSwapDefaults { asset: MediaAsset; ready: boolean; missing: string[]; frames: number }
+export interface BodySwapUIParams {
+  variant?: "ref2va" | "singularity";
+  // Historical API keys: front is costume/body, side is face/hair in the full recipe.
+  source_asset_id: number; front_upload_id: string; side_upload_id: string;
+  start: number; end: number; subject: string; description: string; seed: number | null;
+}
+export interface BodySwapDefaults {
+  asset: MediaAsset; ready: boolean; missing: string[]; frames: number; max_duration: number;
+  variants: Record<"ref2va" | "singularity", {ready: boolean; missing: string[]}>;
 }
 
 export type GenStatus = "queued" | "running" | "done" | "draft_only" | "error" | "cancelled";
 export type Stage = "load" | "encode" | "pass1" | "draft" | "upscale" | "pass2" | "final" | "decode" | "done";
 
-export type JobKind = "generate" | "generate_nvfp4" | "generate_nvfp4_fast" | "face" | "enhance" | "interpolate" | "sol_refine"
-  | "generate_refmods" | "generate_nvfp4_refmods" | "generate_nvfp4_fast_refmods" | "refmod_create" | "mask_edit" | "mask_track" | "fidelity_upscale";
+export type JobKind = "generate" | "generate_memory" | "generate_nvfp4" | "generate_nvfp4_fast" | "generate_pdmd" | "generate_pdmd_refmods" | "face" | "enhance" | "interpolate"
+  | "generate_refmods" | "generate_memory_refmods" | "generate_nvfp4_refmods" | "generate_nvfp4_fast_refmods" | "refmod_create" | "mask_edit" | "mask_track" | "fidelity_upscale" | "head_swap" | "body_swap" | "body_swap_singularity" | "dlss5";
 
 export interface Project {
   id: number;
@@ -266,7 +292,7 @@ export interface Project {
 export interface Generation {
   id: number;
   project_id: number;
-  kind: JobKind;
+  kind: string; // History also contains jobs from removed workflows.
   source_asset_id: number | null; // face: the refined clip
   // stage_seconds: exact seconds per stage; cold: models were loaded from disk (left out of averages)
   info: {
@@ -281,7 +307,7 @@ export interface Generation {
   status: GenStatus;
   stage: Stage | null;
   progress: number;
-  ui_params: UIParams & Partial<FaceUIParams> & Partial<EnhanceUIParams> & Partial<InterpolateUIParams>;
+  ui_params: UIParams & Partial<FaceUIParams> & Partial<EnhanceUIParams> & Partial<InterpolateUIParams> & Partial<HeadSwapUIParams> & Partial<DLSS5Params>;
   full_params: Record<string, unknown> | null;
   seed: number;
   profile_name: string;
@@ -459,6 +485,11 @@ export interface AssistantFile {
 }
 
 export interface AssistantStatus {
+  provider: "local" | "codex";
+  error?: string;
+  notice?: string;
+  models?: { id: string; label: string; reasoning_efforts: string[] }[];
+  reasoning_effort?: string;
   model: string;
   label: string;
   ready: boolean;
@@ -480,6 +511,9 @@ export interface AssistantModel {
 }
 
 export interface AssistantSettings {
+  provider: "local" | "codex";
+  codex_model: string;
+  codex_reasoning_effort: string;
   model: string;
   device: "gpu" | "cpu";
   context_size: number;

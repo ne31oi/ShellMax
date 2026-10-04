@@ -3,9 +3,11 @@ import { Clapperboard, PanelLeft, PanelRight, Settings, Wand2, X } from "lucide-
 import { useEffect } from "react";
 import { AssistantSetup } from "./components/assistant/AssistantSetup";
 import { FaceRefineDialog } from "./components/face/FaceRefineDialog";
+import { HeadSwapDialog } from "./components/face/HeadSwapDialog";
+import { BodySwapDialog } from "./components/body/BodySwapDialog";
 import { EnhanceDialog } from "./components/enhance/EnhanceDialog";
-import { SoLRefinerDialog } from "./components/enhance/SoLRefinerDialog";
 import { FidelityUpscaleDialog } from "./components/enhance/FidelityUpscaleDialog";
+import { DLSS5Dialog } from "./components/enhance/DLSS5Dialog";
 import { MaskEditDialog } from "./components/mask/MaskEditDialog";
 import { RefModLibrary } from "./components/generate/RefModLibrary";
 import { InterpolateDialog } from "./components/enhance/InterpolateDialog";
@@ -255,9 +257,11 @@ export default function App() {
       </div>
       <SettingsDialog />
       <FaceRefineDialog />
+      <HeadSwapDialog />
+      <BodySwapDialog />
       <EnhanceDialog />
-      <SoLRefinerDialog />
       <FidelityUpscaleDialog />
+      <DLSS5Dialog />
       <MaskEditDialog />
       <RefModLibrary />
       <InterpolateDialog />

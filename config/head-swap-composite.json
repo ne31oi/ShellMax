@@ -1,0 +1,12 @@
+{
+  "sources": {
+    "matanyone2": {"repo": "pq-yang/MatAnyone2", "commit": "0079197acd6d16a741f71558809c06c586c579e0"},
+    "propainter": {"repo": "sczhou/ProPainter", "commit": "e870e79321c31b733e2031af5aa2fb1fe3ac7eec"}
+  },
+  "weights": [
+    {"name": "matanyone2.pth", "url": "https://github.com/pq-yang/MatAnyone2/releases/download/v1.0.0/matanyone2.pth", "size": 141429115, "sha256": "5e9821e4087231427376b437c85bb6e072b41e582314f06fd524f75bc4af5914"},
+    {"name": "ProPainter.pth", "url": "https://github.com/sczhou/ProPainter/releases/download/v0.1.0/ProPainter.pth", "size": 157780510, "sha256": "12c070c4b48f374c91d8a2a17851140b85c159621080989f9e191bbc18bd6591"},
+    {"name": "raft-things.pth", "url": "https://github.com/sczhou/ProPainter/releases/download/v0.1.0/raft-things.pth", "size": 21108000, "sha256": "fcfa4125d6418f4de95d84aec20a3c5f4e205101715a79f193243c186ac9a7e1"},
+    {"name": "recurrent_flow_completion.pth", "url": "https://github.com/sczhou/ProPainter/releases/download/v0.1.0/recurrent_flow_completion.pth", "size": 20348681, "sha256": "22939a1a7900da878dbe1ccd011d646b1bfb30b8290039d8ff0e0c2fefbfd283"}
+  ]
+}

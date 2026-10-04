@@ -18,14 +18,48 @@ export const GENERATE_STAGES: StageDef[] = [
   { id: "decode", label: "Сборка видео", short: "Сборка" },
 ];
 
+const BODY_SWAP_STAGES: StageDef[] = [
+    { id: "load", label: "Загрузка клипа и моделей", short: "Загрузка" },
+    { id: "mask", label: "Выделение персонажа", short: "Маски" },
+    { id: "pose", label: "Поза тела и рук", short: "Поза" },
+    { id: "encode", label: "Кодирование исходника и фотографий", short: "Кодирование" },
+    { id: "sample", label: "Замена персонажа по позе", short: "Замена" },
+    { id: "decode", label: "Сборка кадров", short: "Декод" },
+    { id: "stitch", label: "Восстановление фона и вклейка персонажа", short: "Фон и вклейка" },
+    { id: "save", label: "Сохранение с исходным звуком", short: "Сохранение" },
+];
+
 /** Pipeline stages per job kind, in execution order (mirrors backend jobs/pipelines.py). */
 export const STAGES_BY_KIND: Record<JobKind, StageDef[]> = {
+  dlss5: [
+    { id: "load", label: "Подготовка DLSS5", short: "Подготовка" },
+    { id: "enhance", label: "DLSS5 — нейронная обработка видео", short: "DLSS5" },
+    { id: "save", label: "Сохранение видео и метаданных", short: "Сохранение" },
+  ],
+  body_swap: BODY_SWAP_STAGES,
+  body_swap_singularity: BODY_SWAP_STAGES,
+  head_swap: [
+    { id: "load", label: "Загрузка клипа и моделей", short: "Загрузка" },
+    { id: "track", label: "Отслеживание выбранной головы", short: "Трекинг" },
+    { id: "describe", label: "Описание головы по фотографии", short: "Фото" },
+    { id: "encode", label: "Кодирование фото и исходного клипа", short: "Кодирование" },
+    { id: "pass1", label: "Замена головы — первый проход", short: "Проход 1" },
+    { id: "upscale", label: "Подготовка второго прохода", short: "Подготовка" },
+    { id: "encode2", label: "Привязка второго прохода к исходнику", short: "Привязка" },
+    { id: "pass2", label: "Замена головы — второй проход", short: "Проход 2" },
+    { id: "decode", label: "Сборка кадров", short: "Декод" },
+    { id: "mask", label: "Край волос, восстановление фона и защита рук", short: "Край и фон" },
+    { id: "stitch", label: "Вклейка выбранной головы в исходник", short: "Вклейка" },
+    { id: "save", label: "Сохранение видео с исходным звуком", short: "Сохранение" },
+  ],
   fidelity_upscale: [{ id: "load", label: "Загрузка клипа и модели", short: "Загрузка" },
     { id: "upscale", label: "Бережное улучшение", short: "SwinIR" },
     { id: "save", label: "Сохранение", short: "Сохранение" }],
-  sol_refine: [{ id: "load", label: "Загрузка моделей", short: "Загрузка" },
-    { id: "refine", label: "SoL-Refiner — детализация клипа", short: "SoL-Refiner" }],
   generate: GENERATE_STAGES,
+  generate_pdmd: GENERATE_STAGES,
+  generate_pdmd_refmods: GENERATE_STAGES,
+  generate_memory: GENERATE_STAGES,
+  generate_memory_refmods: GENERATE_STAGES,
   generate_nvfp4: GENERATE_STAGES,
   generate_nvfp4_fast: GENERATE_STAGES,
   generate_refmods: GENERATE_STAGES,
@@ -74,7 +108,11 @@ export const STAGES_BY_KIND: Record<JobKind, StageDef[]> = {
 /** Backwards-compatible default list (generation). */
 export const STAGES = STAGES_BY_KIND.generate;
 
-export const stagesOf = (g: Pick<Generation, "kind">) => STAGES_BY_KIND[g.kind] ?? STAGES;
+/** History can contain jobs whose workflow has since been removed. */
+export const isSupportedJobKind = (kind: string): kind is JobKind => Object.hasOwn(STAGES_BY_KIND, kind);
+export const isGenerationKind = (kind: string) => isSupportedJobKind(kind) && kind.startsWith("generate");
+
+export const stagesOf = (g: Pick<Generation, "kind">) => isSupportedJobKind(g.kind) ? STAGES_BY_KIND[g.kind] : STAGES;
 export const stageInfo = (id: string | null, g?: Pick<Generation, "kind">) => {
   const list = g ? stagesOf(g) : STAGES;
   return list.find((s) => s.id === id) ?? list[0];

@@ -8,8 +8,12 @@ from dataclasses import dataclass, field
 from ..workflow import builder, builder_enhance, builder_face, builder_interpolate, builder_nvfp4_fast, builder_nvfp4
 from ..workflow import builder_refmods, builder_refmod_create, builder_mask_edit
 from ..workflow import builder_mask_track
-from ..workflow import builder_sol_refiner
 from ..workflow import builder_fidelity_upscale
+from ..workflow import builder_memory
+from ..workflow import builder_pdmd
+from ..workflow import builder_head_swap
+from ..workflow import builder_body_swap
+from ..workflow import builder_dlss5
 
 
 @dataclass(frozen=True)
@@ -33,11 +37,22 @@ class Pipeline:
 
 
 PIPELINES = {
+    "dlss5": Pipeline(stages=[("load", 0.02), ("enhance", 0.93), ("save", 0.05)],
+        stage_by_node=builder_dlss5.STAGE_BY_NODE, sampler_nodes=builder_dlss5.SAMPLER_NODES,
+        final_node=builder_dlss5.FINAL_OUTPUT_NODE),
+    "body_swap": Pipeline(stages=[("load", 0.05), ("mask", 0.12), ("pose", 0.08), ("encode", 0.15),
+        ("sample", 0.50), ("decode", 0.04), ("stitch", 0.04), ("save", 0.02)],
+        stage_by_node=builder_body_swap.STAGE_BY_NODE, sampler_nodes=builder_body_swap.SAMPLER_NODES,
+        final_node=builder_body_swap.FINAL_OUTPUT_NODE),
+    "head_swap": Pipeline(stages=[("load", 0.05), ("track", 0.10), ("describe", 0.05), ("encode", 0.10),
+        ("pass1", 0.27), ("upscale", 0.05), ("encode2", 0.10), ("pass2", 0.13), ("decode", 0.04),
+        ("mask", 0.05), ("stitch", 0.03), ("save", 0.03)],
+        stage_by_node=builder_head_swap.STAGE_BY_NODE, sampler_nodes=builder_head_swap.SAMPLER_NODES,
+        final_node=builder_head_swap.FINAL_OUTPUT_NODE, draft_node=builder_head_swap.TRACK_PREVIEW_NODE,
+        report_node=builder_head_swap.TRACK_REPORT_NODE),
     "fidelity_upscale": Pipeline(stages=[("load", 0.05), ("upscale", 0.9), ("save", 0.05)],
                                  stage_by_node=builder_fidelity_upscale.STAGE_BY_NODE, sampler_nodes=(),
                                  final_node=builder_fidelity_upscale.FINAL_OUTPUT_NODE),
-    "sol_refine": Pipeline(stages=[("load", 0.05), ("refine", 0.95)], stage_by_node=builder_sol_refiner.STAGE_BY_NODE,
-                           sampler_nodes=(), final_node=builder_sol_refiner.FINAL_OUTPUT_NODE),
     "mask_track": Pipeline(stages=[("load", 0.1), ("track", 0.9)], stage_by_node=builder_mask_track.STAGE_BY_NODE,
         sampler_nodes=(), final_node=builder_mask_track.FINAL_OUTPUT_NODE),
     "refmod_create": Pipeline(stages=[("load", 0.1), ("encode", 0.9)],
@@ -93,8 +108,19 @@ PIPELINES = {
     ),
 }
 
-for _base in ("generate", "generate_nvfp4", "generate_nvfp4_fast"):
+PIPELINES["generate_memory"] = Pipeline(stages=PIPELINES["generate"].stages,
+    stage_by_node=builder_memory.STAGE_BY_NODE, sampler_nodes=builder_memory.SAMPLER_NODES,
+    final_node=builder_memory.FINAL_OUTPUT_NODE, draft_node=builder_memory.DRAFT_OUTPUT_NODE)
+
+PIPELINES["generate_pdmd"] = Pipeline(stages=PIPELINES["generate"].stages,
+    stage_by_node=builder_pdmd.STAGE_BY_NODE, sampler_nodes=builder_pdmd.SAMPLER_NODES,
+    final_node=builder_pdmd.FINAL_OUTPUT_NODE, draft_node=builder_pdmd.DRAFT_OUTPUT_NODE)
+
+for _base in ("generate", "generate_memory", "generate_nvfp4", "generate_nvfp4_fast", "generate_pdmd"):
     _pipe = PIPELINES[_base]
     PIPELINES[_base + "_refmods"] = Pipeline(stages=_pipe.stages,
         stage_by_node={**_pipe.stage_by_node, **builder_refmods.STAGE_BY_NODE},
         sampler_nodes=_pipe.sampler_nodes, final_node=_pipe.final_node, draft_node=_pipe.draft_node)
+
+# Body Swap variants share identical node IDs and stages.
+PIPELINES["body_swap_singularity"] = PIPELINES["body_swap"]

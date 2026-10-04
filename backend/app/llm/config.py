@@ -11,6 +11,9 @@ KV_KEY = "assistant_settings"
 
 
 class AssistantSettings(BaseModel):
+    provider: Literal["local", "codex"] = "local"
+    codex_model: str = ""
+    codex_reasoning_effort: str = ""
     model: str = DEFAULT_CHOICE
     device: Literal["gpu", "cpu"] = "gpu"  # studio 'auto' resolves to GPU once ComfyUI is unloaded
     context_size: int = Field(25600, ge=8192, le=102400)  # studio (правка 119)

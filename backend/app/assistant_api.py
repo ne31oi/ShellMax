@@ -15,6 +15,7 @@ from .llm.downloader import downloads
 from .llm.registry import CHOICES, FILES
 from .llm.service import AssistantBusy, AssistantService
 from .llm.references import load_references
+from .llm.mask_prompt import MaskPromptIn, prepare_mask_prompt
 from .media import library
 from .workflow.camera import user_camera_directive
 from .workflow.cinematography import resolve_cinematic_technique_ids
@@ -60,8 +61,8 @@ def _precheck(svc: AssistantService) -> JSONResponse | None:
 
 # ---------------------------------------------------------------- status / models / settings
 @router.get("/status")
-def status(request: Request):
-    return _svc(request).status()
+def status(request: Request, refresh: bool = False):
+    return _svc(request).status(refresh=refresh)
 
 
 @router.get("/models")
@@ -78,6 +79,8 @@ def models():
 @router.post("/download")
 async def download():
     s = config.load()
+    if s.provider == "codex":
+        raise HTTPException(422, "Codex использует установленный Codex CLI. Скачивать локальную модель не нужно.")
     downloads.start(list(CHOICES[s.model].all_files()))
     return {"ok": True}
 
@@ -89,9 +92,11 @@ def get_settings():
 
 @router.put("/settings")
 async def put_settings(body: config.AssistantSettings, request: Request):
+    if _svc(request).busy():
+        raise HTTPException(409, "Ассистент пишет ответ. Дождитесь окончания или остановите его перед изменением настроек.")
     old = config.load()
     config.save(body)
-    if (old.model, old.context_size, old.kv_cache, old.device) != (body.model, body.context_size, body.kv_cache, body.device):
+    if (old.provider, old.model, old.context_size, old.kv_cache, old.device) != (body.provider, body.model, body.context_size, body.kv_cache, body.device):
         await _svc(request).runner.stop()  # next request starts with the new settings
     return {"ok": True}
 
@@ -305,6 +310,16 @@ def edit(body: EditIn, request: Request):
 
 
 # ---------------------------------------------------------------- face refine prompt
+@router.post("/mask-prompt")
+async def mask_prompt(body: MaskPromptIn, request: Request):
+    svc = _svc(request)
+    if (busy := _precheck(svc)) is not None:
+        return busy
+    system, user, images, infos = await prepare_mask_prompt(body)
+    return _sse(_checked_prompt_edit(svc, system, user, images, "", body.text,
+                                     refs=infos), scrub_style_slogans=True)
+
+
 @router.post("/face-prompt")
 async def face_prompt(body: FaceIn, request: Request):
     svc = _svc(request)

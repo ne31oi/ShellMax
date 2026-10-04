@@ -4,6 +4,7 @@ import { fmtSize } from "../../lib/format";
 import { useAssistant } from "../../store/assistant";
 import { useUI } from "../../store/ui";
 import { Button, Dialog, ErrorMessage } from "../ui";
+import { CodexConnection } from "./CodexConnection";
 
 /** Shown when the assistant is used before its model is downloaded (studio "Модель ассистента не скачана"). */
 export function AssistantSetup() {
@@ -23,6 +24,7 @@ export function AssistantSetup() {
   return (
     <Dialog open={open} onOpenChange={openSetup} title="Ассистент промптов">
       <div className="space-y-4 p-5">
+        {status?.provider === "codex" ? <CodexConnection /> : <>
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent">
             <Sparkles size={18} />
@@ -68,6 +70,7 @@ export function AssistantSetup() {
           </div>
         )}
         {failed && <ErrorMessage text={failed.error || "Не удалось загрузить модель"} />}
+        </>}
 
         <button
           onClick={() => {
@@ -76,7 +79,7 @@ export function AssistantSetup() {
           }}
           className="text-xs text-muted underline-offset-2 hover:text-fg hover:underline"
         >
-          Выбрать другую модель…
+          Настройки ассистента…
         </button>
       </div>
     </Dialog>

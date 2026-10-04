@@ -1,0 +1,586 @@
+{
+  "1122": {
+    "class_type": "SolidMask",
+    "inputs": {
+      "value": 0,
+      "width": 32,
+      "height": 32
+    }
+  },
+  "1188": {
+    "class_type": "ShellMaxCLIPLoaderByPath",
+    "inputs": {
+      "type": "minimax",
+      "device": "default",
+      "clip_path": "__TEXT_ENCODER__"
+    }
+  },
+  "1199": {
+    "class_type": "ShellMaxUNETLoaderByPath",
+    "inputs": {
+      "weight_dtype": "default",
+      "unet_path": "__UNET__"
+    }
+  },
+  "1121": {
+    "class_type": "SetLatentNoiseMask",
+    "inputs": {
+      "samples": [
+        "1207",
+        0
+      ],
+      "mask": [
+        "1122",
+        0
+      ]
+    }
+  },
+  "1207": {
+    "class_type": "VAEEncodeAudio",
+    "inputs": {
+      "audio": [
+        "1191",
+        2
+      ],
+      "vae": [
+        "1118",
+        0
+      ]
+    }
+  },
+  "1117": {
+    "class_type": "ShellMaxVAELoaderByPath",
+    "inputs": {
+      "vae_path": "__VAE_VIDEO__"
+    }
+  },
+  "1118": {
+    "class_type": "ShellMaxVAELoaderByPath",
+    "inputs": {
+      "vae_path": "__VAE_AUDIO__"
+    }
+  },
+  "1200": {
+    "class_type": "ModelAttentionBackend",
+    "inputs": {
+      "attention": "comfy kitchen attention",
+      "model": [
+        "1199",
+        0
+      ]
+    }
+  },
+  "1202": {
+    "class_type": "MiniMaxH3SigmaShift",
+    "inputs": {
+      "shift_video": 12,
+      "shift_audio": 1.5,
+      "model": [
+        "1201",
+        0
+      ]
+    }
+  },
+  "1198": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": "__SEED__",
+      "steps": 16,
+      "cfg": 1,
+      "sampler_name": "er_sde",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "1443",
+        0
+      ],
+      "positive": [
+        "1423",
+        0
+      ],
+      "negative": [
+        "1423",
+        0
+      ],
+      "latent_image": [
+        "1143",
+        0
+      ]
+    }
+  },
+  "1258": {
+    "class_type": "ImageResizeKJv2",
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "upscale_method": "nearest-exact",
+      "keep_proportion": "resize",
+      "pad_color": "0, 0, 0",
+      "crop_position": "center",
+      "divisible_by": 32,
+      "device": "cpu",
+      "image": [
+        "1191",
+        0
+      ]
+    }
+  },
+  "1183": {
+    "class_type": "GetImageSize",
+    "inputs": {
+      "image": [
+        "1211",
+        0
+      ]
+    }
+  },
+  "1190": {
+    "class_type": "ShellMaxCheckpointLoaderByPath",
+    "inputs": {
+      "checkpoint_path": "__SAM__"
+    }
+  },
+  "1134": {
+    "class_type": "SAM3_VideoTrack",
+    "inputs": {
+      "detection_threshold": 0.5,
+      "max_objects": 0,
+      "detect_interval": 1,
+      "images": [
+        "1258",
+        0
+      ],
+      "model": [
+        "1190",
+        0
+      ],
+      "conditioning": [
+        "1127",
+        0
+      ]
+    }
+  },
+  "1206": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "1211",
+        0
+      ],
+      "vae": [
+        "1117",
+        0
+      ]
+    }
+  },
+  "1150": {
+    "class_type": "MVEx_MaskToLatentSpace",
+    "inputs": {
+      "compression": "auto",
+      "spatial_method": "max",
+      "temporal_method": "max",
+      "grow_spatial": 8,
+      "grow_temporal": 0,
+      "grow_temp_mode": "both",
+      "masks": [
+        "1211",
+        1
+      ],
+      "vae": [
+        "1117",
+        0
+      ]
+    }
+  },
+  "1144": {
+    "class_type": "SetLatentNoiseMask",
+    "inputs": {
+      "samples": [
+        "1206",
+        0
+      ],
+      "mask": [
+        "1150",
+        0
+      ]
+    }
+  },
+  "1143": {
+    "class_type": "LTXVConcatAVLatent",
+    "inputs": {
+      "video_latent": [
+        "1144",
+        0
+      ],
+      "audio_latent": [
+        "1121",
+        0
+      ]
+    }
+  },
+  "1242": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "__FRONT__"
+    }
+  },
+  "1127": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "__SUBJECT__",
+      "clip": [
+        "1190",
+        1
+      ]
+    }
+  },
+  "1154": {
+    "class_type": "MiniMaxH3ReferenceToVideo",
+    "inputs": {
+      "prompt": "__PROMPT__",
+      "width": [
+        "1183",
+        0
+      ],
+      "height": [
+        "1183",
+        1
+      ],
+      "length": [
+        "1191",
+        1
+      ],
+      "ref_image_size": "match",
+      "clip": [
+        "1188",
+        0
+      ],
+      "vae": [
+        "1117",
+        0
+      ],
+      "audio_vae": [
+        "1118",
+        0
+      ],
+      "ref_images.ref_image_0": [
+        "1242",
+        0
+      ],
+      "ref_images.ref_image_1": [
+        "1243",
+        0
+      ]
+    }
+  },
+  "1280": {
+    "class_type": "ShellMaxBackgroundRemovalLoaderByPath",
+    "inputs": {
+      "model_path": "__BACKGROUND__"
+    }
+  },
+  "1216": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "1198",
+        0
+      ],
+      "vae": [
+        "1117",
+        0
+      ]
+    }
+  },
+  "1211": {
+    "class_type": "MVEx_SubjectCrop",
+    "inputs": {
+      "mode": "tracked",
+      "mode.crop_scale": 1.75,
+      "mode.padding": "firm",
+      "mode.prefer": "stillness",
+      "mode.aspect_ratio": 0,
+      "mode.seamless_loop": false,
+      "divisible_by": 32,
+      "upscale_megapixels": 0.7,
+      "resize_method": "auto",
+      "original_images": [
+        "1258",
+        0
+      ],
+      "masks": [
+        "body_coverage",
+        0
+      ]
+    }
+  },
+  "1130": {
+    "class_type": "SAM3_TrackToMask",
+    "inputs": {
+      "object_indices": "",
+      "track_data": [
+        "1134",
+        0
+      ]
+    }
+  },
+  "1136": {
+    "class_type": "MVEx_MaskCleanup",
+    "inputs": {
+      "threshold": 0.3,
+      "method": "shrink_grow",
+      "method.shrink": 12,
+      "method.min_frames": 4,
+      "edge_grow": 16,
+      "masks": [
+        "1130",
+        0
+      ]
+    }
+  },
+  "1281": {
+    "class_type": "RemoveBackground",
+    "inputs": {
+      "bg_removal_model": [
+        "1280",
+        0
+      ],
+      "image": [
+        "1464",
+        1
+      ]
+    }
+  },
+  "1282": {
+    "class_type": "GrowMaskWithBlur",
+    "inputs": {
+      "expand": 0,
+      "incremental_expandrate": 0,
+      "tapered_corners": true,
+      "flip_input": false,
+      "blur_radius": 6,
+      "lerp_alpha": 1,
+      "decay_factor": 1,
+      "fill_holes": true,
+      "mask": [
+        "body_union",
+        0
+      ]
+    }
+  },
+  "1273": {
+    "class_type": "MVEx_SubjectUncrop",
+    "inputs": {
+      "feather": 6,
+      "resize_method": "auto",
+      "cropped_images": [
+        "body_background",
+        0
+      ],
+      "original_images": [
+        "1258",
+        0
+      ],
+      "bboxes": [
+        "1211",
+        2
+      ],
+      "cropped_masks": [
+        "1282",
+        0
+      ]
+    }
+  },
+  "1277": {
+    "class_type": "VHS_VideoCombine",
+    "inputs": {
+      "frame_rate": 24,
+      "loop_count": 0,
+      "filename_prefix": "__PREFIX__",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 19,
+      "save_metadata": false,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "1273",
+        0
+      ],
+      "audio": [
+        "1191",
+        2
+      ]
+    }
+  },
+  "1191": {
+    "class_type": "ShellMaxBodySwapSource",
+    "inputs": {
+      "video": "__SOURCE__",
+      "start": "__START__",
+      "frames": "__FRAMES__",
+      "has_audio": "__HAS_AUDIO__"
+    }
+  },
+  "1243": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "__SIDE__"
+    }
+  },
+  "1423": {
+    "class_type": "MiniMaxH3AddGuide",
+    "inputs": {
+      "frame_idx": 0,
+      "positive": [
+        "1154",
+        0
+      ],
+      "latent": [
+        "1154",
+        1
+      ],
+      "audio_vae": [
+        "1118",
+        0
+      ],
+      "audio": [
+        "1191",
+        2
+      ]
+    }
+  },
+  "1442": {
+    "class_type": "ShellMaxModelPatchLoaderByPath",
+    "inputs": {
+      "model_path": "__CONTROLNET__"
+    }
+  },
+  "1443": {
+    "class_type": "MiniMaxH3FunControlNetApply",
+    "inputs": {
+      "strength": 1.0,
+      "start_percent": 0,
+      "end_percent": 0.7,
+      "model": [
+        "1202",
+        0
+      ],
+      "model_patch": [
+        "1442",
+        0
+      ],
+      "vae": [
+        "1117",
+        0
+      ],
+      "control_video": [
+        "1446",
+        0
+      ],
+      "mask": [
+        "1211",
+        1
+      ],
+      "source_video": [
+        "1211",
+        0
+      ]
+    }
+  },
+  "1446": {
+    "class_type": "DWPreprocessor",
+    "inputs": {
+      "detect_hand": "enable",
+      "detect_body": "enable",
+      "detect_face": "disable",
+      "resolution": 768,
+      "bbox_detector": "yolox_l.onnx",
+      "pose_estimator": "dw-ll_ucoco_384_bs5.torchscript.pt",
+      "scale_stick_for_xinsr_cn": "disable",
+      "image": [
+        "1211",
+        0
+      ]
+    }
+  },
+  "1464": {
+    "class_type": "VRAM_Debug",
+    "inputs": {
+      "empty_cache": true,
+      "gc_collect": true,
+      "unload_all_models": true,
+      "image_pass": [
+        "1216",
+        0
+      ]
+    }
+  },
+  "body_union": {
+    "class_type": "MaskComposite",
+    "inputs": {
+      "destination": [
+        "1211",
+        1
+      ],
+      "source": [
+        "1281",
+        0
+      ],
+      "x": 0,
+      "y": 0,
+      "operation": "add"
+    }
+  },
+  "1201": {
+    "class_type": "ShellMaxLoraModelOnlyByPath",
+    "inputs": {
+      "strength_model": 1,
+      "model": [
+        "1200",
+        0
+      ],
+      "lora_path": "__TURBO__"
+    }
+  },
+  "body_coverage": {
+    "class_type": "GrowMaskWithBlur",
+    "inputs": {
+      "mask": [
+        "1136",
+        0
+      ],
+      "expand": 48,
+      "incremental_expandrate": 0,
+      "tapered_corners": true,
+      "flip_input": false,
+      "blur_radius": 0,
+      "lerp_alpha": 1,
+      "decay_factor": 1,
+      "fill_holes": true
+    }
+  },
+  "body_background": {
+    "class_type": "ShellMaxBodySwapBackground",
+    "inputs": {
+      "source": [
+        "1211",
+        0
+      ],
+      "donor": [
+        "1216",
+        0
+      ],
+      "coverage": [
+        "1211",
+        1
+      ],
+      "alpha": [
+        "1281",
+        0
+      ],
+      "weights_dir": "__COMPOSITE_WEIGHTS__"
+    }
+  }
+}

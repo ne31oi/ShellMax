@@ -11,10 +11,65 @@ from .jobs.estimator import estimate as estimate_time
 from .jobs.persist import push_generation
 from .workflow import enhance, face, interpolate
 from .workflow.params import EnhanceUIParams, FaceUIParams, InterpolateUIParams, UIParams
-from .workflow.sol_refiner import SoLRefinerUI
 from .workflow.fidelity_upscale import FidelityUI
+from .workflow.head_swap import HeadSwapUI
+from .workflow.body_swap import BodySwapUI
+from .workflow.dlss5 import DLSS5UI
 
 router = APIRouter()
+
+
+@router.get("/dlss5/defaults")
+async def dlss5_defaults(asset_id: int, request: Request):
+    from typing import get_args
+    from .engine_api import _combo_options
+    from .workflow.dlss5 import Mode, Style, defaults
+    result = {**defaults(asset_id), "modes": list(get_args(Mode)), "styles": list(get_args(Style))}
+    try:
+        info = await state(request).engine.client.object_info("DLSS5Settings")
+        spec = info["DLSS5Settings"]["input"]["required"]
+        result["modes"] = _combo_options(spec["upscaling_mode"]) or result["modes"]
+        result["styles"] = _combo_options(spec["nr_style"]) or result["styles"]
+    except Exception:  # The dialog can explain missing installation while the engine is stopped.
+        pass
+    return result
+
+
+@router.post("/dlss5")
+async def dlss5_job(ui: DLSS5UI, request: Request, project_id: int = 1):
+    g = services.create_asset_job("dlss5", ui, project_id)
+    await push_generation(g)
+    state(request).jobs.enqueue(g.id)
+    return g
+
+
+@router.get("/body-swap/defaults")
+def body_swap_defaults(asset_id: int, project_id: int = 1):
+    from .body_swap_jobs import defaults
+    return defaults(asset_id, project_id)
+
+
+@router.post("/body-swap")
+async def body_swap_job(ui: BodySwapUI, request: Request, project_id: int = 1):
+    from .workflow.body_swap import KINDS
+    g = services.create_asset_job(KINDS[ui.variant], ui, project_id)
+    await push_generation(g)
+    state(request).jobs.enqueue(g.id)
+    return g
+
+
+@router.get("/head-swap/defaults")
+def head_swap_defaults(asset_id: int, project_id: int = 1):
+    from .head_swap_jobs import defaults
+    return defaults(asset_id, project_id)
+
+
+@router.post("/head-swap")
+async def head_swap_job(ui: HeadSwapUI, request: Request, project_id: int = 1):
+    g = services.create_asset_job("head_swap", ui, project_id)
+    await push_generation(g)
+    state(request).jobs.enqueue(g.id)
+    return g
 
 
 @router.get("/fidelity-upscale/defaults")
@@ -30,19 +85,6 @@ async def create_fidelity_job(ui: FidelityUI, request: Request, project_id: int 
     state(request).jobs.enqueue(g.id)
     return g
 
-
-@router.get("/sol-refiner/defaults")
-def sol_refiner_defaults(asset_id: int):
-    from .sol_refiner_jobs import defaults
-    return defaults(asset_id)
-
-
-@router.post("/sol-refiner")
-async def create_sol_refiner(ui: SoLRefinerUI, request: Request, project_id: int = 1):
-    g = services.create_asset_job("sol_refine", ui, project_id)
-    await push_generation(g)
-    state(request).jobs.enqueue(g.id)
-    return g
 
 # ---------------------------------------------------------------- generations
 @router.get("/generations")

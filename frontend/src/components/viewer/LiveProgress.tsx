@@ -62,7 +62,7 @@ export function LiveView({ gen, preview }: { gen: Generation; preview?: string }
             <Square size={12} /> {queued ? "Убрать из очереди" : "Остановить"}
           </Button>
         </div>
-        {!gen.draft_asset_id && !queued && (
+        {!gen.draft_asset_id && !queued && (gen.kind === "face" || stagesOf(gen).some((s) => s.id === "draft")) && (
           <p className="mt-1 text-center text-[11px] text-faint">
             {gen.kind === "face"
               ? "Сначала найдём лицо на каждом кадре — покажем превью трекинга"

@@ -10,6 +10,7 @@ from .jobs.estimator import estimate as estimate_time  # noqa: F401 — re-expor
 from .library_api import router as library_router
 from .projects_api import router as projects_router
 from .fantastic_api import router as fantastic_router
+from .updates_api import router as updates_router
 
 router = APIRouter(prefix="/api")
 router.include_router(engine_router)
@@ -17,6 +18,7 @@ router.include_router(library_router)
 router.include_router(generations_router)
 router.include_router(projects_router)
 router.include_router(fantastic_router)
+router.include_router(updates_router)
 
 # ---------------------------------------------------------------- live events
 @router.websocket("/ws")

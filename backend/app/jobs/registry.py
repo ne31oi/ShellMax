@@ -11,11 +11,13 @@ from typing import Any, Callable
 
 from ..db.models import Generation
 from ..workflow.builder import build_prompt
+from ..workflow.builder_memory import build_memory_prompt
 from ..workflow.builder_enhance import build_enhance_prompt
 from ..workflow.builder_face import build_face_prompt
 from ..workflow.builder_interpolate import build_interpolate_prompt
 from ..workflow.builder_nvfp4 import build_nvfp4_prompt
 from ..workflow.builder_nvfp4_fast import build_nvfp4_fast_prompt
+from ..workflow.builder_pdmd import build_pdmd_prompt
 from ..workflow.params import EnhanceFullParams, FaceFullParams, FullParams, InterpolateFullParams
 from .pipelines import PIPELINES, Pipeline
 from ..workflow import builder_refmods, builder_refmod_create, builder_mask_edit
@@ -25,11 +27,18 @@ from ..refmods import collect_output as collect_refmod_output
 from ..mask_tracking import expand_mask_track, collect_output as collect_mask_output
 from ..workflow.fantastic import MaskTrackUI, MaskTrackFull
 from ..workflow.builder_mask_track import build_mask_track_prompt
-from ..workflow.builder_sol_refiner import build_sol_refiner_prompt
-from ..workflow.sol_refiner import SoLRefinerUI, SoLRefinerFull
-from ..sol_refiner_jobs import expand as expand_sol_refiner
 from ..workflow.fidelity_upscale import FidelityFull, FidelityUI, expand as expand_fidelity
 from ..workflow.builder_fidelity_upscale import build_fidelity_prompt
+from ..workflow.builder_head_swap import build_head_swap_prompt
+from ..workflow.head_swap import HeadSwapFull, HeadSwapUI
+from ..head_swap_jobs import expand as expand_head_swap
+from ..workflow.builder_body_swap import build_body_swap_prompt
+from ..workflow.body_swap import BodySwapFull, BodySwapUI
+from ..body_swap_jobs import expand as expand_body_swap
+from ..body_swap_jobs import expand_singularity as expand_body_swap_singularity
+from ..workflow.builder_body_swap_singularity import build_body_swap_singularity_prompt
+from ..workflow.builder_dlss5 import build_dlss5_prompt
+from ..workflow.dlss5 import DLSS5Full, DLSS5UI, expand as expand_dlss5
 
 UploadKind = str | None  # "refs" | "face" | None
 
@@ -84,13 +93,28 @@ def _interpolate_title(g: Generation, is_draft: bool, source_name: str | None) -
 
 
 HANDLERS: dict[str, KindHandler] = {
+    "dlss5": KindHandler("dlss5", DLSS5Full, build_dlss5_prompt, free_before=True,
+                         ui_cls=DLSS5UI, expand=expand_dlss5,
+                         title=lambda g, draft, name: f"{name or 'Клип'} · DLSS5"),
+    "generate_pdmd": KindHandler("generate_pdmd", FullParams, build_pdmd_prompt, upload="refs", title=_generate_title),
+    "generate_pdmd_refmods": KindHandler("generate_pdmd_refmods", FullParams, builder_refmods.build_pdmd_refmod_prompt,
+                                         upload="refs", title=_generate_title),
+    "body_swap_singularity": KindHandler("body_swap_singularity", BodySwapFull, build_body_swap_singularity_prompt,
+        upload="media", ui_cls=BodySwapUI, expand=expand_body_swap_singularity,
+        title=lambda g, draft, name: f"{name or 'Клип'} · замена персонажа · Singularity"),
+    "body_swap": KindHandler("body_swap", BodySwapFull, build_body_swap_prompt, upload="media",
+                             ui_cls=BodySwapUI, expand=expand_body_swap,
+                             title=lambda g, draft, name: f"{name or 'Клип'} · замена персонажа"),
+    "head_swap": KindHandler("head_swap", HeadSwapFull, build_head_swap_prompt, upload="media",
+                             ui_cls=HeadSwapUI, expand=expand_head_swap,
+                             title=lambda g, draft, name: f"{name or 'Клип'} · {'трекинг головы' if draft else 'замена головы'}"),
+    "generate_memory": KindHandler("generate_memory", FullParams, build_memory_prompt, upload="refs", title=_generate_title),
+    "generate_memory_refmods": KindHandler("generate_memory_refmods", FullParams, builder_refmods.build_memory_refmod_prompt,
+                                          upload="refs", title=_generate_title),
     "fidelity_upscale": KindHandler("fidelity_upscale", FidelityFull, build_fidelity_prompt, free_before=True,
                                    ui_cls=FidelityUI, expand=expand_fidelity,
                                    retry_defaults={"scale": 2},
                                    title=lambda g, draft, name: f"{name or 'Клип'} · SwinIR ×{g.ui_params.get('scale', 2)}"),
-    "sol_refine": KindHandler("sol_refine", SoLRefinerFull, build_sol_refiner_prompt, free_before=True,
-                              ui_cls=SoLRefinerUI, expand=expand_sol_refiner,
-                              title=lambda g, draft, name: f"{name or 'Клип'} · SoL-Refiner"),
     "mask_track": KindHandler("mask_track", MaskTrackFull, build_mask_track_prompt, upload="media", free_before=True,
                               ui_cls=MaskTrackUI, expand=expand_mask_track, collect_artifact=collect_mask_output),
     "generate_refmods": KindHandler("generate_refmods", FullParams, builder_refmods.build_refmod_prompt,
@@ -118,7 +142,10 @@ HANDLERS: dict[str, KindHandler] = {
 
 
 def get_handler(kind: str) -> KindHandler:
-    return HANDLERS.get(kind) or HANDLERS["generate"]
+    handler = HANDLERS.get(kind)
+    if handler is None:
+        raise ValueError("Этот тип задачи больше не поддерживается")
+    return handler
 
 
 def pipeline_for(kind: str) -> Pipeline:
@@ -126,7 +153,7 @@ def pipeline_for(kind: str) -> Pipeline:
 
 
 def asset_title_for(g: Generation, is_draft: bool, source_name: str | None = None) -> str:
-    h = get_handler(g.kind)
-    if h.title:
+    h = HANDLERS.get(g.kind)
+    if h and h.title:
         return h.title(g, is_draft, source_name)
     return asset_title((g.ui_params or {}).get("prompt", ""), g.id)

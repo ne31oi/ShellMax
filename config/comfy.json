@@ -11,11 +11,18 @@
     "ComfyUI/main.py",
     "--windows-standalone-build",
     "--disable-auto-launch",
-    "--reserve-vram", "1",
+    "--vram-headroom",
+    "4",
+    "--disable-comfy-compiler",
     "--fast-disk",
+    "--disable-pinned-memory",
+    "--cache-ram",
+    "8",
     "--use-pytorch-cross-attention",
     "--disable-cuda-malloc",
-    "--fast", "fp16_accumulation",
-    "--preview-method", "auto"
+    "--fast",
+    "fp16_accumulation",
+    "--preview-method",
+    "auto"
   ]
 }

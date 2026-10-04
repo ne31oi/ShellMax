@@ -4,7 +4,7 @@ import {
 import { useState } from "react";
 import type { FaceStrength, Generation } from "../../api/types";
 import * as actions from "../../lib/actions";
-import { timeBreakdown, trackSummary } from "../../lib/stages";
+import { isSupportedJobKind, timeBreakdown, trackSummary } from "../../lib/stages";
 import { fmtDuration } from "../../lib/format";
 import { useLibrary } from "../../store/library";
 import { useUI } from "../../store/ui";
@@ -276,13 +276,13 @@ export function GenerationClipInfo({ gen, comparing, canToggleCompare, onToggleC
               Промпт
             </Button>
           )}
-          <Button size="sm" variant="ghost" onClick={() => actions.retry(gen, false)} title="Повторить с новым сидом">
+          <Button size="sm" variant="ghost" disabled={!isSupportedJobKind(gen.kind)} onClick={() => actions.retry(gen, false)} title="Повторить с новым сидом">
             <Dices size={13} /> Ещё раз
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => actions.retry(gen, true)} title="Тот же сид — тот же результат">
+          <Button size="sm" variant="ghost" disabled={!isSupportedJobKind(gen.kind)} onClick={() => actions.retry(gen, true)} title="Тот же сид — тот же результат">
             <Copy size={13} /> Точно
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => actions.editAndRetry(gen)}>
+          <Button size="sm" variant="ghost" disabled={!isSupportedJobKind(gen.kind)} onClick={() => actions.editAndRetry(gen)}>
             <Pencil size={13} /> Изменить
           </Button>
         </div>

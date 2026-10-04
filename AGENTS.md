@@ -8,8 +8,13 @@ ShellMax — локальное веб-приложение (FastAPI + React), �
 | `generate` — генерация видео | `workflows/MiniMax_H3_Singularity_DualSampling_The_AI_Brief_EN.json` | `workflow/builder.py` | `tests/test_builder.py` |
 | `generate_nvfp4` — NVFP4-вариант генерации | `workflows/ShellMax_NVFP4_DualSampling.json` | `workflow/builder_nvfp4.py` (обёртка над `builder`) | `tests/test_builder_nvfp4.py` |
 | `generate_nvfp4_fast` — быстрый NVFP4 | `workflows/ShellMax_NVFP4_DualSampling_5.json` | `workflow/builder_nvfp4_fast.py` | `tests/test_builder_nvfp4.py` |
+| `generate_pdmd` — PDMD 4, DualSampling 2+2 | `workflows/ShellMax_PDMD4_DualSampling.api.json` (RefMods: `ShellMax_PDMD4_DualSampling_RefMods.api.json`) | `workflow/builder_pdmd.py` | `tests/test_builder_pdmd.py` |
 | `face` — улучшение лица на готовом клипе | `workflows/MiniMax_H3_FaceRefine_Best.json` | `workflow/builder_face.py` | `tests/test_builder_face.py` |
+| `head_swap` — замена выбранной головы по фотографии | `workflows/ShellMax_HeadSwap_Target.api.json` (без рамки в старых задачах — `ShellMax_HeadSwap.api.json`) | `workflow/builder_head_swap.py` | `tests/test_builder_head_swap.py` (сверка графа, трекинга и адаптация к имеющимся весам) |
+| `body_swap` — полная замена персонажа по костюму и портрету, с исходным звуком | `workflows/ShellMax_BodySwap_Fitted.api.json` (recipe_version=6; версии 1–5 имеют отдельные замороженные графы) | `workflow/builder_body_swap.py` | `tests/test_builder_body_swap.py` |
+| `body_swap_singularity` — тот же Body Swap с Singularity вместо Ref2VA | `workflows/ShellMax_BodySwap_Fitted_Singularity.api.json` (версии 1–5 имеют отдельные графы) | `workflow/builder_body_swap_singularity.py` | `tests/test_builder_body_swap_singularity.py` |
 | `enhance` — детализация / апскейл (SeedVR2) | `workflows/ShellMax_SeedVR2_Enhance.json` | `workflow/builder_enhance.py` | `tests/test_builder_enhance.py` |
+| `dlss5` — нейронное улучшение видео NVIDIA | `workflows/ShellMax_DLSS5.json` | `workflow/builder_dlss5.py` | `tests/test_builder_dlss5.py` |
 | `interpolate` — интерполяция кадров (RIFE) | `workflows/ShellMax_Interpolate.json` | `workflow/builder_interpolate.py` | `tests/test_builder_interpolate.py` |
 
 - **Сейчас:** студия генерации (в т.ч. NVFP4), улучшение лица, SeedVR2, интерполяция, NLE v1 (дорожки / планы / экспорт).

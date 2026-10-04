@@ -1,22 +1,33 @@
 import clsx from "clsx";
 import { Check, ChevronRight, Download } from "lucide-react";
 import { useEffect, useState } from "react";
-import { api } from "../../api/client";
+import { api, ApiError } from "../../api/client";
 import type { AssistantModel, AssistantSettings } from "../../api/types";
 import { fmtSize } from "../../lib/format";
 import { useAssistant } from "../../store/assistant";
+import { useUI } from "../../store/ui";
 import { Button, SectionTitle, Select, Switch } from "../ui";
 import { AudioModelSettings } from "../assistant/AudioModelSettings";
+import { CodexConnection } from "../assistant/CodexConnection";
+
+const REASONING_LABELS: Record<string, string> = {
+  none: "Без рассуждения (none)", minimal: "Минимальная (minimal)", low: "Низкая (low)",
+  medium: "Средняя (medium)", high: "Высокая (high)", xhigh: "Очень высокая (xhigh)",
+  max: "Максимальная (max)", ultra: "Ультра (ultra)",
+};
 
 export function AssistantSettingsPanel() {
   const [s, setS] = useState<AssistantSettings | null>(null);
   const [models, setModels] = useState<AssistantModel[]>([]);
   const [expert, setExpert] = useState(false);
+  const [saving, setSaving] = useState(false);
   const status = useAssistant((st) => st.status);
+  const job = useAssistant((st) => st.job);
 
   const reload = () => {
     api.assistantSettings().then(setS);
     api.assistantModels().then(setModels);
+    void useAssistant.getState().refresh();
   };
   useEffect(reload, []);
   useEffect(() => {
@@ -26,28 +37,59 @@ export function AssistantSettingsPanel() {
   if (!s) return null;
   const save = async (patch: Partial<AssistantSettings>) => {
     const next = { ...s, ...patch };
-    setS(next);
-    await api.saveAssistantSettings(next);
-    await useAssistant.getState().refresh();
-    api.assistantModels().then(setModels);
+    setSaving(true);
+    try {
+      await api.saveAssistantSettings(next);
+      setS(next);
+      await useAssistant.getState().refresh(true);
+      api.assistantModels().then(setModels);
+    } catch (error) {
+      useUI.getState().toast(error instanceof ApiError ? error.message : "Не удалось изменить настройки ассистента", "bad");
+    } finally {
+      setSaving(false);
+    }
   };
   const pct = status?.total_bytes ? Math.round((status.received_bytes / status.total_bytes) * 100) : 0;
+  const codexModels = status?.provider === "codex" ? status.models ?? [] : [];
+  const reasoningEfforts = codexModels.find((model) => model.id === status?.model)?.reasoning_efforts ?? [];
+  const autoReasoning = !s.codex_reasoning_effort && status?.provider === "codex" && status.reasoning_effort
+    ? `Авто · ${REASONING_LABELS[status.reasoning_effort] ?? status.reasoning_effort}` : "Авто · из настроек Codex";
 
   return (
     <div className="space-y-6 p-5">
       <AudioModelSettings />
       <p className="text-xs leading-relaxed text-muted">
-        Локальная модель для кнопок «В промпт» и «Составить ассистентом». Промпты пишутся по спецификации
-        MiniMax H3 Singularity. Набор моделей и параметры — как в Minimax Studio V6. Перед генерацией видео ассистент
-        сам выгружается из видеопамяти.
+        Ассистент для кнопок «В промпт», «Поправить», промптов лица и чата идей.
+        Промпты пишутся по действующей спецификации MiniMax H3 Singularity.
       </p>
 
+      <Select label="Кто пишет промпты" value={s.provider} disabled={saving || !!job || status?.busy}
+        onChange={(value) => void save({ provider: value as AssistantSettings["provider"] })}
+        options={[{ value: "codex", label: "Codex" }, { value: "local", label: "Локальная модель" }]} />
+
+      {s.provider === "codex" ? <div className="space-y-4">
+        <Select label="Модель Codex" value={s.codex_model} disabled={saving || !!job || status?.busy}
+          onChange={(value) => {
+            const nextModel = codexModels.find((model) => model.id === value);
+            void save({ codex_model: value,
+              codex_reasoning_effort: nextModel?.reasoning_efforts.includes(s.codex_reasoning_effort) ? s.codex_reasoning_effort : "" });
+          }}
+          options={[{ value: "", label: "Авто · из настроек Codex" },
+            ...codexModels.map((model) => ({ value: model.id, label: model.label }))]} />
+        <Select label="Глубина рассуждения (reasoning)" value={s.codex_reasoning_effort}
+          disabled={saving || !!job || status?.busy}
+          onChange={(value) => void save({ codex_reasoning_effort: value })}
+          options={[{ value: "", label: autoReasoning },
+            ...reasoningEfforts.map((effort) => ({ value: effort, label: REASONING_LABELS[effort] ?? effort }))]} />
+        <CodexConnection />
+      </div> : <>
       <section>
         <SectionTitle>Модель</SectionTitle>
         <div className="space-y-1.5">
           {models.map((m) => (
             <button
               key={m.id}
+              disabled={saving || !!job || status?.busy}
               onClick={() => save({ model: m.id })}
               className={clsx(
                 "flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
@@ -128,6 +170,7 @@ export function AssistantSettingsPanel() {
           </div>
         )}
       </section>
+      </>}
     </div>
   );
 }

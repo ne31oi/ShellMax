@@ -1,0 +1,9 @@
+{
+  "head_lora": {
+    "repo": "Alissonerdx/Minimax-H3-ComfyUI",
+    "revision": "849fb3d4f434f2e9b4a4d4f7253471bf5e6719f9",
+    "file": "loras/minimax_h3_head_swap_v1.0_r32.safetensors",
+    "size": 310177072,
+    "sha256": "ea97bd1a8178460661055784d63b4cb560732196fd15d5d7f33bfd214b65ab00"
+  }
+}
