@@ -14,6 +14,7 @@ from ..workflow import builder_pdmd
 from ..workflow import builder_head_swap
 from ..workflow import builder_body_swap
 from ..workflow import builder_dlss5
+from ..workflow import builder_continuation
 
 
 @dataclass(frozen=True)
@@ -115,6 +116,10 @@ PIPELINES["generate_memory"] = Pipeline(stages=PIPELINES["generate"].stages,
 PIPELINES["generate_pdmd"] = Pipeline(stages=PIPELINES["generate"].stages,
     stage_by_node=builder_pdmd.STAGE_BY_NODE, sampler_nodes=builder_pdmd.SAMPLER_NODES,
     final_node=builder_pdmd.FINAL_OUTPUT_NODE, draft_node=builder_pdmd.DRAFT_OUTPUT_NODE)
+
+PIPELINES["continue_video"] = Pipeline(stages=PIPELINES["generate"].stages,
+    stage_by_node=builder_continuation.STAGE_BY_NODE, sampler_nodes=builder_continuation.SAMPLER_NODES,
+    final_node=builder_continuation.FINAL_OUTPUT_NODE, draft_node=builder_continuation.DRAFT_OUTPUT_NODE)
 
 for _base in ("generate", "generate_memory", "generate_nvfp4", "generate_nvfp4_fast", "generate_pdmd"):
     _pipe = PIPELINES[_base]

@@ -104,6 +104,8 @@ interface FormState {
   refmodMode: string;
   refmodAudio: boolean;
   headSwapIdentityUploadId: string | null;
+  continuationDuration: number;
+  continuationContextFrames: 5 | 22 | 39;
   bodySwapPhotoIds: [string, string];
   bodySwapDrafts: Record<string, BodySwapUIParams>;
   dlss5Settings: Omit<DLSS5Params, "source_asset_id"> | null;
@@ -130,7 +132,7 @@ interface FormState {
 
 const LIMITS = { image: 9, video: 3, audio: 3 } as const;
 const STICKY: (keyof FormState)[] = [
-  "bodySwapPhotoIds", "bodySwapDrafts", "dlss5Settings",
+    "bodySwapPhotoIds", "bodySwapDrafts", "dlss5Settings", "continuationDuration", "continuationContextFrames",
   "refs", "prompt", "aspect", "duration", "quality", "look", "cinematicTechniques", "styles",
   "seedLocked", "seed", "variants", "profileId", "promptHistory", "recentRefs", "promptLibrary", "promptDraft", "maskEditDrafts", "refmodMode", "refmodAudio", "headSwapIdentityUploadId",
 ];
@@ -176,6 +178,8 @@ export const useForm = create<FormState>((set, get) => ({
   refmodMode: "Compressed Reference",
   refmodAudio: false,
   headSwapIdentityUploadId: null,
+  continuationDuration: 2,
+  continuationContextFrames: 22,
   bodySwapPhotoIds: ["", ""],
   bodySwapDrafts: {},
   dlss5Settings: null,

@@ -210,6 +210,8 @@ export interface EngineProfile {
   /** Standard INT8 and the two retained NVFP4 recipes. */
   pipeline?: "generate" | "generate_memory" | "generate_nvfp4" | "generate_nvfp4_fast" | "generate_pdmd";
   pdmd_lora?: string;
+  pdmd_strength?: number;
+  pdmd_sparse?: boolean;
   nvfp4_unet?: string;
   unet: string;
   text_encoder: string;
@@ -260,6 +262,8 @@ export interface UIParams {
 }
 
 export interface HeadSwapTarget { frame_index: number; box: CropBox }
+export interface ContinuationUIParams extends UIParams { source_asset_id: number; context_frames: 5 | 22 | 39 }
+export interface ContinuationDefaults { asset: MediaAsset; context_frames: number; params: ContinuationUIParams }
 export interface HeadSwapUIParams { source_asset_id: number; identity_upload_id: string; seed: number | null; target: HeadSwapTarget }
 export interface HeadSwapDefaults { asset: MediaAsset; ready: boolean; missing: string[]; frames: number }
 export interface BodySwapUIParams {
@@ -277,7 +281,7 @@ export type GenStatus = "queued" | "running" | "done" | "draft_only" | "error" |
 export type Stage = "load" | "encode" | "pass1" | "draft" | "upscale" | "pass2" | "final" | "decode" | "done";
 
 export type JobKind = "generate" | "generate_memory" | "generate_nvfp4" | "generate_nvfp4_fast" | "generate_pdmd" | "generate_pdmd_refmods" | "face" | "enhance" | "interpolate"
-  | "generate_refmods" | "generate_memory_refmods" | "generate_nvfp4_refmods" | "generate_nvfp4_fast_refmods" | "refmod_create" | "mask_edit" | "mask_track" | "fidelity_upscale" | "head_swap" | "body_swap" | "body_swap_singularity" | "dlss5";
+  | "generate_refmods" | "generate_memory_refmods" | "generate_nvfp4_refmods" | "generate_nvfp4_fast_refmods" | "refmod_create" | "mask_edit" | "mask_track" | "fidelity_upscale" | "head_swap" | "body_swap" | "body_swap_singularity" | "dlss5" | "continue_video";
 
 export interface Project {
   id: number;
@@ -307,7 +311,7 @@ export interface Generation {
   status: GenStatus;
   stage: Stage | null;
   progress: number;
-  ui_params: UIParams & Partial<FaceUIParams> & Partial<EnhanceUIParams> & Partial<InterpolateUIParams> & Partial<HeadSwapUIParams> & Partial<DLSS5Params>;
+  ui_params: UIParams & Partial<FaceUIParams> & Partial<EnhanceUIParams> & Partial<InterpolateUIParams> & Partial<HeadSwapUIParams> & Partial<DLSS5Params> & Partial<ContinuationUIParams>;
   full_params: Record<string, unknown> | null;
   seed: number;
   profile_name: string;

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { AssistantSetup } from "./components/assistant/AssistantSetup";
 import { FaceRefineDialog } from "./components/face/FaceRefineDialog";
 import { HeadSwapDialog } from "./components/face/HeadSwapDialog";
+import { ContinuationDialog } from "./components/generate/ContinuationDialog";
 import { BodySwapDialog } from "./components/body/BodySwapDialog";
 import { EnhanceDialog } from "./components/enhance/EnhanceDialog";
 import { FidelityUpscaleDialog } from "./components/enhance/FidelityUpscaleDialog";
@@ -258,6 +259,7 @@ export default function App() {
       <SettingsDialog />
       <FaceRefineDialog />
       <HeadSwapDialog />
+      <ContinuationDialog />
       <BodySwapDialog />
       <EnhanceDialog />
       <FidelityUpscaleDialog />

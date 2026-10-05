@@ -1,5 +1,7 @@
 """UI decisions -> full workflow parameters."""
 
+import pytest
+
 from app.jobs.errors import humanize_error
 from app.jobs.registry import asset_title
 from app.workflow.params import EngineProfile, LoraSpec, ResolvedRef, UIParams, clean_path
@@ -63,6 +65,17 @@ def test_default_profile_has_no_realism_lora():
              for l in [*prof.loras_main, *prof.loras_final]}
     assert REALISM_STEM not in stems
     assert any("lms" in s for s in stems)
+
+
+@pytest.mark.parametrize("enabled,strength,active", [(True, 0.6, True), (False, 0.6, False), (True, 0, False)])
+def test_profile_realism_keeps_its_activation_word(monkeypatch, enabled, strength, active):
+    monkeypatch.setattr("app.workflow.presets._all_style_triggers", lambda: ["r34l1sm"])
+    lora = LoraSpec(path=f"F:/{REALISM_STEM}.safetensors", enabled=enabled, strength=strength)
+    full = expand(UIParams(prompt="r34l1sm\n\nA woman walks.", look="natural"),
+                  profile(loras_final=[lora]), [], [], seed=1, filename_prefix="x")
+    assert ("r34l1sm" in full.prompt) is active
+    if active:
+        assert full.prompt.startswith("r34l1sm")
 
 
 def test_refs_pass_through_in_order():

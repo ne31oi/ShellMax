@@ -147,6 +147,11 @@ def expand(
     q = presets[ui.quality]
 
     style_triggers = [t for _, trig in styles for t in trig]
+    # A manually enabled Realism adapter needs the same trigger as the style chip.
+    # Otherwise inactive-style cleanup silently strips its activation word.
+    if any(lora.enabled and lora.strength != 0 and is_realism_lora(lora.path)
+           for lora in [*profile.loras_main, *profile.loras_final]):
+        style_triggers = [*style_triggers, REALISM_TRIGGER]
     # Drop slogans of styles that are not selected (assistant often weaves them into prose).
     prompt_text = scrub_style_triggers(ui.prompt, style_triggers, _all_style_triggers())
     prompt_text = with_lora_triggers(prompt_text, style_triggers)
@@ -169,6 +174,8 @@ def expand(
         unet=profile.unet,
         nvfp4_unet=profile.nvfp4_unet,
         pdmd_lora=profile.pdmd_lora,
+        pdmd_strength=profile.pdmd_strength,
+        pdmd_sparse=profile.pdmd_sparse,
         text_encoder=profile.text_encoder,
         vae_video=profile.vae_video,
         vae_audio=profile.vae_audio,

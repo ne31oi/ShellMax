@@ -41,6 +41,7 @@ interface UIState {
   toasts: Toast[];
   faceDialog: FaceDialogState | null;
   headSwapDialog: FaceDialogState | null;
+  continuationDialog: FaceDialogState | null;
   bodySwapDialog: FaceDialogState | null;
   enhanceDialog: EnhanceDialogState | null;
   fidelityUpscaleDialog: EnhanceDialogState | null;
@@ -66,6 +67,7 @@ interface UIState {
   toast: (text: string, tone?: Toast["tone"], action?: Toast["action"]) => void;
   openFaceDialog: (state: FaceDialogState | null) => void;
   openHeadSwapDialog: (state: FaceDialogState | null) => void;
+  openContinuationDialog: (state: FaceDialogState | null) => void;
   openBodySwapDialog: (state: FaceDialogState | null) => void;
   openEnhanceDialog: (state: EnhanceDialogState | null) => void;
   openFidelityUpscaleDialog: (state: EnhanceDialogState | null) => void;
@@ -105,6 +107,7 @@ export const useUI = create<UIState>((set) => ({
   toasts: [],
   faceDialog: null,
   headSwapDialog: null,
+  continuationDialog: null,
   bodySwapDialog: null,
   enhanceDialog: null,
   fidelityUpscaleDialog: null,
@@ -166,6 +169,7 @@ export const useUI = create<UIState>((set) => ({
   dismiss: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
   openFaceDialog: (faceDialog) => set({ faceDialog }),
   openHeadSwapDialog: (headSwapDialog) => set({ headSwapDialog }),
+  openContinuationDialog: (continuationDialog) => set({ continuationDialog }),
   openBodySwapDialog: (bodySwapDialog) => set({ bodySwapDialog }),
   openEnhanceDialog: (enhanceDialog) => set({ enhanceDialog }),
   openFidelityUpscaleDialog: (fidelityUpscaleDialog) => set({ fidelityUpscaleDialog }),

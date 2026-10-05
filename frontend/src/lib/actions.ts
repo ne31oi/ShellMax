@@ -165,6 +165,10 @@ export async function retry(g: Generation, sameSeed: boolean, variants = 1) {
 }
 
 export async function editAndRetry(g: Generation) {
+  if (g.kind === "continue_video") {
+    if (g.source_asset_id) useUI.getState().openContinuationDialog({ assetId: g.source_asset_id, fromGenerationId: g.id });
+    return;
+  }
   if (!isSupportedJobKind(g.kind)) {
     toast("Этот тип обработки больше не поддерживается. Выберите другой способ обработки клипа", "info");
     return;

@@ -24,6 +24,8 @@
     "low_vram": false
   },
   "pdmd": {
+    "strength": 1.0,
+    "sparse": false,
     "name": "PDMD 4 · DualSampling 2+2",
     "lora": "data/models/pdmd/minimax_h3_pdmd_4nfe_comfyui_v6.safetensors",
     "expert": {
@@ -310,6 +312,10 @@
       "motion": "auto", "scene_change_threshold": 0.24, "warmup_frames": 0, "runtime_dir": ""
     },
     "encoding": {"codec": "H.264", "container": "MP4", "quality": "Good"}
+  },
+  "continuation": {
+    "context_frames": 22,
+    "duration": 2.0
   },
   "body_swap": {
     "models": {

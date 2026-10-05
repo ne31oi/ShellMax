@@ -101,7 +101,9 @@ class EngineProfile(BaseModel):
     name: str = "Singularity v1.3"
     # Separate profiles preserve the reference recipe and the five-interval final variant.
     pipeline: Literal["generate", "generate_memory", "generate_nvfp4", "generate_nvfp4_fast", "generate_pdmd"] = "generate"
-    pdmd_lora: str = ""  # Fixed-strength model-only distillation adapter, separate from creative stacks.
+    pdmd_lora: str = ""  # Model-only distillation adapter, separate from creative stacks.
+    pdmd_strength: float = 1.0
+    pdmd_sparse: bool = False
     unet: str
     nvfp4_unet: str = ""  # Separate final-pass model; ignored by existing pipelines.
     text_encoder: str
@@ -196,6 +198,8 @@ class FullParams(BaseModel):
     unet: str
     nvfp4_unet: str = ""
     pdmd_lora: str = ""
+    pdmd_strength: float = 1.0
+    pdmd_sparse: bool = False
     text_encoder: str
     vae_video: str
     vae_audio: str

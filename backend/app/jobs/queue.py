@@ -267,7 +267,7 @@ class JobManager:
         if handler.upload == "face":
             full = await self._upload_face_refs(FaceFullParams(**g.full_params))
         elif handler.upload == "refs":
-            full = await self._upload_refs(FullParams(**g.full_params), g.ui_params)
+            full = await self._upload_refs(handler.params_cls(**g.full_params), g.ui_params)
         elif handler.upload == "media":
             full = await self._upload_media(handler.params_cls(**g.full_params))
         else:

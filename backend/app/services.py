@@ -275,7 +275,8 @@ async def edit_upload(upload_id: str, edit: RefEdit) -> Upload:
 
 
 # ---------------------------------------------------------------- generations
-def create_generations(ui: UIParams, project_id: int, *, info: dict | None = None) -> list[Generation]:
+def generation_inputs(ui: UIParams) -> tuple[EngineProfileRow, EngineProfile, list[ResolvedRef], list[tuple[LoraSpec, str]]]:
+    """Resolve the shared recipe, references and styles for generation jobs."""
     row, profile = get_profile(ui.profile_id)
     problems = profile_problems(profile)
     if problems:
@@ -301,6 +302,11 @@ def create_generations(ui: UIParams, project_id: int, *, info: dict | None = Non
             strength = st.strength if st.strength is not None else lib.default_strength
             styles.append((LoraSpec(path=lib.path, strength=strength), lib.triggers))
 
+    return row, profile, refs, styles
+
+
+def create_generations(ui: UIParams, project_id: int, *, info: dict | None = None) -> list[Generation]:
+    row, profile, refs, styles = generation_inputs(ui)
     created = []
     kind = profile.pipeline + ("_refmods" if any(ref.refmod_file for ref in refs) else "")
     for i in range(ui.variants):

@@ -9,6 +9,7 @@ ShellMax — локальное веб-приложение (FastAPI + React), �
 | `generate_nvfp4` — NVFP4-вариант генерации | `workflows/ShellMax_NVFP4_DualSampling.json` | `workflow/builder_nvfp4.py` (обёртка над `builder`) | `tests/test_builder_nvfp4.py` |
 | `generate_nvfp4_fast` — быстрый NVFP4 | `workflows/ShellMax_NVFP4_DualSampling_5.json` | `workflow/builder_nvfp4_fast.py` | `tests/test_builder_nvfp4.py` |
 | `generate_pdmd` — PDMD 4, DualSampling 2+2 | `workflows/ShellMax_PDMD4_DualSampling.api.json` (RefMods: `ShellMax_PDMD4_DualSampling_RefMods.api.json`) | `workflow/builder_pdmd.py` | `tests/test_builder_pdmd.py` |
+| `continue_video` — продолжение движения готового клипа | `workflows/ShellMax_H3_Continuation.api.json` | `workflow/builder_continuation.py` | `tests/test_builder_continuation.py` |
 | `face` — улучшение лица на готовом клипе | `workflows/MiniMax_H3_FaceRefine_Best.json` | `workflow/builder_face.py` | `tests/test_builder_face.py` |
 | `head_swap` — замена выбранной головы по фотографии | `workflows/ShellMax_HeadSwap_Target.api.json` (без рамки в старых задачах — `ShellMax_HeadSwap.api.json`) | `workflow/builder_head_swap.py` | `tests/test_builder_head_swap.py` (сверка графа, трекинга и адаптация к имеющимся весам) |
 | `body_swap` — полная замена персонажа по костюму и портрету, с исходным звуком | `workflows/ShellMax_BodySwap_Fitted.api.json` (recipe_version=6; версии 1–5 имеют отдельные замороженные графы) | `workflow/builder_body_swap.py` | `tests/test_builder_body_swap.py` |

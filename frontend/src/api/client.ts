@@ -14,6 +14,8 @@ import type {
   HeadSwapDefaults,
   BodySwapDefaults,
   BodySwapUIParams,
+  ContinuationUIParams,
+  ContinuationDefaults,
   HeadSwapUIParams,
   FidelityDefaults,
   DLSS5Defaults,
@@ -243,6 +245,8 @@ export const api = {
 
   faceDefaults: (assetId: number) => get<FaceDefaults>("/api/face/defaults" + q({ asset_id: assetId })),
   headSwapDefaults: (assetId: number) => get<HeadSwapDefaults>("/api/head-swap/defaults" + q({ asset_id: assetId, project_id: pid() })),
+  continuationDefaults: (assetId: number) => get<ContinuationDefaults>("/api/continue-video/defaults" + q({ asset_id: assetId, project_id: pid() })),
+  continueVideo: (params: ContinuationUIParams) => post<Generation>("/api/continue-video" + q({ project_id: pid() }), params),
   bodySwapDefaults: (assetId: number) => get<BodySwapDefaults>("/api/body-swap/defaults" + q({ asset_id: assetId, project_id: pid() })),
   bodySwap: (params: BodySwapUIParams) => post<Generation>("/api/body-swap" + q({ project_id: pid() }), params),
   headSwap: (params: HeadSwapUIParams) => post<Generation>("/api/head-swap" + q({ project_id: pid() }), params),

@@ -39,6 +39,8 @@ from ..body_swap_jobs import expand_singularity as expand_body_swap_singularity
 from ..workflow.builder_body_swap_singularity import build_body_swap_singularity_prompt
 from ..workflow.builder_dlss5 import build_dlss5_prompt
 from ..workflow.dlss5 import DLSS5Full, DLSS5UI, expand as expand_dlss5
+from ..workflow.continuation import ContinuationFull, ContinuationUI, expand as expand_continuation
+from ..workflow.builder_continuation import build_continuation_prompt
 
 UploadKind = str | None  # "refs" | "face" | None
 
@@ -93,6 +95,9 @@ def _interpolate_title(g: Generation, is_draft: bool, source_name: str | None) -
 
 
 HANDLERS: dict[str, KindHandler] = {
+    "continue_video": KindHandler("continue_video", ContinuationFull, build_continuation_prompt,
+        upload="refs", ui_cls=ContinuationUI, expand=expand_continuation,
+        title=lambda g, draft, name: f"{name or 'Клип'} · продолжение"),
     "dlss5": KindHandler("dlss5", DLSS5Full, build_dlss5_prompt, free_before=True,
                          ui_cls=DLSS5UI, expand=expand_dlss5,
                          title=lambda g, draft, name: f"{name or 'Клип'} · DLSS5"),

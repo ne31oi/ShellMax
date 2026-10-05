@@ -56,6 +56,7 @@ export const STAGES_BY_KIND: Record<JobKind, StageDef[]> = {
     { id: "upscale", label: "Бережное улучшение", short: "SwinIR" },
     { id: "save", label: "Сохранение", short: "Сохранение" }],
   generate: GENERATE_STAGES,
+  continue_video: GENERATE_STAGES,
   generate_pdmd: GENERATE_STAGES,
   generate_pdmd_refmods: GENERATE_STAGES,
   generate_memory: GENERATE_STAGES,

@@ -13,6 +13,7 @@ def default_profile() -> EngineProfile:
     return base_profile().model_copy(update={
         "name": recipe["name"], "pipeline": KIND,
         "pdmd_lora": str((settings.ROOT / recipe["lora"]).resolve()),
+        "pdmd_strength": recipe["strength"], "pdmd_sparse": recipe["sparse"],
         "loras_main": [], "loras_final": [],
         "expert": ExpertParams(**recipe["expert"]),
     })

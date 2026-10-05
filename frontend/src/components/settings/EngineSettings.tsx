@@ -13,7 +13,7 @@ import { FaceRecipeSection, LoraGroup, NumField } from "./EngineSettingsParts";
 const MODEL_FIELDS: { key: keyof EngineProfile; label: string; hint: string; category: ModelCategory }[] = [
   { key: "unet", label: "Модель", hint: "Диффузионная модель MiniMax H3", category: "unet" },
   { key: "nvfp4_unet", label: "Финальная модель", hint: "Смешанная NVFP4 для финального прохода", category: "unet" },
-  { key: "pdmd_lora", label: "PDMD 4 LoRA", hint: "Конвертация v6 · сила фиксирована 1,0", category: "lora" },
+  { key: "pdmd_lora", label: "PDMD LoRA", hint: "Сила задаётся в «Эксперте»", category: "lora" },
   { key: "text_encoder", label: "Текстовый энкодер", hint: "Qwen3-VL для MiniMax H3", category: "text_encoder" },
   { key: "vae_video", label: "VAE видео", hint: "", category: "vae" },
   { key: "vae_audio", label: "VAE аудио", hint: "", category: "vae" },
@@ -110,14 +110,15 @@ export function EngineSettings() {
   };
   const resetToWorkflow = async () => {
     const wf = await api.workflowDefaults(draft.pipeline);
-    update({ expert: wf.expert, low_vram: wf.low_vram });
+    update({ expert: wf.expert, low_vram: wf.low_vram,
+      ...(draft.pipeline === "generate_pdmd" ? { pdmd_strength: wf.pdmd_strength, pdmd_sparse: wf.pdmd_sparse } : {}) });
     useUI.getState().toast("Внутренние параметры сброшены к воркфлоу", "ok");
   };
 
   const changePipeline = async (pipeline: NonNullable<EngineProfile["pipeline"]>) => {
     if (pipeline === "generate_pdmd" || draft.pipeline === "generate_pdmd") {
       const wf = await api.workflowDefaults(pipeline);
-      update({ pipeline, pdmd_lora: wf.pdmd_lora, expert: wf.expert,
+      update({ pipeline, pdmd_lora: wf.pdmd_lora, pdmd_strength: wf.pdmd_strength, pdmd_sparse: wf.pdmd_sparse, expert: wf.expert,
         loras_main: wf.loras_main, loras_final: wf.loras_final });
     } else update({ pipeline });
   };
@@ -207,7 +208,7 @@ export function EngineSettings() {
         />
         <p className="mt-1.5 text-xs text-muted">
           {draft.pipeline === "generate_pdmd"
-            ? "PDMD заменяет Turbo. По умолчанию — 4 шага, разделение 2+2. В «Эксперте» можно увеличить шаги: например, 8 и разделение 4. Дополнительные шаги экспериментальны; качество сохранения референсов может отличаться от обычного Singularity."
+            ? "Все параметры PDMD доступны в «Эксперте»: шаги, разделение, сэмплер, планировщик, сила LoRA и sparse attention. Исходный рецепт — Euler/simple, 4 шага, разделение 2+2, сила 1,0."
             : draft.pipeline === "generate_memory"
             ? "Модель и шаги Singularity сохраняются. H3 Sparse: полное video-attention на начальном проходе и последнем шаге финала, 30% между ними. Результат может отличаться; крупные тензоры считаются по частям."
             : "Singularity сохраняет исходный рецепт. Оба NVFP4 используют INT8 сначала и NVFP4 на финале: 10 интервалов ближе к эталону, 5 — быстрее."}
@@ -280,13 +281,15 @@ export function EngineSettings() {
               </Button>
             </div>
             <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-              <NumField label="Шаги планировщика" value={draft.expert.steps} onChange={(steps) => updateExpert({ steps })} min={1} max={60} />
-              <NumField label="Шаг разделения сигм" value={draft.expert.split_step} onChange={(split_step) => updateExpert({ split_step })} min={0} max={60} />
+              <NumField label="Шаги планировщика" value={draft.expert.steps} onChange={(steps) => updateExpert({ steps })} min={1} />
+              <NumField label="Шаг разделения сигм" value={draft.expert.split_step} onChange={(split_step) => updateExpert({ split_step })} min={0} />
+              {draft.pipeline === "generate_pdmd" && draft.expert.split_step === 0 &&
+                <p className="text-xs text-muted">Все шаги на итоговом разрешении, без раннего черновика.</p>}
               <SelectField label="Сэмплер" value={draft.expert.sampler} onChange={(sampler) => updateExpert({ sampler })}
                 options={options.sampler.map((v) => ({ value: v, label: v }))} defaultValue={draft.pipeline === "generate_pdmd" ? "euler" : "seeds_2"} />
               <SelectField label="Планировщик" value={draft.expert.scheduler} onChange={(scheduler) => updateExpert({ scheduler })}
                 options={options.scheduler.map((v) => ({ value: v, label: v }))} defaultValue="simple" />
-              <NumField label="Доп. промежуточные сигмы" value={draft.expert.extend_steps} onChange={(extend_steps) => updateExpert({ extend_steps })} min={0} max={20} />
+              <NumField label="Доп. промежуточные сигмы" value={draft.expert.extend_steps} onChange={(extend_steps) => updateExpert({ extend_steps })} min={0} />
               <SelectField
                 label="Размер референсов"
                 value={draft.expert.ref_image_size}
@@ -297,7 +300,14 @@ export function EngineSettings() {
                 ]}
                 defaultValue="match"
               />
-              {draft.pipeline !== "generate_memory" && draft.pipeline !== "generate_pdmd" && <>
+              {draft.pipeline === "generate_pdmd" && <>
+                <NumField label="Сила PDMD LoRA" value={draft.pdmd_strength ?? 1} onChange={(pdmd_strength) => update({ pdmd_strength })} step={0.05} />
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[13px]">Sparse attention в PDMD</span>
+                  <Switch checked={draft.pdmd_sparse ?? false} onChange={(pdmd_sparse) => update({ pdmd_sparse })} label="Sparse attention в PDMD" />
+                </div>
+              </>}
+              {draft.pipeline !== "generate_memory" && <>
                 <NumField label="Sparse attention τ" value={draft.expert.sparse_tau} onChange={(sparse_tau) => updateExpert({ sparse_tau })} step={0.05} min={0} max={4} />
                 <div className="grid grid-cols-2 gap-2">
                   <NumField label="Sparse от" value={draft.expert.sparse_start} onChange={(sparse_start) => updateExpert({ sparse_start })} step={0.05} min={0} max={1} />
@@ -306,6 +316,7 @@ export function EngineSettings() {
               </>}
               {draft.pipeline !== "generate_memory" && <>
                 <NumField label="ChunkFeedForward: частей" value={draft.expert.chunk_ff_chunks} onChange={(chunk_ff_chunks) => updateExpert({ chunk_ff_chunks })} min={1} max={16} />
+                <NumField label="ChunkFeedForward: порог токенов" value={draft.expert.chunk_ff_seq_threshold} onChange={(chunk_ff_seq_threshold) => updateExpert({ chunk_ff_seq_threshold })} min={0} />
                 <NumField label="Экономия VRAM: групп голов" value={draft.expert.low_vram_heads} onChange={(low_vram_heads) => updateExpert({ low_vram_heads })} min={1} max={56} />
               </>}
               <SelectField

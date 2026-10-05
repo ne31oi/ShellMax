@@ -1,0 +1,254 @@
+{
+  "69": {
+    "class_type": "ShellMaxUNETLoaderByPath",
+    "inputs": {
+      "unet_path": "__UNET__",
+      "weight_dtype": "default"
+    }
+  },
+  "70": {
+    "class_type": "MiniMaxH3MemoryEfficientSageAttentionPatch",
+    "inputs": {
+      "model": [
+        "69",
+        0
+      ]
+    }
+  },
+  "119": {
+    "class_type": "ModelAttentionBackend",
+    "inputs": {
+      "model": [
+        "70",
+        0
+      ],
+      "attention": "comfy kitchen attention"
+    }
+  },
+  "143": {
+    "class_type": "MiniMaxChunkFeedForward",
+    "inputs": {
+      "model": [
+        "119",
+        0
+      ],
+      "chunks": 8,
+      "seq_threshold": 4096
+    }
+  },
+  "64": {
+    "class_type": "ShellMaxCLIPLoaderByPath",
+    "inputs": {
+      "clip_path": "__CLIP__",
+      "type": "minimax",
+      "device": "default"
+    }
+  },
+  "65": {
+    "class_type": "ShellMaxVAELoaderByPath",
+    "inputs": {
+      "vae_path": "__VAE_VIDEO__"
+    }
+  },
+  "66": {
+    "class_type": "ShellMaxVAELoaderByPath",
+    "inputs": {
+      "vae_path": "__VAE_AUDIO__"
+    }
+  },
+  "84": {
+    "class_type": "PrimitiveStringMultiline",
+    "inputs": {
+      "value": "__PROMPT__"
+    }
+  },
+  "74": {
+    "class_type": "PrimitiveFloat",
+    "inputs": {
+      "value": 2.0
+    }
+  },
+  "75": {
+    "class_type": "ComfyMathExpression",
+    "inputs": {
+      "expression": "max(5, round(a * 24)) + (5 - (max(5, round(a * 24)) % 17)) % 17",
+      "values.a": [
+        "74",
+        0
+      ]
+    }
+  },
+  "ref_image_0": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "__REF_IMAGE__"
+    }
+  },
+  "56": {
+    "class_type": "MiniMaxH3ReferenceToVideo",
+    "inputs": {
+      "clip": [
+        "64",
+        0
+      ],
+      "vae": [
+        "65",
+        0
+      ],
+      "audio_vae": [
+        "66",
+        0
+      ],
+      "prompt": [
+        "84",
+        0
+      ],
+      "width": 1440,
+      "height": 832,
+      "length": [
+        "75",
+        1
+      ],
+      "ref_image_size": "match",
+      "ref_images.ref_image_0": [
+        "ref_image_0",
+        0
+      ]
+    }
+  },
+  "126": {
+    "class_type": "BasicGuider",
+    "inputs": {
+      "model": [
+        "pdmd_lora",
+        0
+      ],
+      "conditioning": [
+        "56",
+        0
+      ]
+    }
+  },
+  "63": {
+    "class_type": "RandomNoise",
+    "inputs": {
+      "noise_seed": 42424242
+    }
+  },
+  "58": {
+    "class_type": "KSamplerSelect",
+    "inputs": {
+      "sampler_name": "euler"
+    }
+  },
+  "71": {
+    "class_type": "BasicScheduler",
+    "inputs": {
+      "model": [
+        "pdmd_lora",
+        0
+      ],
+      "scheduler": "simple",
+      "steps": 4,
+      "denoise": 1
+    }
+  },
+  "94": {
+    "class_type": "ExtendIntermediateSigmas",
+    "inputs": {
+      "sigmas": [
+        "71",
+        0
+      ],
+      "steps": 1,
+      "start_at_sigma": 1.0000000000000002,
+      "end_at_sigma": 0,
+      "spacing": "linear"
+    }
+  },
+  "106": {
+    "class_type": "SamplerCustomAdvanced",
+    "inputs": {
+      "noise": [
+        "63",
+        0
+      ],
+      "guider": [
+        "126",
+        0
+      ],
+      "sampler": [
+        "58",
+        0
+      ],
+      "sigmas": [
+        "94",
+        0
+      ],
+      "latent_image": [
+        "56",
+        1
+      ]
+    }
+  },
+  "109": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "106",
+        1
+      ],
+      "vae": [
+        "65",
+        0
+      ]
+    }
+  },
+  "110": {
+    "class_type": "VAEDecodeAudio",
+    "inputs": {
+      "samples": [
+        "106",
+        1
+      ],
+      "vae": [
+        "66",
+        0
+      ]
+    }
+  },
+  "141": {
+    "class_type": "VHS_VideoCombine",
+    "inputs": {
+      "images": [
+        "109",
+        0
+      ],
+      "audio": [
+        "110",
+        0
+      ],
+      "frame_rate": 24,
+      "loop_count": 0,
+      "filename_prefix": "__PREFIX__",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 19,
+      "save_metadata": true,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true
+    }
+  },
+  "pdmd_lora": {
+    "class_type": "ShellMaxLoraModelOnlyByPath",
+    "inputs": {
+      "model": [
+        "143",
+        0
+      ],
+      "lora_path": "__PDMD__",
+      "strength_model": 1.0
+    }
+  }
+}

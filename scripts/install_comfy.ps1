@@ -59,7 +59,7 @@ $RequiredClasses = @(
     'VHS_LoadVideoFFmpegPath', 'GetImageSize', 'SAM3_TrackToMask', 'SolidMask', 'SetLatentNoiseMask', 'VAEEncodeAudio', 'VAEEncode', 'MaskComposite', 'GrowMaskWithBlur', 'VRAM_Debug', 'RemoveBackground', 'CLIPTextEncode',
     'MVEx_SubjectCrop', 'MVEx_SubjectUncrop', 'MVEx_MaskCleanup', 'MVEx_MaskToLatentSpace', 'DWPreprocessor', 'MiniMaxH3FunControlNetApply', 'ShellMaxModelPatchLoaderByPath', 'ShellMaxBackgroundRemovalLoaderByPath', 'ShellMaxBodySwapSource', 'ShellMaxBodySwapRestoreHands', 'ShellMaxBodySwapBackground', 'ShellMaxBodySwapFitComposite',
     'ShellMaxH3HeadSwapTrack', 'ShellMaxH3HeadSwapMasks', 'ShellMaxH3HeadSwapContours', 'ShellMaxH3HeadSwapTemporal', 'ShellMaxH3HeadSwapStitch', 'ShellMaxH3HeadSwapPad', 'ShellMaxH3HeadSwapRestore', 'ShellMaxLatentUpscalerDimensionsByPath',
-    'MiniMaxH3AddGuide', 'MiniMaxH3SigmaShift', 'EmptyMiniMaxH3LatentAV', 'TextGenerate', 'StringConcatenate', 'CFGGuider', 'ManualSigmas', 'ImageResizeKJv2',
+    'ShellMaxH3ContinuationPrefix', 'ShellMaxContinuationOutput', 'MiniMaxH3AddGuide', 'MiniMaxH3SigmaShift', 'EmptyMiniMaxH3LatentAV', 'TextGenerate', 'StringConcatenate', 'CFGGuider', 'ManualSigmas', 'ImageResizeKJv2',
     'H3MemoryOptimization', 'H3AIMDOResidencyLimiter', 'H3SparseAttentionAdvanced',
     'ShellMaxUpscaleModelLoaderByPath', 'ImageUpscaleWithModel', 'ImageScale',
     'MiniMaxH3ReferenceToVideo', 'BlockSparseAttention', 'ModelAttentionBackend', 'ExtendIntermediateSigmas',

@@ -15,8 +15,23 @@ from .workflow.fidelity_upscale import FidelityUI
 from .workflow.head_swap import HeadSwapUI
 from .workflow.body_swap import BodySwapUI
 from .workflow.dlss5 import DLSS5UI
+from .workflow.continuation import ContinuationUI
 
 router = APIRouter()
+
+
+@router.get("/continue-video/defaults")
+def continuation_defaults(asset_id: int, project_id: int = 1):
+    from .workflow.continuation import defaults
+    return defaults(asset_id, project_id)
+
+
+@router.post("/continue-video")
+async def continuation_job(ui: ContinuationUI, request: Request, project_id: int = 1):
+    g = services.create_asset_job("continue_video", ui, project_id)
+    await push_generation(g)
+    state(request).jobs.enqueue(g.id)
+    return g
 
 
 @router.get("/dlss5/defaults")
